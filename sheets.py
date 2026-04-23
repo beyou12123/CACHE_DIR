@@ -3926,6 +3926,55 @@ def get_bot_settings(bot_id):
         return {}
 
 # --------------------------------------------------------------------------
+def sync_ad_campaign_results(bot_token):
+    """تحديث عدد المسجلين في ورقة الإعلانات بناءً على سجل التسجيلات"""
+    try:
+        bot_token_str = str(bot_token).strip()
+        # ضمان تحديث البيانات المحلية قبل الحساب
+        smart_sync_check(bot_token_str)
+        
+        # جلب البيانات من الكاش المحلي
+        ads_records = get_bot_data_from_cache(bot_token_str, "إدارة_الحملات_الإعلانية")
+        reg_records = get_bot_data_from_cache(bot_token_str, "سجل_التسجيلات")
+        
+        all_regs_campaigns = [str(r.get("column_26", "")) for r in reg_records]
+        
+        if ss is None: connect_to_google()
+        ads_sheet = ss.worksheet("إدارة_الحملات_الإعلانية")
+
+        for ad in ads_records:
+            campaign_id = str(ad.get('column_4')) # معرف الحملة
+            if not campaign_id: continue
+            
+            count = all_regs_campaigns.count(campaign_id)
+            
+            # تحديث السحابة
+            cell = ads_sheet.find(campaign_id)
+            if cell:
+                ads_sheet.update_cell(cell.row, 9, count)
+            
+        return True
+    except Exception as e:
+        print(f"❌ Error syncing ad results: {e}")
+        return False
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
 
 
 
