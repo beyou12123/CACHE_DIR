@@ -1710,47 +1710,40 @@ async def process_admin_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # --------------------------------------------------------------------------
 
 #دالة المزامنة مع جوجل شيت
+# دالة المزامنة مع جوجل شيت
 def start_scheduler():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
-scheduler = AsyncIOScheduler(timezone="Asia/Riyadh")
-[cite_start]
+    scheduler = AsyncIOScheduler(timezone="Asia/Riyadh")
 
- 
-    # 1. المزامنة الصامتة (Pull): تحديث الكاش المحلي من جوجل كل 15 دقيقة
-    # لجلب أي تعديلات يدوية قمت بها في الشيت (مثل تغيير خطة بوت أو رصيد مستخدم)
-    scheduler.add_job(
-        lambda: [smart_sync_check(token) for token in get_all_active_tokens()], 
-        'interval', 
-        minutes=15,
-        id='pull_sync'
-    )
+    # 1. المزامنة الصامتة (Pull): تحديث الكاش المحلي من جوجل كل 15 دقيقة  
+    # لجلب أي تعديلات يدوية قمت بها في الشيت (مثل تغيير خطة بوت أو رصيد مستخدم)  
+    scheduler.add_job(  
+        lambda: [smart_sync_check(token) for token in get_all_active_tokens()],   
+        'interval',   
+        minutes=15,  
+        id='pull_sync'  
+    )  
 
-    # 2. مزامنة النتائج: تحديث إحصائيات الحملات الإعلانية كل ساعة
-    scheduler.add_job(
-        sync_ad_campaign_results, 
-        'interval', 
-        hours=1,
-        id='ads_sync'
-    )
+    # 2. مزامنة النتائج: تحديث إحصائيات الحملات الإعلانية كل ساعة  
+    scheduler.add_job(  
+        sync_ad_campaign_results,   
+        'interval',   
+        hours=1,  
+        id='ads_sync'  
+    )  
 
-    # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة (Pending) لجوجل شيت فجراً
-    # التوقيت المعتمد: 03:30 صباحاً (وقت هادئ لضمان استقرار الـ API)
-    scheduler.add_job(
-        push_to_google_sheets, 
-        'cron', 
-        hour=3, 
-        minute=30,
-        id='daily_push_sync'
-    )
+    # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة (Pending) لجوجل شيت فجراً  
+    # التوقيت المعتمد: 03:30 صباحاً (وقت هادئ لضمان استقرار الـ API)  
+    scheduler.add_job(  
+        push_to_google_sheets,   
+        'cron',   
+        hour=3,   
+        minute=30,  
+        id='daily_push_sync'  
+    )  
 
-    scheduler.start()
+    scheduler.start()  
     print("⏰ تم تشغيل المجدل الزمني: المزامنة الصامتة كل 15 دقيقة، والرفع الشامل 03:30 فجراً.")
-
-# دالة مساعدة لجلب كافة التوكنات النشطة للمزامنة
-def get_all_active_tokens():
-    from sheets import get_all_active_bots
-    return [bot.get('column_4') for bot in get_all_active_bots()]
-
 # --- [ القسم 1: الدوال التشغيلية (يجب أن تظل في الأعلى) ] ---
 
 # دالة تشغيل كافة البوتات عند الإقلاع لضمان التنفيذ المتسلسل
