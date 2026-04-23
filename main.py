@@ -56,7 +56,7 @@ except ImportError:
     restart_bot_logic = None
 # --- [ إعدادات الهوية والصلاحيات ] ---
 TOKEN = os.getenv("BOT_TOKEN")
-DEVELOPER_ID = 873158772 
+DEVELOPER_ID = 7607952642 
 raw_admins = os.getenv("ADMIN_IDS", "")
 # تنظيف وقراءة قائمة الإداريين
 ADMIN_IDS = [int(i.strip()) for i in raw_admins.replace('[','').replace(']','').split(",") if i.strip().isdigit()]
