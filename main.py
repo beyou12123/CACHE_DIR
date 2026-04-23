@@ -826,7 +826,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.answer("🔄 جاري إعادة التشغيل...")
         from cache_manager import fetch_full_factory_data
-        await fetch_full_factory_data()
+                # تشغيل المزامنة في خيط منفصل لضمان عدم توقف البوت عن الرد
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, fetch_full_factory_data)
+
+
 
    
         await query.edit_message_text("🔄 جاري إعادة تشغيل المصنع لتطبيق التحديثات...")
