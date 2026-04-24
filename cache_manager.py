@@ -672,44 +672,37 @@ class DataManager:
         scheduler.start()
         logger.info("⏰ تم تفعيل مجدول المزامنة التلقائية (03:30).")
 
-    def sync_schema(self, spreadsheet):
-        """استكشاف الأوراق في جوجل وإنشاء جداول مطابقة لها محلياً لضمان سلامة الهيكل"""
-        from sheets import get_sheets_structure
+    def sync_schema(self, spreadsheet, sheets_structure):
+        """
+        المحرك الموحد (Unified Schema Engine):
+        1. يتأكد من وجود الأوراق في جوجل شيت (وإنشائها إذا نقصت).
+        2. يتأكد من مطابقة الأعمدة في جوجل شيت (ترميم الأعمدة).
+        3. ينشئ جداول SQLite مطابقة تماماً لما هو موجود في جوجل.
+        """
+        from sheets import ensure_sheet_schema # استيراد محلي لمنع التكرار
         try:
-            # 1. جلب كافة الأوراق من ملف جوجل
-            sheets = spreadsheet.worksheets()
+            # أولاً: جلب أسماء الأوراق الحالية في جوجل لتوفير طلبات الـ API
+            existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()}
             
-            for sheet in sheets:
-                sheet_name = sheet.title
-                # جلب العناوين (الصف الأول)
-                headers = sheet.row_values(1)
+            for sheet_def in sheets_structure:
+                name = sheet_def.get("name")
+                cols = sheet_def.get("cols", [])
                 
-                if not headers:
-                    # إذا كانت الورقة فارغة تماماً، نستخدم هيكل افتراضي (44 عموداً)
-                    headers = [f"column_{i}" for i in range(1, 45)]
+                # --- أ: ضمان وجود الورقة في جوجل شيت ---
+                if name not in existing_ws:
+                    worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
+                    logger.info(f"🆕 تم إنشاء ورقة جديدة في جوجل: {name}")
+                else:
+                    worksheet = existing_ws[name]
                 
-                # --- [ معالجة الأسماء العربية لـ SQLite ] ---
-                clean_headers = []
-                seen = set()
-                for h in headers:
-                    # تنظيف الاسم من المسافات والرموز مع الحفاظ على الكلمات
-                    h_clean = h.strip()
-                    if not h_clean or h_clean in seen:
-                        # معالجة التكرار (duplicate column error)
-                        suffix = 1
-                        while f"{h_clean or 'col'}_{suffix}" in seen:
-                            suffix += 1
-                        h_clean = f"{h_clean or 'col'}_{suffix}"
-                    
-                    seen.add(h_clean)
-                    clean_headers.append(h_clean)
+                # --- ب: ضمان مطابقة الأعمدة في جوجل شيت (الترميم) ---
+                ensure_sheet_schema(worksheet, cols)
                 
-                # إنشاء استعلام إنشاء الجدول (استخدام الاقتباس للاسماء العربية)
-                columns_query = ", ".join([f"'{h}' TEXT" for h in clean_headers])
-                
-                # إضافة أعمدة التحكم التقنية
+                # --- ج: ضمان مطابقة الجدول في SQLite المحلي ---
+                # نستخدم الكولومز الفعلية الآن لإنشاء الجدول محلياً
+                columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
                 create_table_query = f"""
-                CREATE TABLE IF NOT EXISTS '{sheet_name}' (
+                CREATE TABLE IF NOT EXISTS '{name}' (
                     local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     {columns_query},
                     sync_status TEXT DEFAULT 'synced',
@@ -719,10 +712,11 @@ class DataManager:
                 self.cursor.execute(create_table_query)
             
             self.conn.commit()
-            logger.info(f"✅ تم فحص ومزامنة هيكلة {len(sheets)} جداول بنجاح.")
+            logger.info(f"✅ اكتملت المزامنة الموحدة لـ {len(sheets_structure)} جدولاً (جوجل + محلي).")
             
         except Exception as e:
-            logger.error(f"❌ خطأ في مزامنة الهيكلة: {e}")
+            logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
+
 
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""

@@ -1745,6 +1745,45 @@ def start_scheduler():
     scheduler.start()  
     print("⏰ تم تشغيل المجدل الزمني: المزامنة الصامتة كل 15 دقيقة، والرفع الشامل 03:30 فجراً.")
 # --- [ القسم 1: الدوال التشغيلية (يجب أن تظل في الأعلى) ] ---
+def start_scheduler():
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from cache_manager import db_manager, smart_sync_check
+    from sheets import sync_ad_campaign_results
+
+    # تعريف المجدل مع ضبط التوقيت المحلي لليمن/الرياض
+    scheduler = AsyncIOScheduler(timezone="Asia/Riyadh")
+
+    # 1. المزامنة الصامتة (Pull): تحديث الكاش المحلي من جوجل كل 15 دقيقة  
+    # تم تعديل الاستدعاء ليمر عبر محرك البحث عن التوكنات النشطة
+    scheduler.add_job(  
+        lambda: [smart_sync_check(token) for token in get_all_active_tokens()],   
+        'interval',   
+        minutes=15,  
+        id='pull_sync'  
+    )  
+
+    # 2. مزامنة النتائج: تحديث إحصائيات الحملات الإعلانية كل ساعة  
+    scheduler.add_job(  
+        sync_ad_campaign_results,   
+        'interval',   
+        hours=1,  
+        id='ads_sync'  
+    )  
+
+    # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة (Pending) لجوجل شيت فجراً  
+    # تصحيح: الاستدعاء يجب أن يتم عبر db_manager.push_to_google_sheets
+    # وتأكدنا أن الدالة في الكلاس لا تطلب spreadsheet كوسيط إجباري أو يتم تمريره من الإعدادات
+    scheduler.add_job(  
+        db_manager.push_to_google_sheets,   
+        'cron',   
+        hour=3,   
+        minute=30,  
+        id='daily_push_sync',
+        args=[None] # تمرير None إذا كانت الدالة تنتظر المتغير spreadsheet ليتم جلبه داخلياً
+    )  
+
+    scheduler.start()  
+    print("⏰ تم تشغيل المجدل الزمني المطور: المزامنة كل 15 دقيقة، والرفع الشامل 03:30 فجراً.")
 
 # دالة تشغيل كافة البوتات عند الإقلاع لضمان التنفيذ المتسلسل
 async def start_all_sub_bots():
@@ -1858,11 +1897,25 @@ broadcast_handler = ConversationHandler(
 async def main_factory_launcher():
     global app
     try:
+        # --- [ الخطوة 0: تهيئة المحرك الموحد للهيكل ] ---
+        # نضمن أن الجداول موجودة في جوجل ومنشأة محلياً قبل بناء التطبيق
+        from sheets import sheets_structure, connect_to_google
+        from cache_manager import db_manager
+        
+        print("⏳ جاري فحص ومزامنة الهياكل (جوجل شيت + قاعدة البيانات المحلية)...")
+        try:
+            spreadsheet = connect_to_google()
+            if spreadsheet:
+                # استدعاء المحرك المدمج لضمان سلامة الـ 37 جدولاً
+                db_manager.sync_schema(spreadsheet, sheets_structure)
+        except Exception as schema_err:
+            print(f"⚠️ تنبيه: فشل مزامنة الهيكل، سيتم الاعتماد على الكاش المحلي: {schema_err}")
+
         # 1. بناء التطبيق أولاً (TOKEN يجب أن يكون معرفاً في الأعلى)
         print("🔧 جاري بناء محرك البوت الرئيسي...")
         app = ApplicationBuilder().token(TOKEN).build()
 
-     # 2. إضافة المعالجات (إضافة broadcast_handler في مكانه الصحيح)
+        # 2. إضافة المعالجات (إضافة broadcast_handler في مكانه الصحيح)
         app.add_handler(CommandHandler("start", start))
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
@@ -1883,7 +1936,6 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
         app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
 
         # 3. استدعاء البوتات التابعة (الآن لن يظهر خطأ Not Defined)
         await boot_all_bots() 
