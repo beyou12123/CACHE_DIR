@@ -1898,29 +1898,28 @@ async def main_factory_launcher():
     global app
     try:
         # --- [ الخطوة 0: تهيئة المحرك الموحد للهيكل ] ---
-        # نضمن أن الجداول موجودة في جوجل ومنشأة محلياً قبل بناء التطبيق
-        from sheets import sheets_structure, connect_to_google
+        # التصحيح: استيراد الدالة get_sheets_structure وليس sheets_structure
+        from sheets import get_sheets_structure, connect_to_google
         from cache_manager import db_manager
         
         print("⏳ جاري فحص ومزامنة الهياكل (جوجل شيت + قاعدة البيانات المحلية)...")
         try:
-            spreadsheet = connect_to_google()
+            spreadsheet = connect_to_google() # استدعاء دالة الاتصال
             if spreadsheet:
-                # استدعاء المحرك المدمج لضمان سلامة الـ 37 جدولاً
-                db_manager.sync_schema(spreadsheet, sheets_structure)
+                # التصحيح: جلب الهيكل من الدالة وتمريره للمحرك
+                structure = get_sheets_structure() 
+                db_manager.sync_schema(spreadsheet, structure) #
         except Exception as schema_err:
             print(f"⚠️ تنبيه: فشل مزامنة الهيكل، سيتم الاعتماد على الكاش المحلي: {schema_err}")
 
-        # 1. بناء التطبيق أولاً (TOKEN يجب أن يكون معرفاً في الأعلى)
+        # 1. بناء التطبيق أولاً
         print("🔧 جاري بناء محرك البوت الرئيسي...")
         app = ApplicationBuilder().token(TOKEN).build()
 
-        # 2. إضافة المعالجات (إضافة broadcast_handler في مكانه الصحيح)
+        # [ إكمال بقية المعالجات الـ Handlers كما هي في كودك بدون تغيير ]
         app.add_handler(CommandHandler("start", start))
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
-        
-        # تم وضعها هنا قبل handle_message لضمان عدم تداخل النصوص
         app.add_handler(broadcast_handler)
 
         app.add_handler(CallbackQueryHandler(owner_dashboard, pattern="^open_admin_dashboard$"))
@@ -1937,7 +1936,7 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-        # 3. استدعاء البوتات التابعة (الآن لن يظهر خطأ Not Defined)
+        # 3. استدعاء البوتات التابعة
         await boot_all_bots() 
         asyncio.create_task(start_all_sub_bots()) 
 
@@ -1947,7 +1946,6 @@ async def main_factory_launcher():
         await app.updater.start_polling(drop_pending_updates=True)
         await app.start()
         
-        # إشعار المطور بالنجاح
         try:
             await app.bot.send_message(chat_id=DEVELOPER_ID, text="✅ **تم إعادة تشغيل المحرك بنجاح!**")
         except: pass
