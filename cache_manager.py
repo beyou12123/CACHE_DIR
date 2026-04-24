@@ -623,7 +623,7 @@ class DataManager:
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row  # للوصول للبيانات بأسماء الأعمدة
         self.cursor = self.conn.cursor()
-# ==========================================================================
+
     async def restore_from_telegram(self):
         """جلب آخر نسخة احتياطية من التلجرام إذا لم يوجد ملف محلي"""
         if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
@@ -643,7 +643,7 @@ class DataManager:
                 logger.info("🔄 تم استعادة قاعدة البيانات من تلجرام بنجاح!")
         except Exception as e:
             logger.error(f"❌ فشل في استعادة النسخة الاحتياطية: {e}")
-# ==========================================================================
+
     async def create_backup_to_telegram(self):
         """تحويل ملف SQL إلى Base64 وإرساله للقناة الخاصة لضمان الأمان القصوى"""
         try:
@@ -663,7 +663,7 @@ class DataManager:
             logger.info("💾 تم إرسال نسخة احتياطية جديدة مشفرة إلى التلجرام.")
         except Exception as e:
             logger.error(f"❌ فشل في إنشاء نسخة احتياطية: {e}")
-# ==========================================================================
+
     def setup_sync_scheduler(self):
         """ضبط المزامنة والنسخ الاحتياطي التلقائي في الساعة 03:30 فجراً"""
         scheduler = AsyncIOScheduler()
@@ -671,34 +671,43 @@ class DataManager:
         
         scheduler.start()
         logger.info("⏰ تم تفعيل مجدول المزامنة التلقائية (03:30).")
-# ==========================================================================
+
     def sync_schema(self, spreadsheet):
         """استكشاف الأوراق في جوجل وإنشاء جداول مطابقة لها محلياً لضمان سلامة الهيكل"""
         from sheets import get_sheets_structure
         try:
-
+            # 1. جلب كافة الأوراق من ملف جوجل
             sheets = spreadsheet.worksheets()
+            
             for sheet in sheets:
                 sheet_name = sheet.title
+                # جلب العناوين (الصف الأول)
                 headers = sheet.row_values(1)
                 
                 if not headers:
+                    # إذا كانت الورقة فارغة تماماً، نستخدم هيكل افتراضي (44 عموداً)
                     headers = [f"column_{i}" for i in range(1, 45)]
                 
+                # --- [ معالجة الأسماء العربية لـ SQLite ] ---
                 clean_headers = []
                 seen = set()
                 for h in headers:
+                    # تنظيف الاسم من المسافات والرموز مع الحفاظ على الكلمات
                     h_clean = h.strip()
                     if not h_clean or h_clean in seen:
+                        # معالجة التكرار (duplicate column error)
                         suffix = 1
                         while f"{h_clean or 'col'}_{suffix}" in seen:
                             suffix += 1
                         h_clean = f"{h_clean or 'col'}_{suffix}"
+                    
                     seen.add(h_clean)
                     clean_headers.append(h_clean)
                 
+                # إنشاء استعلام إنشاء الجدول (استخدام الاقتباس للاسماء العربية)
                 columns_query = ", ".join([f"'{h}' TEXT" for h in clean_headers])
                 
+                # إضافة أعمدة التحكم التقنية
                 create_table_query = f"""
                 CREATE TABLE IF NOT EXISTS '{sheet_name}' (
                     local_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -711,14 +720,14 @@ class DataManager:
             
             self.conn.commit()
             logger.info(f"✅ تم فحص ومزامنة هيكلة {len(sheets)} جداول بنجاح.")
+            
         except Exception as e:
             logger.error(f"❌ خطأ في مزامنة الهيكلة: {e}")
 
     async def push_to_google_sheets(self, spreadsheet):
-    	        """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
+        """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
         from sheets import safe_api_call, ss, connect_to_google
         try:
-
             self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
             tables = self.cursor.fetchall()
 
@@ -740,21 +749,28 @@ class DataManager:
 
                 for row in rows:
                     row_dict = dict(row)
+                    # استخراج البيانات بالترتيب الصحيح للأعمدة الأصلية فقط
                     original_row = [row_dict[key] for key in row_dict.keys() if key not in ['local_id', 'sync_status', 'last_updated']]
                     data_to_upload.append(original_row)
                     row_ids.append(row_dict['local_id'])
 
                 if data_to_upload:
-
                     success = safe_api_call(worksheet.append_rows, data_to_upload, value_input_option='USER_ENTERED')
                     
                     if success:
+                        # تحديث الحالة محلياً لتصبح 'synced'
                         placeholders = ", ".join(["?" for _ in row_ids])
                         self.cursor.execute(f"UPDATE '{table_name}' SET sync_status = 'synced' WHERE local_id IN ({placeholders})", row_ids)
                         self.conn.commit()
                         logger.info(f"✅ تم رفع {len(data_to_upload)} سجل بنجاح إلى {table_name}")
         except Exception as e:
             logger.error(f"❌ خطأ حرج أثناء المزامنة الشاملة: {e}")
+
+#~~~~~~~~~~~~~~~~
+
+#~~~~~~~~~~~~~~~~
+
+
 # ==========================================================================
 
 def check_excel_export_permission(bot_token, all_bots):
