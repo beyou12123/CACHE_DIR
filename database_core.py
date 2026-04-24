@@ -165,6 +165,11 @@ async def push_to_google_sheets(self, spreadsheet):
         logger.error(f"❌ خطأ حرج أثناء المزامنة الشاملة: {e}")
 
 # --------------------------------------------------------------------------
+# أضف هذا في نهاية ملف database_core.py
+import os
+factory_token = os.getenv("BOT_TOKEN")
+# تعريف الكائن الموحد الذي يبحث عنه نظام sheets.py
+db_manager = DataManager(factory_token) if factory_token else None
 
 # --------------------------------------------------------------------------
 

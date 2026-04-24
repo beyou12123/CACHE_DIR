@@ -10,20 +10,31 @@ import random
 # استيراد محرك الذاكرة المؤقتة للمصنع كامل
 from database_core import DataManager
 from cache_manager import get_bot_data_from_cache, smart_sync_check, update_global_version, ensure_bot_sync_row
-# --- السطر القديم ---
-# db_manager = None 
+# --- [ التعديل المعتمد لملف sheets.py ] ---
+import os
+from database_core import DataManager
 
-# --- التعديل الصحيح في sheets.py ---
+# تعريف المتغير بشكل عالمي
+db_manager = None
 
-# نقوم باستيراد الكائن الفعلي من ملف النواة
 try:
-    from database_core import db_manager
+    # محاولة استيراد الكائن الجاهز من النواة
+    from database_core import db_manager as core_db
+    db_manager = core_db
 except ImportError:
-    # إذا لم يكن موجوداً بهذا الاسم، نستخدم DataManager كبديل
-    from database_core import DataManager
-    db_manager = DataManager()
+    # إذا فشل، ننشئ نسخة جديدة باستخدام توكن المصنع
+    token = os.getenv("BOT_TOKEN")
+    if token:
+        db_manager = DataManager(token)
 
-# تأكد من أن المتغير db_manager متاح عالمياً في الملف
+# دالة تأمين المحرك (أضفها لضمان عدم حدوث خطأ NoneType مستقبلاً)
+def get_db():
+    global db_manager
+    if db_manager is None:
+        token = os.getenv("BOT_TOKEN")
+        if token:
+            db_manager = DataManager(token)
+    return db_manager
 
 
 def get_system_time(mode="full"):
