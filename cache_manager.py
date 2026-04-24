@@ -8,6 +8,12 @@ import gspread
 import base64
 import pandas as pd
 from io import BytesIO 
+import sqlite3
+import re
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Bot
+
+
 
 
 
@@ -15,32 +21,38 @@ from io import BytesIO
 # 1. كتلة الإعدادات الأساسية والمحرك العام (المفاتيح الأصلية)
 # ==========================================================================
 
+# إعدادات ثابتة (تم توحيد المسار ليتوافق مع مجلد الكاش في Railway)
+DB_PATH = "cache_data/database.db"
+BACKUP_CHANNEL_ID = -1003910834893  # المعرف الخاص بالقناة
 DEVELOPER_ID = 873158772  # معرف المطور الثابت
-logger = logging.getLogger(__name__)
 
+# تصحيح: توحيد إعدادات اللوجر لمنع التضارب في السجلات
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("FACTORY_CORE")
+
+# تصحيح المسارات: استخدام المسار المطلق لضمان الوصول للمجلد في بيئة Docker/Railway
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache_data")
 
+# التأكد من إنشاء المجلد مرة واحدة وبشكل صحيح
 if not os.path.exists(CACHE_DIR):
-    os.makedirs(CACHE_DIR)
-    print(f"📁 تم إنشاء مجلد الكاش في المسار: {CACHE_DIR}")
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        print(f"📁 تم إنشاء مجلد الكاش بنجاح في: {CACHE_DIR}")
+    except Exception as e:
+        print(f"❌ خطأ في إنشاء مجلد الكاش: {e}")
 
 # المتغيرات الخاصة بالهروب من الـ API (المزامنة الصامتة)
 LAST_CHECK_TIME = 0       
 CHECK_INTERVAL = 900      # 15 دقيقة
 
-# مسارات الحفظ الفيزيائي (المرآة) لضمان بقاء البيانات وتمكين التحميل
-CACHE_DIR = "./cache_data"
-if not os.path.exists(CACHE_DIR):
-    os.makedirs(CACHE_DIR)
-
-# مستودع الذاكرة المركزية للمصنع كامل (RAM)
+# مستودع الذاكرة المركزية للمصنع كامل (RAM) - تم الحفاظ على كافة المفاتيح
 FACTORY_GLOBAL_CACHE = {
     "data": {},      # بيانات الـ 37 ورقة
     "versions": {},   # أرقام الإصدارات
     "temp_registration_tokens": {} # تخزين روابط الموظفين والمدربين الموّلدة لحظياً
-   
 }
+
 
 # ==========================================================================
 # 2. دوال الوقت والنظام
@@ -74,7 +86,7 @@ def save_cache_to_disk():
     except Exception as e:
         logger.error(f"❌ خطأ حرج أثناء الكتابة على القرص: {e}")
 
-
+# ==========================================================================
 # انشاء نسخة مشفرة
 
 
@@ -121,7 +133,7 @@ def generate_secure_backup(bot_id=None):
 
 def ensure_bot_sync_row(bot_id, owner_id=None, developer_id=None):
     """إضافة صف جديد للبوت في ورقة 'نظام_المزامنة'"""
-    from sheets import ss, safe_api_call
+
 
     try:
         try:
@@ -156,7 +168,7 @@ def ensure_bot_sync_row(bot_id, owner_id=None, developer_id=None):
 # ==========================================================================
 def fetch_full_factory_data():
     """سحب بيانات المصنع كاملة وتحديث الرام والقرص مع ضمان الحفظ الفوري لكل ورقة"""
-    from sheets import ss, get_sheets_structure
+
 
     global FACTORY_GLOBAL_CACHE
     try:
@@ -204,15 +216,16 @@ def fetch_full_factory_data():
         logger.error(f"❌ خطأ حرج في المزامنة: {e}")
         return False
 
-
 # ==========================================================================
-# 5. دوال الواجهة (API Interface)
+# 3. دوال إدارة الكاش والتصدير (المعدلة للارتباط بـ SQLite)
 # ==========================================================================
-
-def get_bot_data_from_cache(bot_id, sheet_name):
-    """جلب بيانات بوت معين من الذاكرة المركزية"""
-    all_records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
-    return [r for r in all_records if str(r.get("bot_id")) == str(bot_id)]
+def get_bot_data_from_cache(bot_token, sheet_name):
+    """جلب البيانات من الذاكرة المؤقتة (RAM) بسرعة فائقة"""
+    global FACTORY_GLOBAL_CACHE
+    return FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
+# ==========================================================================    
+    
+    
 
 def smart_sync_check(bot_id):
     """المزامنة الصامتة للهروب من قيود API جوجل"""
@@ -229,11 +242,11 @@ def smart_sync_check(bot_id):
 # --------------------------------------------------------------------------
 def update_global_version(bot_id):
     """تحديث الإصدار في نظام_المزامنة باستخدام المطابقة المباشرة للمصفوفة لضمان الدقة"""
-    from sheets import ss, safe_api_call
+
     try:
         # التأكد من الاتصال
         if 'ss' not in globals() or ss is None:
-            from sheets import connect_to_google
+
             connect_to_google()
 
         sync_sheet = ss.worksheet("نظام_المزامنة")
@@ -570,34 +583,202 @@ def export_bot_data_to_excel(bot_token):
     except Exception as e:
         return None, f"❌ خطأ أثناء توليد الملف: {str(e)}"
 
-
+# ==========================================================================
 def check_excel_permission_from_cache(bot_token):
     """التحقق من صلاحية الإكسل للبوت من خلال الكاش"""
     global FACTORY_GLOBAL_CACHE
     all_bots = FACTORY_GLOBAL_CACHE["data"].get("البوتات_المصنوعة", [])
     bot_cfg = next((b for b in all_bots if str(b.get("التوكن")) == str(bot_token)), {})
     return str(bot_cfg.get("ميزة_رفع_وتصدير_البيانات_اكسل", "FALSE")).upper() == "TRUE"
-
+# ==========================================================================
 def generate_excel_from_cache():
     """تحويل كافة بيانات الكاش الحالية إلى ملف إكسل متعدد الأوراق"""
     global FACTORY_GLOBAL_CACHE
     output = BytesIO()
     try:
+        # استخدام xlsxwriter كونه الأكثر استقراراً في تصدير البيانات العربية
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             for sheet_name, records in FACTORY_GLOBAL_CACHE["data"].items():
                 if records and isinstance(records, list):
                     df = pd.DataFrame(records)
-                    clean_name = sheet_name[:31] # توافق إكسل
+                    # ضمان توافق اسم الورقة مع شروط إكسل (حد أقصى 31 حرف)
+                    clean_name = sheet_name[:31] 
                     df.to_excel(writer, sheet_name=clean_name, index=False)
         output.seek(0)
         return output
     except Exception as e:
-        print(f"❌ خطأ تصدير الكاش: {e}")
+        logger.error(f"❌ خطأ تصدير الكاش: {e}")
         return None
 
 
-
 # --------------------------------------------------------------------------
+# ==========================================================================
+# 2. كلاس إدارة البيانات (DataManager) المدمج من database_core
+# ==========================================================================
+
+class DataManager:
+    def __init__(self, bot_token):
+        self.bot_token = bot_token
+        # تم الاكتفاء بإنشاء المجلد في بداية الملف لتوحيد المسارات
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row  # للوصول للبيانات بأسماء الأعمدة
+        self.cursor = self.conn.cursor()
+# ==========================================================================
+    async def restore_from_telegram(self):
+        """جلب آخر نسخة احتياطية من التلجرام إذا لم يوجد ملف محلي"""
+        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
+            logger.info("✅ القاعدة المحلية موجودة، لا داعي للاستعادة.")
+            return
+
+        try:
+            bot = Bot(token=self.bot_token)
+            # جلب آخر رسالة في القناة لاستعادة قاعدة البيانات
+            messages = await bot.get_chat_history(chat_id=BACKUP_CHANNEL_ID, limit=1)
+            
+            if messages:
+                backup_data = messages[0].text
+                # فك تشفير Base64 وتحويله لملف DB
+                with open(DB_PATH, "wb") as f:
+                    f.write(base64.b64decode(backup_data))
+                logger.info("🔄 تم استعادة قاعدة البيانات من تلجرام بنجاح!")
+        except Exception as e:
+            logger.error(f"❌ فشل في استعادة النسخة الاحتياطية: {e}")
+# ==========================================================================
+    async def create_backup_to_telegram(self):
+        """تحويل ملف SQL إلى Base64 وإرساله للقناة الخاصة لضمان الأمان القصوى"""
+        try:
+            if not os.path.exists(DB_PATH):
+                logger.warning("⚠️ لا يوجد ملف قاعدة بيانات لعمل نسخة احتياطية.")
+                return
+
+            with open(DB_PATH, "rb") as f:
+                encoded_string = base64.b64encode(f.read()).decode('utf-8')
+            
+            bot = Bot(token=self.bot_token)
+            await bot.send_message(
+                chat_id=BACKUP_CHANNEL_ID,
+                text=encoded_string,
+                disable_notification=True
+            )
+            logger.info("💾 تم إرسال نسخة احتياطية جديدة مشفرة إلى التلجرام.")
+        except Exception as e:
+            logger.error(f"❌ فشل في إنشاء نسخة احتياطية: {e}")
+# ==========================================================================
+    def setup_sync_scheduler(self):
+        """ضبط المزامنة والنسخ الاحتياطي التلقائي في الساعة 03:30 فجراً"""
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(self.create_backup_to_telegram, 'cron', hour=3, minute=30)
+        
+        scheduler.start()
+        logger.info("⏰ تم تفعيل مجدول المزامنة التلقائية (03:30).")
+# ==========================================================================
+    def sync_schema(self, spreadsheet):
+        """استكشاف الأوراق في جوجل وإنشاء جداول مطابقة لها محلياً لضمان سلامة الهيكل"""
+        from sheets import get_sheets_structure
+        try:
+
+            sheets = spreadsheet.worksheets()
+            for sheet in sheets:
+                sheet_name = sheet.title
+                headers = sheet.row_values(1)
+                
+                if not headers:
+                    headers = [f"column_{i}" for i in range(1, 45)]
+                
+                clean_headers = []
+                seen = set()
+                for h in headers:
+                    h_clean = h.strip()
+                    if not h_clean or h_clean in seen:
+                        suffix = 1
+                        while f"{h_clean or 'col'}_{suffix}" in seen:
+                            suffix += 1
+                        h_clean = f"{h_clean or 'col'}_{suffix}"
+                    seen.add(h_clean)
+                    clean_headers.append(h_clean)
+                
+                columns_query = ", ".join([f"'{h}' TEXT" for h in clean_headers])
+                
+                create_table_query = f"""
+                CREATE TABLE IF NOT EXISTS '{sheet_name}' (
+                    local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {columns_query},
+                    sync_status TEXT DEFAULT 'synced',
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+                self.cursor.execute(create_table_query)
+            
+            self.conn.commit()
+            logger.info(f"✅ تم فحص ومزامنة هيكلة {len(sheets)} جداول بنجاح.")
+        except Exception as e:
+            logger.error(f"❌ خطأ في مزامنة الهيكلة: {e}")
+
+    async def push_to_google_sheets(self, spreadsheet):
+    	        """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
+        from sheets import safe_api_call, ss, connect_to_google
+        try:
+
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            tables = self.cursor.fetchall()
+
+            for table in tables:
+                table_name = table[0]
+                self.cursor.execute(f"SELECT * FROM '{table_name}' WHERE sync_status = 'pending'")
+                rows = self.cursor.fetchall()
+
+                if not rows: continue
+
+                try:
+                    worksheet = spreadsheet.worksheet(table_name)
+                except:
+                    logger.warning(f"⚠️ الورقة {table_name} غير موجودة في جوجل.")
+                    continue
+
+                data_to_upload = []
+                row_ids = []
+
+                for row in rows:
+                    row_dict = dict(row)
+                    original_row = [row_dict[key] for key in row_dict.keys() if key not in ['local_id', 'sync_status', 'last_updated']]
+                    data_to_upload.append(original_row)
+                    row_ids.append(row_dict['local_id'])
+
+                if data_to_upload:
+
+                    success = safe_api_call(worksheet.append_rows, data_to_upload, value_input_option='USER_ENTERED')
+                    
+                    if success:
+                        placeholders = ", ".join(["?" for _ in row_ids])
+                        self.cursor.execute(f"UPDATE '{table_name}' SET sync_status = 'synced' WHERE local_id IN ({placeholders})", row_ids)
+                        self.conn.commit()
+                        logger.info(f"✅ تم رفع {len(data_to_upload)} سجل بنجاح إلى {table_name}")
+        except Exception as e:
+            logger.error(f"❌ خطأ حرج أثناء المزامنة الشاملة: {e}")
+# ==========================================================================
+
+def check_excel_export_permission(bot_token, all_bots):
+    """التحقق من صلاحية تصدير الإكسل للبوت المحدد"""
+    bot_cfg = next((b for b in all_bots if str(b.get("التوكن")) == str(bot_token)), {})
+    return str(bot_cfg.get("ميزة_رفع_وتصدير_البيانات_اكسل", "FALSE")).upper() == "TRUE"
+# ==========================================================================
+# 4. تفعيل المحرك الموحد
+# ==========================================================================
+
+factory_token = os.getenv("BOT_TOKEN")
+# إنشاء كائن db_manager الوحيد الذي سيعتمد عليه كامل النظام
+db_manager = DataManager(factory_token) if factory_token else DataManager(os.getenv("BOT_TOKEN"))
+
+
+# إشعار النظام ببدء العمل
+if db_manager:
+    logger.info("🚀 محرك الكاش وقاعدة البيانات المدمج يعمل الآن بكفاءة...")
+
+# ==========================================================================
+# نهاية الملف - تم دمج database_core و cache_manager بنجاح كامل
+# ==========================================================================
+
+
 
 # --------------------------------------------------------------------------
 
