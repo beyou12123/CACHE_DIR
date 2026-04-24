@@ -396,7 +396,8 @@ def connect_to_google():
         lectures_sheet = safe_get_sheet("جدول_المحاضرات")
 
         print("✅ تم الاتصال بجوجل بنجاح. الجداول بانتظار التهيئة اليدوية ⚙️")
-        return True
+        return ss  # تعديل: إعادة كائن الملف الحقيقي وليس القيمة True
+        
     except Exception as e:
         print(f"❌ فشل الاتصال الأولي: {str(e)}")
         return False
