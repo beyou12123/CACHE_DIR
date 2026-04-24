@@ -397,7 +397,6 @@ def connect_to_google():
 
         print("✅ تم الاتصال بجوجل بنجاح. الجداول بانتظار التهيئة اليدوية ⚙️")
         return ss  # تعديل: إعادة كائن الملف الحقيقي وليس القيمة True
-        
     except Exception as e:
         print(f"❌ فشل الاتصال الأولي: {str(e)}")
         return False
@@ -654,26 +653,35 @@ def check_connection():
 # جلب الإحصائيات 
 def get_all_active_bots():
     """
-    جلب كافة البوتات النشطة من القاعدة المحلية.
-    تحافظ على نفس المفتاح 'التوكن' و 'حالة التشغيل' كما في الكود الأصلي.
+    جلب كافة البوتات النشطة من القاعدة المحلية باستخدام الأسماء العربية الجديدة.
     """
     try:
-        # جلب البيانات من الجدول المحلي (column_4 هو التوكن، column_5 هو حالة التشغيل)
-        # ملاحظة: sqlite3.Row تسمح لنا بالوصول عبر أسماء الأعمدة كما في قاموس جوجل
-        db_manager.cursor.execute("SELECT * FROM 'البوتات_المصنوعة' WHERE column_5 = 'نشط'")
-        rows = db_manager.cursor.fetchall()
+        db = get_db()
+        if not db or not db.cursor:
+            return []
+
+        # 1. الاستعلام باستخدام الأسماء الحقيقية للأعمدة
+        query = "SELECT * FROM 'البوتات_المصنوعة' WHERE 'حالة التشغيل' = 'نشط'"
+        db.cursor.execute(query)
+        rows = db.cursor.fetchall()
         
-        # تحويل النتائج إلى قائمة قواميس لتطابق get_all_records() الأصلية
         active_bots = []
         for row in rows:
+            # تحويل صف SQLite إلى قاموس (Dict)
             bot_dict = dict(row)
-            # التأكد من وجود التوكن (column_4) كما في شرطك الأصلي
-            if bot_dict.get("column_4"):
+            
+            # 2. التصحيح الجذري للمفاتيح:
+            # نستخدم 'التوكن' بدلاً من 'column_4' ليتوافق مع الهيكل الجديد
+            if bot_dict.get("التوكن"):
+                # نضمن وجود مفتاح 'التوكن' و 'نوع البوت' لكي لا تفشل دالة start_all_sub_bots
                 active_bots.append(bot_dict)
+                
         return active_bots
     except Exception as e:
         print(f"❌ خطأ جلب البوتات النشطة من المحلي: {e}")
         return []
+#~~~~~~~~~~~~~~~~
+
 
 def get_total_bots_count():
     """

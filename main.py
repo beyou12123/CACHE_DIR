@@ -1891,6 +1891,48 @@ broadcast_handler = ConversationHandler(
 )
 
 # --------------------------------------------------------------------------
+async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """حذف قاعدة البيانات المحلية وإعادة تشغيل المصنع لبنائها بالهيكل الجديد"""
+    user_id = update.effective_user.id
+    
+    # حماية: المطور فقط من يمكنه تنفيذ هذا الأمر
+    if user_id != DEVELOPER_ID:
+        await update.message.reply_text("🚫 عذراً، هذا الأمر مخصص للمطور الأساسي فقط.")
+        return
+
+    try:
+        from cache_manager import db_manager, DB_PATH
+        import os
+        import sys
+
+        await update.message.reply_text("⏳ جاري إغلاق الاتصال وتدمير القاعدة القديمة...")
+
+        # 1. إغلاق الاتصال لتجنب خطأ "ملف قيد الاستخدام"
+        if db_manager and db_manager.conn:
+            db_manager.conn.close()
+
+        # 2. حذف الملف فيزيائياً
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+            await update.message.reply_text("✅ تم حذف ملف database.db بنجاح.")
+        else:
+            await update.message.reply_text("⚠️ الملف غير موجود بالفعل، سيتم بناء واحد جديد.")
+
+        # 3. حذف ملف القفل (Lock) لضمان عدم تعليق المصنع
+        lock_file = "/app/cache_data/bot_factory.lock"
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
+
+        await update.message.reply_text("🔄 جاري إعادة تشغيل السيرفر الآن لبناء الهيكل العربي... يرجى الانتظار دقيقة.")
+        
+        # 4. إعادة تشغيل السيرفر بالكامل (Hot Restart)
+        os.execv(sys.executable, ['python'] + sys.argv)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ فشل الحذف: {str(e)}")
+
+
+
 
 
 # --- [ القسم 3: المحرك الرئيسي (نهاية الملف) ] ---
@@ -1918,6 +1960,7 @@ async def main_factory_launcher():
 
         # [ إكمال بقية المعالجات الـ Handlers كما هي في كودك بدون تغيير ]
         app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("Delete_database", delete_database_handler))        
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
         app.add_handler(broadcast_handler)

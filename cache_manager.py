@@ -687,7 +687,8 @@ class DataManager:
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
                 cols = sheet_def.get("cols", [])
-                
+                    # --- [ إضافة تأخير بسيط هنا ] ---
+                time.sleep(2.2)             
                 # --- أ: ضمان وجود الورقة في جوجل شيت ---
                 if name not in existing_ws:
                     worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
