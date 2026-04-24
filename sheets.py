@@ -884,7 +884,8 @@ def setup_bot_factory_database(bot_token=None):
     return 0
 
 def verify_setup(bot_token):
-    [span_0](start_span)"""دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار[span_0](end_span)"""
+    """دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار"""
+
     try:
         from database_core import DataManager
         dm = DataManager(bot_token)
