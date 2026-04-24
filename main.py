@@ -7,11 +7,10 @@ import importlib # استيراد الموديولات ديناميكياً لت
 import signal
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from cache_manager import FACTORY_GLOBAL_CACHE
+from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
 from apscheduler.schedulers.background import BackgroundScheduler
 from sheets import sync_ad_campaign_results, connect_to_google
-from database_core import push_to_google_sheets # دالة الرفع الشاملة
-from cache_manager import smart_sync_check # دالة التحديث الصامت
+
 # استيراد الأدوات الأساسية من مكتبة تليجرام
 from telegram import (
     Update, 
