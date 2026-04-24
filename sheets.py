@@ -6,10 +6,17 @@ import time
 import logging
 import uuid 
 import random
+# استيراد كل شيء من الملف الموحد الجديد
+from cache_manager import (
+    DataManager, 
+    db_manager, 
+    get_bot_data_from_cache, 
+    smart_sync_check, 
+    update_global_version, 
+    ensure_bot_sync_row
+)
 
-# استيراد محرك الذاكرة المؤقتة للمصنع كامل
-from database_core import DataManager
-from cache_manager import get_bot_data_from_cache, smart_sync_check, update_global_version, ensure_bot_sync_row
+
 # --- [ التعديل المعتمد لملف sheets.py ] ---
 import os
 from database_core import DataManager
@@ -876,6 +883,16 @@ def setup_bot_factory_database(bot_token=None):
     print(f"⚠️ فشل التحقق النهائي من التهيئة!")
     return 0
 
+def verify_setup(bot_token):
+    [span_0](start_span)"""دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار[span_0](end_span)"""
+    try:
+        from database_core import DataManager
+        dm = DataManager(bot_token)
+        # التحقق من وجود جدول البوتات كعينة
+        dm.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='البوتات_المصنوعة'")
+        return dm.cursor.fetchone() is not None
+    except:
+        return False
 
 
 # --------------------------------------------------------------------------    
