@@ -19,14 +19,14 @@ from cache_manager import (
 
 # --- [ التعديل المعتمد لملف sheets.py ] ---
 import os
-from database_core import DataManager
+from cache_manager import DataManager
 
 # تعريف المتغير بشكل عالمي
 db_manager = None
 
 try:
     # محاولة استيراد الكائن الجاهز من النواة
-    from database_core import db_manager as core_db
+    from cache_manager import db_manager as core_db
     db_manager = core_db
 except ImportError:
     # إذا فشل، ننشئ نسخة جديدة باستخدام توكن المصنع
@@ -416,7 +416,7 @@ def local_save_wrapper(table_name, data_list):
     try:
         # 1. التحقق الوقائي: إذا كان المحرك غير جاهز، نحاول استدعاءه فوراً
         if db_manager is None:
-            from database_core import db_manager as dm
+            from cache_manager import db_manager as dm
             db_manager = dm
 
         # 2. تجهيز علامات الاستفهام
@@ -765,7 +765,7 @@ def setup_bot_factory_database(bot_token=None):
 
     # [إضافة حيوية]: مزامنة هيكلية قاعدة البيانات المحلية أولاً
     try:
-        from database_core import DataManager
+        from cache_manager import DataManager
         print("🔗 جاري ربط الهيكل المحلي بـ SQLite...")
         # استدعاء محرك المزامنة الهيكلية الذي أنشأناه سابقاً
         db_manager.sync_schema(ss)
@@ -887,7 +887,7 @@ def verify_setup(bot_token):
     """دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار"""
 
     try:
-        from database_core import DataManager
+        from cache_manager import DataManager
         dm = DataManager(bot_token)
         # التحقق من وجود جدول البوتات كعينة
         dm.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='البوتات_المصنوعة'")
