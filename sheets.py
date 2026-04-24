@@ -10,7 +10,21 @@ import random
 # استيراد محرك الذاكرة المؤقتة للمصنع كامل
 from database_core import DataManager
 from cache_manager import get_bot_data_from_cache, smart_sync_check, update_global_version, ensure_bot_sync_row
-db_manager = None 
+# --- السطر القديم ---
+# db_manager = None 
+
+# --- التعديل الصحيح في sheets.py ---
+
+# نقوم باستيراد الكائن الفعلي من ملف النواة
+try:
+    from database_core import db_manager
+except ImportError:
+    # إذا لم يكن موجوداً بهذا الاسم، نستخدم DataManager كبديل
+    from database_core import DataManager
+    db_manager = DataManager()
+
+# تأكد من أن المتغير db_manager متاح عالمياً في الملف
+
 
 def get_system_time(mode="full"):
     """
@@ -377,22 +391,33 @@ connect_to_google()
 # --- الدوال الوظيفية الأساسية ---
 def local_save_wrapper(table_name, data_list):
     """
-    دالة الحفظ المحلي الصارمة: تحفظ الصف كما هو تماماً 
-    مع الحفاظ على ترتيب الأعمدة (11 عمود) وتجهيزها للمزامنة.
+    دالة الحفظ المحلي المحدثة: تتأكد من اتصال قاعدة البيانات قبل التنفيذ
+    لتجنب خطأ 'NoneType' object has no attribute 'cursor'
     """
+    global db_manager
     try:
-        # تجهيز علامات الاستفهام بناءً على عدد الأعمدة المرسلة
+        # 1. التحقق الوقائي: إذا كان المحرك غير جاهز، نحاول استدعاءه فوراً
+        if db_manager is None:
+            from database_core import db_manager as dm
+            db_manager = dm
+
+        # 2. تجهيز علامات الاستفهام
         placeholders = ", ".join(["?" for _ in data_list])
         
-        # استعلام SQL ديناميكي يتجاهل أسماء الأعمدة ويحفظ بالترتيب المباشر
-        # نفترض أن الجدول المحلي تم إنشاؤه بـ 11 عمود + أعمدة التقنية
+        # 3. بناء الاستعلام
         query = f"INSERT INTO '{table_name}' VALUES (NULL, {placeholders}, 'pending', CURRENT_TIMESTAMP)"
         
-        db_manager.cursor.execute(query, data_list)
-        db_manager.conn.commit()
-        return True
+        # 4. التنفيذ مع التحقق من وجود الكرسر
+        if db_manager and db_manager.cursor:
+            db_manager.cursor.execute(query, data_list)
+            db_manager.conn.commit()
+            return True
+        else:
+            print(f"⚠️ محرك قاعدة البيانات لا يزال غير جاهز للحفظ في {table_name}")
+            return False
+
     except Exception as e:
-        print(f"❌ خطأ في الحفظ المحلي (الجدول: {table_name}): {e}")
+        print(f"❌ خطأ حرج في الحفظ المحلي (الجدول: {table_name}): {e}")
         return False
 
 def save_user(user_id, username, inviter_id=None):
