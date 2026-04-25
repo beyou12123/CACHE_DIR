@@ -166,11 +166,68 @@ def ensure_bot_sync_row(bot_id, owner_id=None, developer_id=None):
 # ==========================================================================
 # 4. محرك السحب الشامل المطور (Comprehensive Fetch Engine)
 # ==========================================================================
+def update_global_version(bot_id):
+    """تحديث الإصدار في نظام_المزامنة مع استيراد محلي لتجنب التعارض"""
+    # استيراد الدوال من sheets داخل الدالة فقط لمنع Circular Import
+    from sheets import connect_to_google, ss, safe_api_call
+    
+    try:
+        if ss is None:
+            connect_to_google()
+            from sheets import ss, safe_api_call # إعادة التأكيد بعد الاتصال
+
+        sync_sheet = ss.worksheet("نظام_المزامنة")
+        all_ids = sync_sheet.col_values(1)
+        
+        search_id = str(bot_id).strip()
+        target_row = None
+
+        for index, row_id in enumerate(all_ids):
+            if str(row_id).strip() == search_id:
+                target_row = index + 1
+                break
+
+        now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if target_row:
+            current_val = sync_sheet.cell(target_row, 2).value
+            try:
+                current_v = int(current_val) if current_val else 0
+            except:
+                current_v = 0
+            new_v = current_v + 1
+
+            FACTORY_GLOBAL_CACHE["versions"][str(bot_id)] = new_v
+            
+            # تم استخدام safe_api_call هنا بعد استيرادها محلياً
+            safe_api_call(sync_sheet.update_cell, target_row, 2, new_v)
+            safe_api_call(sync_sheet.update_cell, target_row, 3, now_time)
+            
+            save_cache_to_disk()
+            print(f"🔄 [نظام المزامنة]: تم تحديث التوكن {search_id} للإصدار {new_v}")
+            return new_v
+        else:
+            new_row = [search_id, 1, now_time, "نشط", "تلقائي", str(DEVELOPER_ID)]
+            safe_api_call(sync_sheet.append_row, new_row)
+            FACTORY_GLOBAL_CACHE["versions"][search_id] = 1
+            save_cache_to_disk()
+            return 1
+            
+    except Exception as e:
+        logger.error(f"❌ فشل رفع الإصدار: {e}")
+        return None
+
+
 def fetch_full_factory_data():
-    """سحب بيانات المصنع كاملة وتحديث الرام والقرص مع ضمان الحفظ الفوري لكل ورقة"""
-
-
+    """
+    سحب بيانات المصنع كاملة وتحديث الرام والقرص:
+    - تم استخدام الاستيراد المحلي لمنع Circular Import.
+    - الحفاظ الكامل على منطق الحفظ الفيزيائي الفوري لكل ورقة.
+    """
+    # استيراد محلي لتفادي تعارض الملفات
+    from sheets import get_sheets_structure, ss, safe_api_call
     global FACTORY_GLOBAL_CACHE
+    
     try:
         structures = get_sheets_structure()
         print(f"🚀 [المحرك]: بدء المزامنة الشاملة ({len(structures)} ورقة)...")
@@ -178,42 +235,43 @@ def fetch_full_factory_data():
         for config in structures:
             sheet_name = config["name"]
             try:
+                # محاولة جلب الورقة من جوجل
                 sheet = ss.worksheet(sheet_name)
-                # سحب البيانات في طلب واحد Batch Read
+                # سحب البيانات (الالتزام بمنطقك الأصلي)
                 records = sheet.get_all_records()
                 FACTORY_GLOBAL_CACHE["data"][sheet_name] = records
                 
-                # --- [ التصحيح الجذري: الحفظ الفيزيائي الفوري لكل ورقة ] ---
-                # نضمن هنا كتابة الملف على القرص فور سحبه لضمان وجوده للتحميل
-                try:
-                    file_path = os.path.join(CACHE_DIR, f"{sheet_name}.json")
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        json.dump(records, f, ensure_ascii=False, indent=4)
-                    print(f"✅ سحب وحفظ: {sheet_name} | سجلات: {len(records)}")
-                except Exception as disk_err:
-                    print(f"⚠️ فشل الكتابة الفيزيائية للورقة {sheet_name}: {disk_err}")
+                # --- [ الحفظ الفيزيائي الفوري لكل ورقة ] ---
+                file_path = os.path.join(CACHE_DIR, f"{sheet_name}.json")
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(records, f, ensure_ascii=False, indent=4)
                 
-                time.sleep(2.8) # حماية API جوجل
+                print(f"✅ سحب وحفظ: {sheet_name} | سجلات: {len(records)}")
+                
+                # تهدئة للـ API (جوجل تسمح بـ 60 طلب في الدقيقة)
+                time.sleep(1.6) 
             except Exception as e:
                 logger.warning(f"⚠️ تخطي الورقة {sheet_name}: {e}")
 
-        # تحديث الإصدارات
+        # تحديث الإصدارات من ورقة نظام_المزامنة
         try:
             sync_sheet = ss.worksheet("نظام_المزامنة")
             sync_data = sync_sheet.get_all_records()
             for row in sync_data:
-                b_id = str(row.get("bot_id"))
-                FACTORY_GLOBAL_CACHE["versions"][b_id] = int(row.get("رقم_الإصدار", 1))
-        except:
-            print("⚠️ تعذر جلب الإصدارات.")
+                b_id = str(row.get("bot_id", row.get("column_1", ""))).strip()
+                if b_id:
+                    v_val = row.get("رقم_الإصدار", row.get("column_2", 1))
+                    FACTORY_GLOBAL_CACHE["versions"][b_id] = int(v_val if v_val else 1)
+        except Exception as v_err:
+            print(f"⚠️ تعذر جلب الإصدارات: {v_err}")
 
-        # تنفيذ الحفظ الفيزيائي الشامل (للمراجعة النهائية وخريطة الإصدارات)
+        # الحفظ الفيزيائي الشامل لخريطة الكاش
         save_cache_to_disk()
 
         print("🎊 [المحرك]: اكتملت المزامنة الشاملة (رام + قرص).")
         return True
     except Exception as e:
-        logger.error(f"❌ خطأ حرج في المزامنة: {e}")
+        logger.error(f"❌ خطأ حرج في المزامنة الشاملة: {e}")
         return False
 
 # ==========================================================================
@@ -240,78 +298,6 @@ def smart_sync_check(bot_id):
     print(f"🔍 [المزامنة الصامتة]: تحديث بيانات المصنع...")
     return fetch_full_factory_data()
 # --------------------------------------------------------------------------
-def update_global_version(bot_id):
-    """تحديث الإصدار في نظام_المزامنة باستخدام المطابقة المباشرة للمصفوفة لضمان الدقة"""
-    # تصحيح حرج: يجب استيراد ss أيضاً من ملف sheets لتجنب خطأ NameError
-    from sheets import connect_to_google, ss 
-    try:
-        # التأكد من الاتصال
-        # تم تعديل الشرط للتحقق من الكائن المستورد 'ss' مباشرة
-        if ss is None:
-            connect_to_google()
-            # بعد الاتصال نحتاج لإعادة استيراد ss لأنه قد يكون تغير قيمته بعد الدالة
-            from sheets import ss
-
-        sync_sheet = ss.worksheet("نظام_المزامنة")
-        # جلب العمود الأول بالكامل (معرفات البوتات) لضمان المطابقة النصية الدقيقة
-        all_ids = sync_sheet.col_values(1)
-        
-        search_id = str(bot_id).strip()
-        target_row = None
-
-        # البحث عن الصف المناسب بمطابقة النص حرفياً لتجنب مشاكل التنسيق في شيت
-        for index, row_id in enumerate(all_ids):
-            if str(row_id).strip() == search_id:
-                target_row = index + 1
-                break
-
-        # تعريف الوقت الحالي في أعلى الكتلة لاستخدامه في الحالتين (تحديث أو إضافة)
-        now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        if target_row:
-            # جلب القيمة الحالية من الخلية مباشرة للتأكد من الرقم الأخير
-            current_val = sync_sheet.cell(target_row, 2).value
-            try:
-                current_v = int(current_val) if current_val else 0
-            except:
-                current_v = 0
-                
-            new_v = current_v + 1
-
-            # تحديث الخلايا في جوجل شيت باستخدام الوسيط الآمن safe_api_call لمنع الحظر
-            # إضافة سطر تحديث الرام قبل الرفع
-            FACTORY_GLOBAL_CACHE["versions"][str(bot_id)] = new_v
-            
-            # ملاحظة: تأكد من تعريف safe_api_call في ملفك أو استبدلها بـ sync_sheet.update_cell مباشرة
-            safe_api_call(sync_sheet.update_cell, target_row, 2, new_v)
-            safe_api_call(sync_sheet.update_cell, target_row, 3, now_time)
-
-            # تحديث الذاكرة المركزية RAM لضمان استجابة البوت الفورية بالبيانات الجديدة
-            FACTORY_GLOBAL_CACHE["versions"][search_id] = new_v
-            
-            # حفظ الكاش فيزيائياً على القرص لضمان بقاء البيانات عند إعادة التشغيل
-            save_cache_to_disk()
-
-            print(f"🔄 [نظام المزامنة]: تم تحديث التوكن بنجاح في الصف {target_row} إلى الإصدار {new_v}")
-            return new_v
-        else:
-            # 🆕 التسجيل التلقائي: إذا لم يجد التوكن يقوم بإضافته فوراً في نظام المزامنة
-            # الترتيب المعتمد: [bot_id, رقم_الإصدار, آخر_تحديث, الحالة, ID_المالك, ID_المطور]
-            new_row = [search_id, 1, now_time, "نشط", "تلقائي", str(DEVELOPER_ID)]
-            safe_api_call(sync_sheet.append_row, new_row)
-            
-            # تحديث الذاكرة والقرص للبوت الجديد لضمان مزامنته فوراً
-            new_v = 1
-            FACTORY_GLOBAL_CACHE["versions"][search_id] = new_v
-            save_cache_to_disk()
-            
-            print(f"✨ [نظام المزامنة]: تم تسجيل توكن جديد تلقائياً: {search_id}")
-            return new_v
-            
-    except Exception as e:
-        # تأكد من أن logger معرف في كودك (عادة موجود في بداية ملف cache_manager)
-        logger.error(f"❌ فشل رفع الإصدار: {e}")
-        return None
 
 
 

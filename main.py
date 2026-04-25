@@ -76,12 +76,23 @@ ACTIVE_RUNTIME_BOTS = {}
 BOT_PROCESS_LOCK_FILE = "/app/cache_data/bot_factory.lock"
 
 def acquire_process_lock():
-    """يمنع تشغيل أكثر من عملية مصنع بوتات"""
+    """يمنع التشغيل المزدوج مع تنظيف القفل القديم"""
     if os.path.exists(BOT_PROCESS_LOCK_FILE):
-        return False
+        try:
+            # قراءة PID العملية القديمة
+            with open(BOT_PROCESS_LOCK_FILE, "r") as f:
+                old_pid = int(f.read())
+            # التأكد هل العملية لا تزال حية فعلاً؟
+            os.kill(old_pid, 0) 
+            return False # العملية حية، لا تشغل نسخة ثانية
+        except (OSError, ValueError):
+            # العملية ميتة أو الملف تالف، احذفه
+            os.remove(BOT_PROCESS_LOCK_FILE)
+            
     with open(BOT_PROCESS_LOCK_FILE, "w") as f:
         f.write(str(os.getpid()))
     return True
+
 
 
 def release_process_lock():
