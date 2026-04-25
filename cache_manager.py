@@ -686,6 +686,7 @@ class DataManager:
         import time # التأكد من وجود المكتبة للـ sleep
         
         try:
+        	print(f"⏳ [SYNC LOG]: بدء مزامنة {len(sheets_structure)} جدولاً...")
             # إصلاح التضارب: إذا لم يتم تمرير spreadsheet، نحاول الاتصال تلقائياً
             if spreadsheet is None:
                 spreadsheet = connect_to_google()
@@ -698,6 +699,7 @@ class DataManager:
             
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
+                print(f"📝 [SYNC LOG]: جاري فحص الجدول: {name}...")
                 cols = sheet_def.get("cols", [])
                 
                 # --- [ إضافة تأخير بسيط هنا ] ---
@@ -730,10 +732,13 @@ class DataManager:
             
             self.conn.commit()
             logger.info(f"✅ اكتملت المزامنة الموحدة لـ {len(sheets_structure)} جدولاً (جوجل + محلي).")
+            print(f"✅ [SYNC LOG]: اكتملت المزامنة المحلية والسحابية بنجاح.")
             
         except Exception as e:
             logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
-
+            print(f"❌ [SYNC LOG - ERROR]: فشل المحرك الموحد: {e}")
+            
+            
 
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
