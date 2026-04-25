@@ -1981,7 +1981,7 @@ async def main_factory_launcher():
     global app
     try:
         # --- [ الخطوة 0: تهيئة المحرك الموحد للهيكل ] ---
-        # التصحيح: استيراد الدالة get_sheets_structure وليس sheets_structure
+        # تم الحفاظ على الاستيراد كما هو لضمان الوظائف
         from sheets import get_sheets_structure, connect_to_google
         from cache_manager import db_manager
         
@@ -1989,9 +1989,11 @@ async def main_factory_launcher():
         try:
             spreadsheet = connect_to_google() # استدعاء دالة الاتصال
             if spreadsheet:
-                # التصحيح: جلب الهيكل من الدالة وتمريره للمحرك
+                # جلب الهيكل من الدالة وتمريره للمحرك
                 structure = get_sheets_structure() 
-                db_manager.sync_schema(spreadsheet, structure) #
+                # تصحيح: تمرير الهيكل فقط إذا كانت الدالة تطلبه كما ظهر في اللوج السابق
+                # أو تمرير spreadsheet و structure إذا كان db_manager معدلاً لذلك
+                db_manager.sync_schema(structure) 
         except Exception as schema_err:
             print(f"⚠️ تنبيه: فشل مزامنة الهيكل، سيتم الاعتماد على الكاش المحلي: {schema_err}")
 
@@ -2021,7 +2023,7 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         # 3. استدعاء البوتات التابعة
-        await boot_all_bots() 
+        boot_all_bots() 
         asyncio.create_task(start_all_sub_bots()) 
 
         # 4. تشغيل محرك المصنع
