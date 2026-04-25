@@ -2000,7 +2000,6 @@ async def main_factory_launcher():
         # [ إكمال بقية المعالجات الـ Handlers كما هي في كودك بدون تغيير ]
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
-        app.add_handler(CommandHandler(backup_to_channel, restore_from_channel))        
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
         app.add_handler(broadcast_handler)
@@ -2011,7 +2010,7 @@ async def main_factory_launcher():
         app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
         app.add_handler(CallbackQueryHandler(
             button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin)$"
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel)$"
         ))
         app.add_handler(CommandHandler("admin_export", export_admins))
         app.add_handler(CommandHandler("import_admin", import_admins_handler))
