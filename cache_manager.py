@@ -24,7 +24,7 @@ from telegram import Bot
 # إعدادات ثابتة (تم توحيد المسار ليتوافق مع مجلد الكاش في Railway)
 DB_PATH = "cache_data/database.db"
 BACKUP_CHANNEL_ID = -1003910834893  # المعرف الخاص بالقناة
-DEVELOPER_ID = 873158772  # معرف المطور الثابت
+DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 
 # تصحيح: توحيد إعدادات اللوجر لمنع التضارب في السجلات
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

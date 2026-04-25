@@ -539,7 +539,7 @@ async def finalize_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_info = await temp_bot.get_me()
         bot_username = f"@{bot_info.username}"
 
-        from sheets import save_bot, get_total_bots_count
+       # from sheets import save_bot, get_total_bots_count
         success = save_bot(user_id, bot_type, friendly_name, bot_token)
 
         if success: 
