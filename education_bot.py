@@ -9,7 +9,8 @@ import secrets
 import importlib
 import importlib.util
 from datetime import datetime
-
+from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+from ContentManager import content_management_handler, config_input_receiver, get_main_config_keyboard, auto_reply_engine
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
 # محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
 try:
@@ -23,7 +24,6 @@ except (ImportError, ModuleNotFoundError):
 import g4f  # المحرك المجاني البديل لضمان استمرارية الردود
 import pandas as pd # ضروري لعمليات استيراد وتصدير الإكسل
 import openpyxl    # محرك معالجة ملفات xlsx
-
 # --- [ 3. مكتبات تليجرام بوت (النسخة الحديثة) ] ---
 from telegram import (
     Update, 
@@ -214,7 +214,7 @@ def get_admin_panel():
         [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
          InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
         [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
-        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("🤖 ضبط الـ AI", callback_data="setup_ai_start")],
+        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("إعدادات المحتوى", callback_data="contentcanager")],
         [InlineKeyboardButton("📥 تحميل نسخة احتياطية ", callback_data="export_data_json"),
          InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
 
@@ -1251,6 +1251,25 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         text = f"<b>{current_msg}</b>\n\n👨‍🏫 <b>الغرفة الأكاديمية:</b> مهامك بانتظارك أيها المدرب."
         await query.edit_message_text(text, reply_markup=get_coach_panel(), parse_mode="HTML")
 
+#إعدادات المحتوى
+    elif data == "contentcanager":
+        # عرض لوحة التحكم مع تعليمات الاستخدام لصاحب البوت
+        instructions = (
+            "⚙️ **لوحة التحكم بإعدادات المحتوى**\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "مرحباً بك في نظام إدارة المحتوى الذكي. يمكنك تخصيص البوت الخاص بك من خلال الخيارات أدناه:\n\n"
+            "🔹 **الأقسام الأساسية:** لضبط اسم المؤسسة والرسائل الترحيبية.\n"
+            "🤖 **الرد الآلي والذكاء:** لضبط الكلمات المفتاحية وتعليمات AI.\n"
+            "⏰ **الترحيب المتقدم:** لضبط رسائل متغيرة حسب وقت اليوم.\n"
+            "🛡️ **الحماية:** لإدارة المحظورات وصلاحيات المشرفين.\n\n"
+            "💡 **تعليمات:** عند اختيار أي قسم، سيظهر لك ما إذا كان 'مضافاً مسبقاً' أو 'فارغاً'. اضغط على زر الإضافة أو التحديث ثم أرسل النص الجديد مباشرة."
+        )
+        
+        await query.message.edit_text(
+            text=instructions, 
+            reply_markup=get_main_config_keyboard(),
+            parse_mode="Markdown"
+        )
 
 #ضبط الذكاء الاصطناعي 
     elif data == "setup_ai_start":
@@ -2807,7 +2826,11 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     bot_token = context.bot.token
     action = context.user_data.get('action') # الحالة الحالية للمستخدم
-    
+    # فحص الرد التلقائي أولاً قبل معالجة الذكاء الاصطناعي
+
+    if await auto_reply_engine(update, context):
+        return  # إذا تم إيجاد رد تلقائي، نكتفي به وننهي الدالة
+
     # تصحيح: نقل جلب الإعدادات للأعلى لضمان توفر bot_owner_id لكافة الأقسام
     try:
         config = get_bot_config(bot_token)
@@ -3734,8 +3757,16 @@ async def run_bot(token, owner_id):
     
     # 1. إضافة المعالجات (Handlers)
     application.add_handler(CommandHandler("start", start_handler))
+# --- قسم الـ Callback (الأزرار) ---
+# سجل معالج ContentManager أولاً
+    application.add_handler(CallbackQueryHandler(content_management_handler))
+# ثم سجل المعالج الخاص ببقية أزرار البوت
     application.add_handler(CallbackQueryHandler(contact_callback_handler))
+
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, config_input_receiver))
+# ثم سجل مستلم الرسائل العام للبوت
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_contact_message))
+
     
     # 2. إعداد مراقب التفعيل (يُوضع هنا بعد تعريف الـ application)
     # سيقوم بفحص القاعدة كل 60 ثانية وإرسال رسائل للطلاب المفعلين

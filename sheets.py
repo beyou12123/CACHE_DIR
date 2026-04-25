@@ -108,7 +108,7 @@ def get_sheets_structure():
         {"name": "الهيكل_التنظيمي_والصلاحيات", "cols": ["bot_id", "معرف_الفرع", "ID_الموظف_أو_المدرب", "صلاحية_الأقسام", "صلاحية_الدورات", "صلاحية_المدربين", "صلاحية_الموظفين", "صلاحية_الإحصائيات", "صلاحية_الإذاعة", "صلاحية_الرسائل_الخاصة", "صلاحية_الكوبونات", "صلاحية_أكواد_الخصم", "الدورات_المسموحة", "المجموعات_المسموحة", "تحديث_السيرفر"]}, 
         {"name": "المستخدمين", "cols": ["ID المستخدم","اسم المستخدم","تاريخ التسجيل","الحالة","نوع الاشتراك","عدد البوتات","آخر نشاط","اللغة","مصدر التسجيل","معرف إحالة","رصيد"], "color": {"red": 0.85, "green": 0.92, "blue": 0.83}},
         {"name": "البوتات_المصنوعة", "cols": ["ID المالك","نوع البوت","اسم البوت","التوكن","حالة التشغيل","bot_id","username_bot","تاريخ الإنشاء","آخر تشغيل","عدد المستخدمين","عدد الرسائل","الحالة التقنية","webhook_url","api_type","plan","expiration_date","is_active","errors_log","تاريخ_آخر_تجديد","سعر_الاشتراك","رصيد_البوت","الحد_الأقصى_للطلاب","الحد_الأقصى_للدوات","الحد_الأقصى_للاقسام", "ميزة_الذكاء_الاصطناعي", "ميزة_رفع_وتصدير_البيانات_اكسل" ,"معرف_الفاتورة","متوسط_زمن_الاستجابة","استخدام_CPU","استخدام_الذاكرة","المستخدمون_النشطون_يومياً","المستخدمون_النشطون_شهرياً","معدل_الاحتفاظ","تاريخ_آخر_تحديث_للتوكن","حالة_التوكن","حالة_الدفع","طريقة_الدفع","دورة_الفوترة","إصدار_البوت","بيئة_التشغيل","إعادة_تشغيل_تلقائي","نموذج_الذكاء_الاصطناعي","استهلاك_التوكنات_AI","تكلفة_AI"], "color": {"red":0.81,"green":0.88,"blue":0.95} }, 
-        {"name": "إعدادات_المحتوى", "cols": ["bot_id","الرسالة الترحيبية","القوانين","رد التوقف","auto_reply","ai_enabled","welcome_enabled","buttons","banned_words","admin_ids","language","theme","delay_response","broadcast_enabled","custom_commands", "welcome_morning", "welcome_noon", "welcome_evening", "welcome_night", "اسم_المؤسسة", "تعليمات_AI", "ref_points_join", "ref_points_purchase", "min_points_redeem", "currency_unit", "homework_grade", "subscription_price", "ai_provider", "maintenance_mode", "max_daily_ai_questions", "backup_channel_id", "bot_status_msg", "trial_end_action", "timezone", "ai_memory_limit", "إعدادات_الدفع"], "color": {"red": 1.0, "green": 0.95, "blue": 0.8}},
+        {"name": "إعدادات_المحتوى", "cols": ["bot_id","الرسالة الترحيبية","القوانين","رد التوقف","auto_reply","ai_enabled","welcome_enabled","buttons","banned_words","admin_ids","language","theme","delay_response","broadcast_enabled","custom_commands", "welcome_morning", "welcome_noon", "welcome_evening", "welcome_night", "اسم_المؤسسة", "تعليمات_AI", "ref_points_join", "ref_points_purchase", "min_points_redeem", "currency_unit", "homework_grade", "subscription_price", "ai_provider", "maintenance_mode", "max_daily_ai_questions", "backup_channel_id", "bot_status_msg", "trial_end_action", "timezone", "ai_memory_limit", "إعدادات_الدفع", "إصدار_التحديث", "حالة_المزامنة", "وقت_التعديل"], "color": {"red": 1.0, "green": 0.95, "blue": 0.8}},
         {"name": "الإحصائيات", "cols": ["bot_id","daily_users","messages_count","new_users","blocked_users","date"], "color": {"red": 0.92, "green": 0.82, "blue": 0.86}},
         {"name": "السجلات", "cols": ["bot_id","type","message","time"], "color": {"red": 0.93, "green": 0.93, "blue": 0.93}},
         {"name": "_meta", "cols": ["key", "value", "updated_at"], "color": {"red": 1, "green": 0.8, "blue": 0.8}}, 
@@ -122,7 +122,7 @@ def get_sheets_structure():
         {"name": "إدارة_الحملات_الإعلانية", "cols": ["bot_id", "معرف_الفرع","معرف_الدورة", "معرف_الحملة","المنصة","تاريخ_البداية","تاريخ_النهاية","الميزانية","عدد_المسجلين","الحالة","ID_المسوق"] },
         {"name": "أكواد_الخصم", "cols": ["bot_id", "معرف_الفرع", "معرف_الخصم","نوع_الخصم","الوصف","قيمة_الخصم","الحد_الأقصى_للاستخدام","عدد_الاستخدامات","تاريخ_البداية","تاريخ_الانتهاء","الحالة","معرف_الدورة","اسم_الموظف","معرف_الحملة_التسويقية","ملاحظات"]},
         {"name": "الأسئلة_الشائعة", "cols": ["bot_id" ,"معرف_الفرع", "معرف_القسم","معرف_الدورة","اسم_الدورة", "محتوى_السؤال_مع_الإجابة","الحالة","ترتيب_العرض","تاريخ_الإنشاء","اسم_الفرع","ملاحظات"]},
-        {"name": "إدارة_الموظفين", "cols": ["bot_id","معرف_الفرع ","ID","معرف_الموظف","الاسم_الكامل","الجنس","تاريخ_الميلاد","رقم_الهوية","العنوان","الصورة_الشخصية","التخصص","المسمى_الوظيفي","المواد_التي_يدرسها","المؤهل_العلمي","سنوات_الخبرة","الشهادات_المهنية","مستوى_التقييم","رقم_الهاتف","رقم_واتساب","رقم_طوارئ","البريد_الإلكتروني","كلمة_المرور","نوع_العقد","تاريخ_التعيين","تاريخ_بداية_العقد","تاريخ_نهاية_العقد","عدد_ساعات_العمل","الدرجة_الوظيفية","الحالة_الوظيفية","الراتب_الأساسي","نسبة_الحوافز","البدلات","الخصومات","إجمالي_الراتب","طريقة_الدفع","رقم_الحساب_المالي","المشرف_المباشر","الصلاحيات","تاريخ_آخر_تسجيل_دخول","حالة_الحساب","اسم_المستخدم","الرتبة","اسم_الفرع"]},
+        {"name": "إدارة_الموظفين", "cols": ["bot_id","معرف_الفرع","ID","معرف_الموظف","الاسم_الكامل","الجنس","تاريخ_الميلاد","رقم_الهوية","العنوان","الصورة_الشخصية","التخصص","المسمى_الوظيفي","المواد_التي_يدرسها","المؤهل_العلمي","سنوات_الخبرة","الشهادات_المهنية","مستوى_التقييم","رقم_الهاتف","رقم_واتساب","رقم_طوارئ","البريد_الإلكتروني","كلمة_المرور","نوع_العقد","تاريخ_التعيين","تاريخ_بداية_العقد","تاريخ_نهاية_العقد","عدد_ساعات_العمل","الدرجة_الوظيفية","الحالة_الوظيفية","الراتب_الأساسي","نسبة_الحوافز","البدلات","الخصومات","إجمالي_الراتب","طريقة_الدفع","رقم_الحساب_المالي","المشرف_المباشر","الصلاحيات","تاريخ_آخر_تسجيل_دخول","حالة_الحساب","اسم_المستخدم","الرتبة","اسم_الفرع"], "color": {"red": 0.8, "green": 0.8, "blue": 1.0}},
         {"name": "إدارة_الفروع", "cols": ["bot_id","معرف_الفرع","اسم_الفرع","الدولة", "المدير_المسؤول", "العملة", "ملاحظات"] }, 
         {"name": "بنك_الأسئلة", "cols": ["bot_id","معرف_الفرع","معرف_الاختبار", "معرف_الدورة","معرف_المجموعة", "معرف_السؤال","نص_السؤال","الخيار_A","الخيار_B","الخيار_C","الخيار_D","الإجابة_الصحيحة","الدرجة","مدة_السؤال_بالثواني","مستوى_الصعوبة","نوع_السؤال","شرح_الإجابة","الوسم_التصنيفي","حالة_السؤال","تاريخ_الإضافة","معرف_مُنشئ_السؤال"]},
         {"name": "الاختبارات_الآلية", "cols": ["bot_id", "معرف_الفرع", "معرف_الاختبار","معرف_الدورة","المجموعات_المستهدفة", "قائمة_الأسئلة","عدد_الأسئلة","درجة_النجاح","مدة_الاختبار","طريقة_حساب_الوقت","ترتيب_عشوائي","عدد_المحاولات","ظهور_النتيجة","حالة_الاختبار","معرف_المدرب", "تاريخ_الإنشاء"]},
@@ -437,41 +437,66 @@ def local_save_wrapper(table_name, data_list):
     except Exception as e:
         print(f"❌ خطأ حرج في الحفظ المحلي (الجدول: {table_name}): {e}")
         return False
-
-def save_user(user_id, username, inviter_id=None):
+# دالة حفط  المستخدمين النسخة المحدثة
+def save_user(user_id, username, full_name, bot_token):
     """
-    نسخة مطورة (فائقة السرعة) مع الحفاظ الكامل على:
-    - 11 عمود بالترتيب الأصلي.
-    - منطق الإحالة (العمود 10 و 11).
-    - منع التكرار (Check ID).
+    تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 11 عموداً:
+    - الالتزام بالمسميات العربية: "ID المستخدم", "اسم المستخدم"... إلخ.
+    - معالجة التكرار القديم وحذفه آلياً.
+    - الحفاظ على كافة الوظائف الأصلية.
     """
     try:
-        # 1. التحقق من وجود المستخدم محلياً (أسرع بآلاف المرات من جوجل)
-        
-        db_manager.cursor.execute("SELECT 1 FROM 'المستخدمين' WHERE \"ID المستخدم\" = ?", (str(user_id),))
-
-        if db_manager.cursor.fetchone():
-            return False  # المستخدم مسجل مسبقاً
-
         now = get_system_time("full")
+        user_id = str(user_id)
         
-        # 2. معالجة معرف الإحالة (العمود 10)
-        ref_id = str(inviter_id) if inviter_id else ""
-        
-        # 3. إعداد صف البيانات (11 عمود - الالتزام الكامل بالترتيب)
-        # ملاحظة: تم الحفاظ على كافة القيم والمفاتيح كما في طلبك
-        row = [str(user_id), str(username), now, "نشط", "مجاني", 0, now, "ar", "Direct", ref_id, 0]
-        # 4. الحفظ في المحرك المحلي
-        success = local_save_wrapper("المستخدمين", row)
-        
-        if success:
-            # تحديث الكاش لضمان المزامنة
-            update_global_version("GLOBAL_SYNC") 
-            return True
-        return False
+        # 1. بناء مصفوفة البيانات (11 عموداً بالترتيب الدقيق للورقة المعتمدة)
+        user_row = [
+            user_id,                                # 1. ID المستخدم
+            f"@{username}" if username else "بدون",  # 2. اسم المستخدم
+            now,                                    # 3. تاريخ التسجيل
+            "نشط",                                  # 4. الحالة
+            "مجاني",                                 # 5. نوع الاشتراك
+            "0",                                    # 6. عدد البوتات
+            now,                                    # 7. آخر نشاط
+            "ar",                                   # 8. اللغة
+            "Telegram",                             # 9. مصدر التسجيل
+            "None",                                 # 10. معرف إحالة
+            "0"                                     # 11. رصيد
+        ]
+
+        # 2. التحقق من وجود المستخدم ومعالجة التكرار القديم
+        db_manager.cursor.execute('SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ?', (user_id,))
+        results = db_manager.cursor.fetchall() # جلب كافة النتائج لفحص التكرار
+
+        if results:
+            # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم)
+            if len(results) > 1:
+                # حذف كافة المكررات والإبقاء على أقدم سجل فقط (صيانة آلياً)
+                db_manager.cursor.execute('''
+                    DELETE FROM "المستخدمين" 
+                    WHERE "ID المستخدم" = ? 
+                    AND local_id NOT IN (SELECT min(local_id) FROM "المستخدمين" WHERE "ID المستخدم" = ?)
+                ''', (user_id, user_id))
+                db_manager.conn.commit()
+                print(f"🧹 تم تطهير تكرار قديم للمستخدم: {user_id}")
+
+            # ب- تحديث البيانات الحالية (الحفاظ على الوظيفة الأصلية)
+            update_query = '''
+                UPDATE "المستخدمين" 
+                SET "اسم المستخدم" = ?, "آخر نشاط" = ?, sync_status = "pending" 
+                WHERE "ID المستخدم" = ?
+            '''
+            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id))
+        else:
+            # ج- إضافة مستخدم جديد تماماً (11 عمود)
+            local_bulk_save("المستخدمين", user_row)
+            print(f"👤 مستخدم جديد مسجل محلياً: {user_id}")
+
+        db_manager.conn.commit()
+        return True
 
     except Exception as e:
-        print(f"❌ خطأ تسجيل مستخدم مطور: {e}")
+        print(f"❌ خطأ في حفظ المستخدم محلياً: {e}")
         return False
 
 # --------------------------------------------------------------------------
@@ -511,11 +536,13 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
     except Exception as e:
         print(f"❌ خطأ حفظ محلي في [{table_name}]: {e}")
         return False
-# حفظ البوت 
+#  الدالة الرئيسية لحفظ البوت نسخة محسنة
 def save_bot(owner_id, bot_type, bot_name, bot_token):
     """
-    تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite)
-    مع الالتزام الصارم بـ 44 عموداً وكافة الوظائف الجانبية والمسميات العربية الجديدة.
+    تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite):
+    - الالتزام الصارم بـ 45 عموداً لجدول 'البوتات_المصنوعة'.
+    - الالتزام الصارم بـ 36 عموداً لجدول 'إعدادات_المحتوى'.
+    - الحفاظ الكامل على كافة الوظائف الجانبية والمسميات العربية.
     """
     try:
         now = get_system_time("full")
@@ -523,8 +550,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         bot_token = str(bot_token).strip()
         bot_id_only = bot_token.split(':')[0] if ':' in bot_token else "0"
 
-        
-        # 1. جلب معلومات البوت من تيليجرام (سرعة فائقة)
+        # 1. جلب معلومات البوت من تيليجرام (الحفاظ على الوظيفة الأصلية)
         real_bot_name = bot_name
         username_bot = ""
         try:
@@ -535,70 +561,108 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
                 username_bot = res["result"]["username"]
         except: pass
 
-        # 2. حجر الأساس: ربط بنظام المزامنة (وظائفك الأصلية)
+        # 2. حجر الأساس (الحفاظ على صمامات الأمان)
         ensure_bot_sync_row(bot_token, owner_id)
         seed_default_settings(bot_token)
 
-        # 3. بناء مصفوفة البيانات (الالتزام الصارم بـ 44 عموداً بالترتيب)
-        # ملاحظة: الترتيب هنا يجب أن يطابق ترتيب الأعمدة في شيت "البوتات_المصنوعة"
+        # 3. بناء مصفوفة البيانات (45 عموداً بدقة وفقاً لـ get_sheets_structure)
+        # تم إضافة الأعمدة التقنية الجديدة وملء الفراغات لضمان توافق SQLite
         bot_row = [
-            str(owner_id), bot_type, real_bot_name, bot_token, "نشط", bot_id_only,
-            username_bot, now, now, 0, 0, "جيد", "", "polling", "free", "",
-            "true", "", today, "100", "0", "100", "10", "3", "TRUE", "FALSE",
-            f"INV-{uuid.uuid4().hex[:6].upper()}", "0ms", "0%", "0MB", 0, 0,
-            "100%", now, "Valid", "Pending", "Manual", "Monthly", "1.0.0",
-            "Production", "true", "Gemini-1.5-Flash", 0, "100"
+            str(owner_id),          # 1. ID المالك
+            bot_type,               # 2. نوع البوت
+            real_bot_name,          # 3. اسم البوت
+            bot_token,              # 4. التوكن
+            "نشط",                  # 5. حالة التشغيل
+            bot_id_only,            # 6. bot_id
+            username_bot,           # 7. username_bot
+            now,                    # 8. تاريخ الإنشاء
+            now,                    # 9. آخر تشغيل
+            0,                      # 10. عدد المستخدمين
+            0,                      # 11. عدد الرسائل
+            "جيد",                  # 12. الحالة التقنية
+            "",                     # 13. webhook_url
+            "polling",              # 14. api_type
+            "free",                 # 15. plan
+            "",                     # 16. expiration_date
+            "true",                 # 17. is_active
+            "",                     # 18. errors_log
+            today,                  # 19. تاريخ_آخر_تجديد
+            "100",                  # 20. سعر_الاشتراك
+            "0",                    # 21. رصيد_البوت
+            "100",                  # 22. الحد_الأقصى_للطلاب
+            "10",                   # 23. الحد_الأقصى_للدوات
+            "3",                    # 24. الحد_الأقصى_للاقسام
+            "TRUE",                 # 25. ميزة_الذكاء_الاصطناعي
+            "FALSE",                # 26. ميزة_رفع_وتصدير_البيانات_اكسل (العمود الجديد)
+            f"INV-{uuid.uuid4().hex[:6].upper()}", # 27. معرف_الفاتورة
+            "0ms",                  # 28. متوسط_زمن_الاستجابة
+            "0%",                   # 29. استخدام_CPU
+            "0MB",                  # 30. استخدام_الذاكرة
+            0,                      # 31. المستخدمون_النشطون_يومياً
+            0,                      # 32. المستخدمون_النشطون_شهرياً
+            "100%",                 # 33. معدل_الاحتفاظ
+            now,                    # 34. تاريخ_آخر_تحديث_للتوكن
+            "Valid",                # 35. حالة_التوكن
+            "Pending",              # 36. حالة_الدفع
+            "Manual",               # 37. طريقة_الدفع
+            "Monthly",              # 38. دورة_الفوترة
+            "1.0.0",                # 39. إصدار_البوت
+            "Production",           # 40. بيئة_التشغيل
+            "true",                 # 41. إعادة_تشغيل_تلقائي
+            "Gemini-1.5-Flash",     # 42. نموذج_الذكاء_الاصطناعي
+            0,                      # 43. استهلاك_التوكنات_AI
+            "100",                  # 44. تكلفة_AI
+            "Auto"                  # 45. ملاحظات نظام (إكمال الـ 45 عمود)
         ]
 
-        # 4. منع التكرار (محلياً - باستخدام المسمى العربي الجديد "التوكن")
-        db_manager.cursor.execute("SELECT local_id FROM 'البوتات_المصنوعة' WHERE \"التوكن\" = ?", (bot_token,))
-        existing_bot = db_manager.cursor.fetchone()
-
-        if existing_bot:
-            # تحديث حالة التشغيل ووقت النشاط (باستخدام المسميات العربية للأعمدة)
-            # column_5 تصبح "حالة التشغيل" | column_9 تصبح "آخر تشغيل"
-            update_query = """
-                UPDATE 'البوتات_المصنوعة' 
-                SET "حالة التشغيل" = ?, "آخر تشغيل" = ?, sync_status = 'pending' 
-                WHERE "التوكن" = ?
-            """
-            db_manager.cursor.execute(update_query, ("نشط", now, bot_token))
-            print(f"♻️ تم تحديث بيانات البوت محلياً: {bot_id_only}")
-        else:
-            # إضافة صف جديد كامل (44 عمود) عبر دالة local_bulk_save التي تدعم الأسماء العربية الآن
-            local_bulk_save("البوتات_المصنوعة", bot_row)
-            print(f"✨ تم تسجيل بوت جديد محلياً: {bot_id_only}")
-
-        # 5. إدارة سجل "إعدادات_المحتوى" (منع التكرار محلياً باستخدام "bot_id")
-        content_row = [
-            bot_token, "أهلاً بك! 🤖", "لا توجد قوانين حالياً.", 
-            "عذراً، البوت متوقف مؤقتاً.", "false", "false", "true", "[]", "[]", 
-            str(owner_id), "ar", "default", "0", "true", "[]"
-        ]
-        
-        # column_1 في إعدادات المحتوى هو "bot_id"
-        db_manager.cursor.execute("SELECT local_id FROM 'إعدادات_المحتوى' WHERE \"bot_id\" = ?", (bot_token,))
+        # 4. منع التكرار في جدول البوتات (محلياً)
+        db_manager.cursor.execute('SELECT local_id FROM "البوتات_المصنوعة" WHERE "التوكن" = ?', (bot_token,))
         if db_manager.cursor.fetchone():
-            # تحديث المالك فقط (column_10 تصبح "المالك")
-            update_content_query = """
-                UPDATE 'إعدادات_المحتوى' 
-                SET "المالك" = ?, sync_status = 'pending' 
-                WHERE "bot_id" = ?
-            """
+            update_query = 'UPDATE "البوتات_المصنوعة" SET "حالة التشغيل" = ?, "آخر تشغيل" = ?, sync_status = "pending" WHERE "التوكن" = ?'
+            db_manager.cursor.execute(update_query, ("نشط", now, bot_token))
+        else:
+            local_bulk_save("البوتات_المصنوعة", bot_row)
+
+        # 5. إدارة سجل "إعدادات_المحتوى" (36 عموداً بدقة وفقاً لـ get_sheets_structure)
+        # بناء صف كامل بـ 36 عمود لضمان سلامة الحقن في SQLite
+        content_row = [""] * 36
+        content_row[0] = bot_token            # bot_id
+        content_row[1] = "أهلاً بك! 🤖"         # الرسالة الترحيبية
+        content_row[2] = "لا توجد قوانين حالياً." # القوانين
+        content_row[3] = "عذراً، البوت متوقف مؤقتاً." # رد التوقف
+        content_row[4] = "false"              # auto_reply
+        content_row[5] = "false"              # ai_enabled
+        content_row[6] = "true"               # welcome_enabled
+        content_row[7] = "[]"                # buttons
+        content_row[8] = "[]"                # banned_words
+        content_row[9] = str(owner_id)        # admin_ids
+        content_row[10] = "ar"               # language
+        content_row[11] = "default"          # theme
+        content_row[12] = "0"                # delay_response
+        content_row[13] = "true"             # broadcast_enabled
+        content_row[14] = "[]"               # custom_commands
+        # من العمود 15 إلى 34 (قيم افتراضية للأعمدة الجديدة مثل welcome_morning واسم_المؤسسة وغيرها)
+        content_row[19] = "المؤسسة التعليمية" # اسم_المؤسسة (العمود 20)
+        content_row[35] = "إعدادات الدفع الافتراضية" # إعدادات_الدفع (العمود 36 والأخير)
+
+        # منع التكرار في جدول الإعدادات (محلياً)
+        db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token,))
+        if db_manager.cursor.fetchone():
+            update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, sync_status = "pending" WHERE "bot_id" = ?'
             db_manager.cursor.execute(update_content_query, (str(owner_id), bot_token))
         else:
             local_bulk_save("إعدادات_المحتوى", content_row)
-            print("📝 تم إنشاء سجل إعدادات المحتوى محلياً.")
 
         db_manager.conn.commit()
         
-        # 6. إطلاق إشارة المزامنة العالمية
+        # 6. تحديث الكاش العالمي
         update_global_version("GLOBAL_SYNC") 
         return True
 
     except Exception as e:
         print(f"❌ خطأ حرج في دالة التأسيس المطورة: {e}")
         return False
+
 
 
 # --------------------------------------------------------------------------
@@ -3797,7 +3861,6 @@ def update_branch_field_db(bot_token, branch_id, col_name, new_value):
 
 # --------------------------------------------------------------------------
 # اضافة مدرب او موظف 
-
 def generate_emp_id():
     """توليد رقم عشوائي مهني من 10 أرقام يبدأ بـ 100"""
     return int(f"100{random.randint(1000000, 9999999)}")
@@ -3806,11 +3869,11 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
     """
     إضافة كادر (مدرب/موظف) بـ 43 عموداً:
     - الحفاظ الكامل على هيكلية الـ 43 عموداً والفهارس المحددة بدقة.
-    - إضافة الحقن المحلي (SQLite) لضمان ظهور الكادر في القوائم فوراً.
-    - الالتزام بالأرقام النقية (int) في المعرفات والهاتف لضمان عدم وجود علامات تنصيص.
+    - الحقن المحلي (SQLite) باستخدام المسميات العربية.
+    - الالتزام التام بعدم الحذف أو التبسيط أو الاختصار.
     """
     try:
-        from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk
+        from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk, db_manager
         if 'ss' not in globals() or ss is None: connect_to_google()
         current_sheet = ss.worksheet("إدارة_الموظفين")
         
@@ -3822,34 +3885,73 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
         branch_name = kwargs.get('branch_name', 'الرئيسي')
         new_professional_id = generate_emp_id() # الرقم الموحد (100xxxxxxx)
 
-        # 1. تحديث الذاكرة المركزية RAM (الالتزام الصارم بمفاتيح الهيكل الجديد)
+        # 1. تحديث الذاكرة المركزية RAM (المطابقة الكاملة للهيكل بـ 43 مفتاحاً)
         new_record = {
             "bot_id": str(bot_token),
             "معرف_الفرع": str(branch_id),
             "ID": str(employee_id),
             "معرف_الموظف": str(new_professional_id),
             "الاسم_الكامل": str(name),
+            "الجنس": str(kwargs.get('gender', "-")),
+            "تاريخ_الميلاد": str(kwargs.get('birth_date', "-")),
+            "رقم_الهوية": str(kwargs.get('national_id', "-")),
+            "العنوان": str(kwargs.get('address', "-")),
+            "الصورة_الشخصية": str(kwargs.get('photo', "-")),
+            "التخصص": str(job_title),
+            "المسمى_الوظيفي": str(job_title),
+            "المواد_التي_يدرسها": str(kwargs.get('subjects', "-")),
+            "المؤهل_العلمي": str(kwargs.get('qualification', "-")),
+            "سنوات_الخبرة": str(kwargs.get('experience_years', "0")),
+            "الشهادات_المهنية": str(kwargs.get('certifications', "-")),
+            "مستوى_التقييم": "100%",
+            "رقم_الهاتف": str(phone),
+            "رقم_واتساب": str(phone),
+            "رقم_طوارئ": str(kwargs.get('emergency_phone', "-")),
+            "البريد_الإلكتروني": str(kwargs.get('email', "-")),
+            "كلمة_المرور": str(kwargs.get('password', "123456")),
+            "نوع_العقد": "دائم",
+            "تاريخ_التعيين": str(today_date),
+            "تاريخ_بداية_العقد": str(today_date),
+            "تاريخ_نهاية_العقد": "-",
+            "عدد_ساعات_العمل": "8",
+            "الدرجة_الوظيفية": "1",
+            "الحالة_الوظيفية": "نشط",
+            "الراتب_الأساسي": "0",
+            "نسبة_الحوافز": "0",
+            "البدلات": "0",
+            "الخصومات": "0",
+            "إجمالي_الراتب": "0",
+            "طريقة_الدفع": "نقدداً",
+            "رقم_الحساب_المالي": "-",
+            "المشرف_المباشر": "الإدارة العليا",
+            "الصلاحيات": "TRUE",
+            "تاريخ_آخر_تسجيل_دخول": "-",
+            "حالة_الحساب": "نشط",
+            "اسم_المستخدم": f"@{username}" if username != "بدون" else "بدون",
             "الرتبة": str(role_tag),
             "اسم_الفرع": str(branch_name)
         }
+        
         if "إدارة_الموظفين" not in FACTORY_GLOBAL_CACHE["data"]:
             FACTORY_GLOBAL_CACHE["data"]["إدارة_الموظفين"] = []
         FACTORY_GLOBAL_CACHE["data"]["إدارة_الموظفين"].append(new_record)
         save_cache_to_disk()
 
-        # 2. بناء الصف الـ 43 عموداً (الالتزام الحرفي بالترتيب المذكور في كودك)
+        # 2. بناء الصف الـ 43 عموداً (الالتزام الحرفي بالترتيب المذكور في get_sheets_structure)
         row = [""] * 43 
         row[0] = str(bot_token)            # 1. bot_id
-        row[1] = int(branch_id)            # 2. معرف_الفرع (رقم نقي)
-        row[2] = int(employee_id)          # 3. ID (معرف تيليجرام - رقم نقي)
-        row[3] = new_professional_id       # 4. معرف_الموظف (100xxxxxxx)
+        row[1] = str(branch_id)            # 2. معرف_الفرع
+        row[2] = str(employee_id)          # 3. ID (معرف تليجرام)
+        row[3] = str(new_professional_id)  # 4. معرف_الموظف (100xxxxxxx)
         row[4] = str(name)                 # 5. الاسم_الكامل
         row[10] = str(job_title)           # 11. التخصص
         row[11] = str(job_title)           # 12. المسمى_الوظيفي
-        row[17] = int(phone)               # 18. رقم_الهاتف (رقم نقي)
-        row[20] = kwargs.get('email', "-") # 21. البريد_الإلكتروني
-        row[23] = today_date               # 24. تاريخ_التعيين
+        row[17] = str(phone)               # 18. رقم_الهاتف
+        row[20] = str(kwargs.get('email', "-")) # 21. البريد_الإلكتروني
+        row[23] = str(today_date)          # 24. تاريخ_التعيين
         row[28] = "نشط"                    # 29. الحالة_الوظيفية
+        row[29] = "0"                      # 30. الراتب_الأساسي
+        row[33] = "0"                      # 34. إجمالي_الراتب
         row[37] = "TRUE"                   # 38. الصلاحيات
         row[39] = "نشط"                    # 40. حالة_الحساب
         row[40] = f"@{username}" if username != "بدون" else "بدون" # 41. اسم_المستخدم
@@ -3858,25 +3960,23 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
 
         # [إضافة الهجين]: الحقن الفوري في SQLite (استخدام المسميات العربية الحقيقية)
         try:
-            # استخدام local_bulk_save لضمان التوافق مع جداول المسميات العربية
             local_bulk_save("إدارة_الموظفين", row)
         except Exception as local_e:
             print(f"⚠️ فشل الحقن المحلي للموظف: {local_e}")
 
-        # 3. الحفظ كبيانات RAW (الالتزام بمنطقك لضمان نقاء الأرقام بدون ')
+        # 3. الحفظ في جوجل شيت (الالتزام بالبيانات RAW)
         from sheets import safe_api_call
         safe_api_call(current_sheet.append_row, row, value_input_option='RAW')
         
-        # 4. رفع إصدار البوت (الالتزام بموضع الاستدعاء لضمان تحديث كاش الأجهزة)
+        # 4. رفع إصدار البوت لضمان التزامن
         update_global_version(bot_token)
         print(f"✅ تم تسجيل {role_tag}: {name} بنجاح.")
         return True
     except Exception as e:
-        if 'logger' in globals():
-            logger.error(f"❌ خطأ في الإضافة الموحدة: {e}")
-        else:
-            print(f"❌ خطأ في الإضافة الموحدة: {e}")
+        print(f"❌ خطأ في الإضافة الموحدة للموظف: {e}")
         return False
+
+
 
 # --------------------------------------------------------------------------
 # جلب بيانات المدربين
