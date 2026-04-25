@@ -652,41 +652,78 @@ class DataManager:
             return False
 
     async def restore_from_telegram(self, manual_file_id=None):
-        """البحث عن آخر ملف نسخة احتياطية وتحميله لاستبدال القاعدة المحلية"""
+        """البحث عن آخر ملف نسخة احتياطية وتحميله لاستبدال القاعدة المحلية مع فحص السلامة"""
         try:
             from datetime import datetime
+            import sqlite3
             print(f"⏳ [RESTORE LOG]: [{datetime.now().strftime('%H:%M:%S')}] بدء عملية الاستعادة...")
 
-            # تحديد معرف الملف (إما الممرر يدوياً أو من الكاش أو محاولة البحث)
+            # محاولة جلب الملف من الرسالة المثبتة في القناة إذا لم يوجد File ID
             file_id = manual_file_id or FACTORY_GLOBAL_CACHE.get('last_backup_file_id')
             
             bot = Bot(token=self.bot_token)
 
+            if not file_id:
+                try:
+                    print(f"🔍 [RESTORE LOG]: جاري محاولة سحب النسخة من الرسالة المثبتة في القناة {BACKUP_CHANNEL_ID}...")
+                    chat = await bot.get_chat(BACKUP_CHANNEL_ID)
+                    if chat.pinned_message and chat.pinned_message.document:
+                        file_id = chat.pinned_message.document.file_id
+                        print("📌 [RESTORE LOG]: تم العثور على نسخة في الرسالة المثبتة.")
+                except Exception as pin_err:
+                    print(f"⚠️ [RESTORE LOG]: فشل جلب الرسالة المثبتة: {pin_err}")
+
             if file_id:
-                print(f"📥 [RESTORE LOG]: تم العثور على معرف ملف، جاري التحميل من سيرفرات تليجرام...")
+                print(f"📥 [RESTORE LOG]: تم العثور على معرف ملف، جاري التحميل...")
                 new_file = await bot.get_file(file_id)
-                
-                # التأكد من وجود مجلد الكاش
                 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
                 
-                # التحميل الفعلي واستبدال الملف
-                await new_file.download_to_drive(DB_PATH)
-                print(f"✅ [RESTORE LOG]: اكتمل تحميل الملف بنجاح. تم تحديث قاعدة البيانات المحلية.")
+                # المسار المؤقت للفحص
+                temp_db_path = DB_PATH + ".temp"
+                await new_file.download_to_drive(temp_db_path)
+
+                # --- بروتوكول الحماية (الفحص الهيكلي) ---
+                print("🛡️ [RESTORE LOG]: جاري فحص سلامة هيكل النسخة...")
+                try:
+                    check_conn = sqlite3.connect(temp_db_path)
+                    check_cursor = check_conn.cursor()
+                    # التأكد من وجود جدول المستخدمين كمؤشر لسلامة القاعدة
+                    check_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='المستخدمين'")
+                    if not check_cursor.fetchone():
+                        raise Exception("الملف لا يحتوي على جدول 'المستخدمين' أو الهيكل غير متوافق.")
+                    check_conn.close()
+                    print("✅ [RESTORE LOG]: فحص السلامة نجح.")
+                except Exception as check_err:
+                    if os.path.exists(temp_db_path): os.remove(temp_db_path)
+                    print(f"❌ [RESTORE LOG - ERROR]: فحص السلامة فشل: {check_err}")
+                    return False
+
+                # تنفيذ الاستبدال (إغلاق -> حذف القديم -> تسمية الجديد)
+                # نغلق الاتصال ونقوم بتصفير كائن الـ cursor لضمان عدم حدوث Database Locked
+                if hasattr(self, 'conn') and self.conn:
+                    try: self.conn.close()
+                    except: pass
+                
+                if os.path.exists(DB_PATH): os.remove(DB_PATH)
+                os.rename(temp_db_path, DB_PATH)
+                
+                # إعادة فتح الاتصال بالقاعدة الجديدة
+                self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+                self.cursor = self.conn.cursor()
+                
+                print(f"✅ [RESTORE LOG]: اكتملت الاستعادة بنجاح. تم تحديث القاعدة المحلية.")
                 return True
 
             # في حال عدم وجود File ID، نحاول البحث في القناة بطريقة بديلة
             print(f"🔍 [RESTORE LOG]: لا يوجد File ID محفوظ. محاولة البحث في القناة {BACKUP_CHANNEL_ID}...")
-            
-            # ملاحظة تقنية: البوتات لا تدعم get_chat_history، لذا سنطبع إرشادات للمطور في السجلات
             print(f"⚠️ [RESTORE LOG]: البوتات الرسمية لا يمكنها قراءة تاريخ القنوات برمجياً.")
             print(f"💡 [RESTORE LOG]: للاستعادة الناجحة، يرجى إعادة توجيه ملف النسخة للبوت أو استخدام زر الاستعادة بعد النسخ مباشرة.")
-
             logger.warning("⚠️ لم يتم العثور على أي ملفات نسخ احتياطي قابلة للاستعادة تلقائياً.")
         except Exception as e:
             logger.error(f"❌ فشل استعادة القاعدة من تليجرام: {e}")
             print(f"❌ [RESTORE LOG - ERROR]: حدث خطأ أثناء الاستعادة: {e}")
         return False
-
 
 
     def setup_sync_scheduler(self):

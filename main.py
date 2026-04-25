@@ -830,14 +830,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- [ الإجراء الجديد: استعادة يدوية من القناة ] ---
     elif data == "restore_from_channel":
-        if user_id != DEVELOPER_ID: return
+        if user_id != DEVELOPER_ID: 
+            return
         
-        await query.edit_message_text("⏳ جاري البحث عن آخر نسخة في القناة وفك تشفيرها...")
+        # تم تحديث النص ليعكس عملية فحص السلامة الهيكلية التي أضفناها في الدالة الأساسية
+        await query.edit_message_text("⏳ جاري البحث عن آخر نسخة في القناة، فحص سلامة الهيكل وفك التشفير...")
         try:
-            await db_manager.restore_from_telegram()
-            await query.edit_message_text("✅ تمت الاستعادة بنجاح! يرجى إعادة تشغيل السيرفر لتطبيق البيانات.")
+            # تنفيذ عملية الاستعادة التي تغلق الاتصال وتستبدل الملف وتفتحه مجدداً
+            success = await db_manager.restore_from_telegram()
+            
+            if success:
+                print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تحديث الكاش...")
+                
+                # --- تحديث الكاش فوراً لضمان عدم الحاجة لإعادة تشغيل السيرفر ---
+                try:
+                    from cache_manager import fetch_full_factory_data
+                    fetch_full_factory_data() 
+                    final_msg = "✅ **تمت الاستعادة بنجاح!**\nتم تحديث قاعدة البيانات وتنشيط الكاش فوراً. البوت يعمل الآن بالبيانات الجديدة."
+                except Exception as cache_err:
+                    print(f"⚠️ [RESTORE LOG]: فشل تحديث الكاش تلقائياً: {cache_err}")
+                    final_msg = "✅ **تمت الاستعادة بنجاح!**\nتم استبدال الملف، ولكن يفضل إعادة تشغيل السيرفر يدوياً لضمان تحديث الكاش."
+                
+                await query.edit_message_text(final_msg, parse_mode="Markdown")
+            else:
+                await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nلم يتم العثور على ملف صالح في القناة أو أن النسخة لم تتجاوز فحص السلامة.")
+                
         except Exception as e:
+            # الحفاظ على هيكل عرض الخطأ الأصلي
             await query.edit_message_text(f"❌ فشل الاستعادة: {str(e)}")
+
+
+
 
     elif data == "confirm_hard_reset":
         # --- [ إضافة جديدة: حماية المطور ] ---
@@ -862,21 +885,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("❌ فشلت العملية. راجع السجلات.")
 
-
     elif data == "restart_factory":
         if user_id != DEVELOPER_ID:
             await deny_access(query, "🚫 إعادة تشغيل المصنع صلاحية حصرية للمطور.")
             return
 
-        await query.answer("🔄 جاري إعادة التشغيل...")
-        from cache_manager import fetch_full_factory_data
-        fetch_full_factory_data()
+        # 1. إرسال رسالة تنبيه ببدء العملية (لتحسين تجربة المستخدم)
+        await query.edit_message_text(
+            "🔄 <b>جاري تحديث كاش المصنع...</b>\n"
+            "يتم الآن إعادة سحب كافة البيانات من جوجل شيت وتحديث المحرك المحلي.",
+            parse_mode="HTML"
+        )
+
+        try:
+            # 2. استدعاء وظيفة تحديث الكاش الشاملة
+            from cache_manager import fetch_full_factory_data
+            
+            # ملاحظة: إذا كانت الدالة async استخدم await، وإذا كانت def عادية اتركها كما هي
+            # بناءً على سجلاتك السابقة، المحرك يحتاج لتنفيذ المزامنة الشاملة
+            fetch_full_factory_data()
+
+            # 3. تحديث الرسالة بعد الانتهاء بنجاح
+            await query.edit_message_text(
+                "✅ <b>تم تحديث المصنع بنجاح!</b>\n"
+                "تمت مزامنة كافة الإعدادات والاشتراكات مع الكاش المحلي.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+                ]),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            # معالجة الخطأ في حال فشل الاتصال بجوجل أثناء التحديث
+            await query.edit_message_text(
+                f"❌ <b>فشل تحديث الكاش:</b>\n<code>{str(e)}</code>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+                ]),
+                parse_mode="HTML"
+            )
 
 
-   
-        await query.edit_message_text("🔄 جاري إعادة تشغيل المصنع لتطبيق التحديثات...")
-        os.execv(sys.executable, ['python'] + sys.argv)
-        
 #~~~~~~~~~~~~~~~~
     # --- [ معالج زر إعادة تشغيل المحرك لقتل النسخ المتضاربة ] ---
     elif data == "reboot_system":
@@ -2167,11 +2215,11 @@ async def main_factory_launcher():
         app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
         app.add_handler(CallbackQueryHandler(
             button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
         ))        
         
         # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
-        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|start_manual_sync|confirm_restore_yes|confirm_restore_no)$"))
+        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|confirm_restore_yes|confirm_restore_no)$"))
 
         app.add_handler(CommandHandler("admin_export", export_admins))
         app.add_handler(CommandHandler("import_admin", import_admins_handler))
@@ -2265,13 +2313,23 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         # 1. إظهار رسالة بدء الاستعادة
         await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة واستبدال البيانات المحلية.")
         
-        # 2. تنفيذ عملية الاستعادة الفعلية
+        # 2. تنفيذ عملية الاستعادة الفعلية (التي تتضمن فحص الهيكل وإغلاق/فتح الاتصال)
         success = await db_manager.restore_from_telegram()
         
-        # 3. تغيير الرسالة عند الانتهاء
+        # 3. تغيير الرسالة عند الانتهاء وتحديث الكاش فوراً
         if success:
-            print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح.")
-            await query.edit_message_text("✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية بآخر نسخة.")
+            print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تحديث الكاش...")
+            
+            # --- التحديث الحي للكاش لضمان المزامنة بدون إعادة تشغيل السيرفر ---
+            try:
+                from cache_manager import fetch_full_factory_data
+                fetch_full_factory_data() 
+                final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية وتنشيط الكاش فوراً. البوت يعمل الآن بالبيانات الجديدة."
+            except Exception as cache_err:
+                print(f"⚠️ [RESTORE LOG]: فشل تحديث الكاش تلقائياً: {cache_err}")
+                final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية بآخر نسخة، ولكن يفضل تحديث الكاش يدوياً."
+
+            await query.edit_message_text(final_msg, parse_mode="Markdown")
         else:
             print("❌ [MANUAL LOG]: فشلت عملية الاستعادة.")
             await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nيرجى التحقق من وجود ملفات في القناة أو راجع سجلات السيرفر.")
