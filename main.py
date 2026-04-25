@@ -1984,8 +1984,9 @@ async def main_factory_launcher():
         # --- [ الخطوة 1: الحماية القصوى - نسخة احتياطية قبل أي إجراء ] ---
         print("🛡️ جاري تأمين قاعدة البيانات وإرسال نسخة احتياطية للقناة...")
         try:
-            # استدعاء دالة النسخ الاحتياطي للقناة (يفترض وجودها في كودك)
-            await backup_to_channel() 
+            # تم تصحيح الاستدعاء ليتوافق مع دالتك الشغالة (create_backup_to_telegram)
+            await db_manager.create_backup_to_telegram() 
+            print("✅ تم تأمين النسخة الاحتياطية بنجاح.")
         except Exception as backup_err:
             print(f"⚠️ فشل النسخ الاحتياطي التلقائي: {backup_err}")
 
@@ -2002,7 +2003,7 @@ async def main_factory_launcher():
         print("🔧 جاري بناء محرك البوت الرئيسي (إقلاع صامت)...")
         app = ApplicationBuilder().token(TOKEN).build()
 
-        # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل
+        # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
         app.add_handler(create_bot_conv) 
@@ -2050,8 +2051,15 @@ async def main_factory_launcher():
         )
         
         try:
+            # 1. إرسال للمطور في الخاص
             await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
-        except: pass
+            
+            # 2. إرسال للقناة (استخدام BACKUP_CHANNEL_ID المستورد من cache_manager)
+            from cache_manager import BACKUP_CHANNEL_ID
+            await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
+            
+        except Exception as msg_err:
+            print(f"⚠️ فشل إرسال رسائل الإقلاع: {msg_err}")
         
         while True:
             await asyncio.sleep(3600)
