@@ -307,3 +307,64 @@ def get_bot_subscription_interface(bot_token):
     ]
 
     return text, InlineKeyboardMarkup(keyboard)
+   
+  
+ 
+def export_subscriptions_backup():
+    """تصدير كافة بيانات الاشتراكات بصيغة جيسون"""
+    try:
+        all_bots = FACTORY_GLOBAL_CACHE.get("all_bots", [])
+        backup_data = {
+            "backup_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "total_bots": len(all_bots),
+            "subscriptions": []
+        }
+        
+        for bot in all_bots:
+            backup_data["subscriptions"].append({
+                "token": bot.get("توكن_البوت"),
+                "plan": bot.get("باقة_الاشتراك"),
+                "expiry": bot.get("تاريخ_انتهاء_الاشتراك"),
+                "owner_id": bot.get("ايدي_المالك")
+            })
+            
+        return json.dumps(backup_data, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Error creating sub backup: {e}")
+        return None
+
+
+
+async def import_subscriptions_from_backup(json_content):
+    """استعادة الاشتراكات من نص جيسون"""
+    try:
+        data = json.loads(json_content)
+        subscriptions = data.get("subscriptions", [])
+        
+        for sub in subscriptions:
+            token = sub.get("token")
+            plan = sub.get("plan")
+            expiry = sub.get("expiry")
+            
+            if token and plan:
+                # تحديث الكاش العالمي (FACTORY_GLOBAL_CACHE)
+                all_bots = FACTORY_GLOBAL_CACHE.get("all_bots", [])
+                for bot in all_bots:
+                    if bot.get("توكن_البوت") == token:
+                        bot["باقة_الاشتراك"] = plan
+                        bot["تاريخ_انتهاء_الاشتراك"] = expiry
+                        break
+                
+                # تحديث قاعدة البيانات الفعلية (Sheets)
+                # ملاحظة: نستخدم الدالة الأصلية لضمان المزامنة
+                await upgrade_bot_plan(token, plan, duration_days=0, override_expiry=expiry)
+        
+        # تحديث النسخة العالمية لضمان مزامنة كافة السيرفرات
+        update_global_version()
+        return True
+    except Exception as e:
+        logger.error(f"Error during import: {e}")
+        return False
+
+
+

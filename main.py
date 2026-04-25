@@ -666,7 +666,7 @@ async def owner_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ],
             
             [InlineKeyboardButton("─── عمليات النظام الحساسة ───", callback_data="none")],
-            [InlineKeyboardButton("💳 إدارة الاشتراكات والترقيات", callback_data="manage_subscriptions")], 
+            [InlineKeyboardButton("💳 إدارة الاشتراكات والترقيات", callback_data="manage_coaches")], 
             [
                 InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
             ],
@@ -890,6 +890,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ موديول course_engine غير متاح حالياً.", show_alert=True)
 
 # ==========================================================================
+
+
     # 1. الدخول للوحة إدارة الاشتراكات (يدعم الصفحات الآن)
     elif data == "manage_subscriptions" or data.startswith("bots_page_"):
         if user_id != DEVELOPER_ID: return
@@ -1153,6 +1155,73 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except:
             pass
+# --------------------------------------------------------------------------
+#دالة نسخ بيانات البوتات المدفوعة الاشتراكات
+    elif data == "manage_coaches":
+        if user_id != DEVELOPER_ID: 
+            return
+        text = (
+            "🤖 <b>إدارة البوتات والاشتراكات:</b>\n\n"
+            "يمكنك استعراض البوتات وإدارة النسخ الاحتياطية لنظام الاشتراكات."
+        )
+        keyboard = [
+            [InlineKeyboardButton("📋 استعراض البوتات", callback_data="manage_subscriptions")],
+            [InlineKeyboardButton("💾 إنشاء نسخة احتياطية للاشتراكات", callback_data="backup_subs")],
+            [InlineKeyboardButton("♻️ استعادة نسخة احتياطية", callback_data="confirm_restorebotvip")],
+            [InlineKeyboardButton("🔙 عودة للوحة التحكم", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "backup_subs":
+        await query.answer("جاري تجهيز النسخة الاحتياطية...")
+        
+        from SubscriptionManager import export_subscriptions_backup
+        backup_json = export_subscriptions_backup()
+        
+        if backup_json:
+            # تحويل النص إلى ملف مؤقت لإرساله
+            import io
+            file_stream = io.BytesIO(backup_json.encode('utf-8'))
+            file_stream.name = f"subs_backup_{datetime.now().strftime('%Y%m%d')}.json"
+            
+            await context.bot.send_document(
+                chat_id=query.message.chat_id,
+                document=file_stream,
+                caption=f"✅ تم استخراج نسخة احتياطية للاشتراكات\n📅 التاريخ: {datetime.now().strftime('%Y-%m-%d')}"
+            )
+        else:
+            await query.edit_message_text("❌ فشل في استخراج البيانات.")
+
+    # هذا الكود يوضع داخل CallbackQueryHandler تحت شرط confirm_restore
+    elif data == "confirm_restorebotvip":
+        await query.answer("جاري استعادة البيانات...")
+        
+        # جلب المحتوى الذي تم حفظه مؤقتاً عند رفع الملف
+        backup_content = context.user_data.get('pending_restore_content')
+        
+        if not backup_content:
+            await query.edit_message_text("❌ لم يتم العثور على بيانات لاستعادتها. يرجى رفع الملف مرة أخرى.")
+            return
+
+        from SubscriptionManager import import_subscriptions_from_backup
+        
+        # تنفيذ الاستعادة
+        success = await import_subscriptions_from_backup(backup_content)
+        
+        if success:
+            await query.edit_message_text("✅ تم استعادة كافة الاشتراكات بنجاح وتحديث قاعدة البيانات.")
+            # تنظيف الذاكرة المؤقتة
+            del context.user_data['pending_restore_content']
+        else:
+            await query.edit_message_text("❌ حدث خطأ أثناء الاستعادة. تأكد من أن الملف سليم وغير معدل يدويًا.")
+
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
 
 
 # --- نهاية معالج الأزرار وبداية الدوال المستقلة ---
@@ -2098,7 +2167,7 @@ async def main_factory_launcher():
         app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
         app.add_handler(CallbackQueryHandler(
             button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
         ))        
         
         # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
