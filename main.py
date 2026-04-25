@@ -307,9 +307,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from sheets import save_user, get_total_factory_users
 
 
-    # محاولة حفظ المستخدم (الدالة تعيد True إذا كان المستخدم جديداً)
-    is_new = save_user(user.id, user.username)
-    
+   # تمرير كافة البيانات المطلوبة: ID، Username، الاسم الكامل، وتوكن البوت
+    is_new = save_user(user.id, user.username, user.full_name, context.bot.token)
+ 
+
+
     # إذا كان المستخدم جديداً، أرسل إشعاراً للمطور (أنت)
     if is_new:
         total_factory_users = get_total_factory_users()

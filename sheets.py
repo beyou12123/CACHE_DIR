@@ -156,6 +156,7 @@ def ensure_sheet_structure(sheet_name, required_headers):
     - لا يحذف أي شيء
     - لا يعيد إنشاء الورقة إذا كانت موجودة
     - يضيف فقط الأعمدة الناقصة
+    - يضمن توسيع الشيت لاستيعاب الأعمدة الـ 39 لتجنب الخطأ 400
     """
     try:
         # فاصل زمني لتهدئة API جوجل عند بدء التعامل مع كل ورقة
@@ -186,9 +187,18 @@ def ensure_sheet_structure(sheet_name, required_headers):
         # إضافة الأعمدة الناقصة فقط
         if missing_headers:
             new_headers = existing_headers + missing_headers
+            
+            # --- [ التحديث المطلوب لتجنب الخطأ 400 ] ---
+            # التأكد من أن عدد أعمدة الشيت يستوعب عدد العناوين الجديد
+            if sheet.col_count < len(new_headers):
+                sheet.add_cols(len(new_headers) - sheet.col_count)
+                time.sleep(0.5)
+            # ------------------------------------------
+
             # استخدام تأخير قبل التحديث المباشر
             time.sleep(1) 
-            sheet.update('1:1', [new_headers])
+            # التأكد من إرسال القائمة كـ List of List لضمان قبولها من API جوجل
+            sheet.update('1:1', [new_headers], value_input_option='USER_ENTERED')
             print(f"⚙️ تم تحديث الأعمدة في {sheet_name} (إضافة الناقص فقط)")
         else:
             print(f"✔️ الورقة {sheet_name} جاهزة ولا تحتاج تعديل")
