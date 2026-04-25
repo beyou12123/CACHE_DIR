@@ -3759,13 +3759,20 @@ async def run_bot(token, owner_id):
     application.add_handler(CommandHandler("start", start_handler))
 # --- قسم الـ Callback (الأزرار) ---
 # سجل معالج ContentManager أولاً
-    application.add_handler(CallbackQueryHandler(content_management_handler))
+    # تصحيح: إضافة النمط الخاص بـ ContentManager لمنعه من امتصاص كافة أزرار البوت
+    application.add_handler(CallbackQueryHandler(content_management_handler, pattern="^(view_|manage_|add_|edit_|del_|back_to_edu_).*$"))
+    # تصحيح: حصر النمط في الوظائف الإحصائية فقط لمنع التداخل مع الأقسام
+    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache)$"))
 # ثم سجل المعالج الخاص ببقية أزرار البوت
-    application.add_handler(CallbackQueryHandler(contact_callback_handler))
+    # تصحيح: إضافة نمط أزرار التواصل لضمان وصول الإشارة إليها
+    application.add_handler(CallbackQueryHandler(contact_callback_handler, pattern="^contact_.*$"))
+    
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, config_input_receiver))
+    # تصحيح: إضافة فلتر Chat(owner_id) لضمان أن هذا المعالج يستقبل رسائل المطور فقط (الإعدادات)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
 # ثم سجل مستلم الرسائل العام للبوت
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_contact_message))
+    # تصحيح: إضافة فلتر Chat لضمان أن هذا المعالج يستقبل رسائل الطلاب فقط (التواصل)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
 
     
     # 2. إعداد مراقب التفعيل (يُوضع هنا بعد تعريف الـ application)
@@ -3777,7 +3784,6 @@ async def run_bot(token, owner_id):
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-
 
 
 

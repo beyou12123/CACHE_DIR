@@ -7,6 +7,7 @@ import importlib # استيراد الموديولات ديناميكياً لت
 import signal
 from datetime import datetime
 import json
+import SubscriptionManager
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -151,7 +152,7 @@ def get_types_menu_inline(user_id):
             descriptions = {r['key']: r['value'] for r in records if str(r['key']).startswith('desc_')}
     except: pass
 
-    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'config.py', 'runner.py', 'course_engine.py', 'educational_manager.py']
+    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'config.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py']
     
     dynamic_buttons = []
     for file in os.listdir('.'):
@@ -665,6 +666,7 @@ async def owner_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ],
             
             [InlineKeyboardButton("─── عمليات النظام الحساسة ───", callback_data="none")],
+            [InlineKeyboardButton("💳 إدارة الاشتراكات والترقيات", callback_data="manage_subscriptions")], 
             [
                 InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
             ],
@@ -887,11 +889,68 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ موديول course_engine غير متاح حالياً.", show_alert=True)
 
+# ==========================================================================
+    # 1. الدخول للوحة إدارة الاشتراكات (يدعم الصفحات الآن)
+    elif data == "manage_subscriptions" or data.startswith("bots_page_"):
+        if user_id != DEVELOPER_ID: return
+        
+        page = int(data.replace("bots_page_", "")) if data.startswith("bots_page_") else 0
+        from SubscriptionManager import get_all_bots_keyboard
+        
+        # استخدام نظام Pagination الجديد المضاف للملف
+        kb = get_all_bots_keyboard(page=page)
+        await query.edit_message_text(
+            f"📋 **قائمة البوتات المصنوعة (صفحة {page + 1}):**\nإختر البوت الذي تريد إدارة اشتراكه:", 
+            reply_markup=kb
+        )
 
-#~~~~~~~~~~~~~~~~
+    # 2. عرض تفاصيل بوت معين (واجهة UX المطورة)
+    elif data.startswith("sub_view_"):
+        bot_token_to_view = data.replace("sub_view_", "")
+        from SubscriptionManager import get_bot_subscription_interface
+        
+        # استدعاء الواجهة التي تعرض المدة المتبقية والمميزات
+        text, reply_markup = get_bot_subscription_interface(bot_token_to_view)
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
-#~~~~~~~~~~~~~~~~
+    # 3. تنفيذ عملية الترقية (يدعم المدة الزمنية التراكمية)
+    elif data.startswith("exec_sub_"):
+        # تنسيق الداتا الجديد: exec_sub_TOKEN_PLAN_DAYS
+        parts = data.split("_")
+        target_token = parts[2]
+        target_plan = parts[3]
+        target_days = int(parts[4]) if len(parts) > 4 else 30
 
+        from SubscriptionManager import upgrade_bot_plan
+        if await upgrade_bot_plan(target_token, target_plan, duration_days=target_days):        
+        
+        await query.edit_message_text(f"⏳ جاري تنفيذ الترقية لباقة {target_plan} لمدة {target_days} يوم...")
+        
+        # تنفيذ الترقية مع دعم التراكم الزمني
+        if await upgrade_bot_plan(target_token, target_plan, duration_days=target_days):
+            await query.edit_message_text(
+                f"✅ تم تحديث اشتراك البوت بنجاح!\n"
+                f"📦 الباقة: **{target_plan}**\n"
+                f"🗓️ المدة المضافة: **{target_days} يوم**"
+            )
+        else:
+            await query.edit_message_text("❌ فشلت عملية الترقية، راجع سجلات السيرفر (SUB LOG).")
+
+    # 4. تمديد الاشتراك الحالي (الميزة الجديدة)
+    elif data.startswith("extend_sub_"):
+        target_token = data.replace("extend_sub_", "")
+        from SubscriptionManager import _fetch_bot_by_token, upgrade_bot_plan
+        
+        bot_data = _fetch_bot_by_token(target_token)
+        if bot_data:
+            current_plan = bot_data['plan'].upper()
+            await query.edit_message_text(f"⏳ جاري تمديد باقة {current_plan} لمدة 30 يوم إضافية...")
+            
+            if await upgrade_bot_plan(target_token, current_plan, duration_days=30):
+                await query.edit_message_text(f"✅ تم تمديد باقة **{current_plan}** بنجاح لمدة شهر إضافي!")
+            else:
+                await query.edit_message_text("❌ فشل التمديد.")
+# ==========================================================================
 
     # --- [ معالج زر بدء المزامنة اليدوية ] ---
     elif data == "start_sync_shet":
@@ -1660,6 +1719,11 @@ async def download_bot_cache(update: Update, context: ContextTypes.DEFAULT_TYPE)
 #رفع النسخة 
 async def start_restore_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """المرحلة الأولى: استقبال الملف وعرض التحذير"""
+    if not update.effective_user: return
+    user_id = update.effective_user.id
+
+        	
+        return
     user_id = update.effective_user.id
     doc = update.message.document
     
@@ -1986,9 +2050,11 @@ async def main_factory_launcher():
         from datetime import datetime 
         print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
         
+        
         # 1. تنظيف التضارب (Conflict) لضمان عدم وجود جلسات معلقة
         temp_bot = Bot(token=TOKEN)
         await temp_bot.delete_webhook(drop_pending_updates=True)
+        await asyncio.sleep(2) # انتظار لضمان إغلاق الجلسات القديمة
         print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح لضمان عدم وجود تضارب.")
 
         # 2. فحص حالة قاعدة البيانات قبل أي إجراء
@@ -2025,8 +2091,8 @@ async def main_factory_launcher():
         app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
         app.add_handler(CallbackQueryHandler(
             button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel)$"
-        ))
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
+        ))        
         
         # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
         app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|start_manual_sync|confirm_restore_yes|confirm_restore_no)$"))

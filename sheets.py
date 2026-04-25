@@ -469,9 +469,7 @@ def local_save_wrapper(table_name, data_list):
 def save_user(user_id, username, full_name, bot_token):
     """
     تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 11 عموداً:
-    - الالتزام بالمسميات العربية: "ID المستخدم", "اسم المستخدم"... إلخ.
-    - معالجة التكرار القديم وحذفه آلياً.
-    - الحفاظ على كافة الوظائف الأصلية.
+    - التعديل: إرجاع True للعضو الجديد فقط، و False للعضو الموجود مسبقاً.
     """
     try:
         now = get_system_time("full")
@@ -494,12 +492,11 @@ def save_user(user_id, username, full_name, bot_token):
 
         # 2. التحقق من وجود المستخدم ومعالجة التكرار القديم
         db_manager.cursor.execute('SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ?', (user_id,))
-        results = db_manager.cursor.fetchall() # جلب كافة النتائج لفحص التكرار
+        results = db_manager.cursor.fetchall() 
 
         if results:
             # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم)
             if len(results) > 1:
-                # حذف كافة المكررات والإبقاء على أقدم سجل فقط (صيانة آلياً)
                 db_manager.cursor.execute('''
                     DELETE FROM "المستخدمين" 
                     WHERE "ID المستخدم" = ? 
@@ -508,24 +505,27 @@ def save_user(user_id, username, full_name, bot_token):
                 db_manager.conn.commit()
                 print(f"🧹 تم تطهير تكرار قديم للمستخدم: {user_id}")
 
-            # ب- تحديث البيانات الحالية (الحفاظ على الوظيفة الأصلية)
+            # ب- تحديث البيانات الحالية
             update_query = '''
                 UPDATE "المستخدمين" 
                 SET "اسم المستخدم" = ?, "آخر نشاط" = ?, sync_status = "pending" 
                 WHERE "ID المستخدم" = ?
             '''
             db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id))
+            db_manager.conn.commit()
+            return False  # <--- تصحيح: العضو موجود مسبقاً، لا ترسل إشعاراً جديداً
+
         else:
-            # ج- إضافة مستخدم جديد تماماً (11 عمود)
+            # ج- إضافة مستخدم جديد تماماً
             local_bulk_save("المستخدمين", user_row)
             print(f"👤 مستخدم جديد مسجل محلياً: {user_id}")
-
-        db_manager.conn.commit()
-        return True
+            db_manager.conn.commit()
+            return True  # <--- تصحيح: العضو جديد فعلاً، سيتم إرسال إشعار للمطور
 
     except Exception as e:
         print(f"❌ خطأ في حفظ المستخدم محلياً: {e}")
         return False
+
 
 # --------------------------------------------------------------------------
 # --- [ دالة الحفظ وتهيئة البوت - النسخة الاحترافية المسرعة ] ---
