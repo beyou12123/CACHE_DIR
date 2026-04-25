@@ -1722,12 +1722,15 @@ async def download_bot_cache(update: Update, context: ContextTypes.DEFAULT_TYPE)
 #رفع النسخة 
 async def start_restore_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """المرحلة الأولى: استقبال الملف وعرض التحذير"""
-    if not update.effective_user: return
-    user_id = update.effective_user.id
-
-        	
+    if not update.effective_user: 
         return
+    
     user_id = update.effective_user.id
+    
+    # تصحيح الحماية: منع العمليات لغير المطور (بناءً على المنطق الموجود في كودك)
+    if user_id != DEVELOPER_ID:
+        return
+        
     doc = update.message.document
     
     if not doc.file_name.endswith('.json'):
@@ -1736,11 +1739,13 @@ async def start_restore_process(update: Update, context: ContextTypes.DEFAULT_TY
 
     # حفظ محتوى الملف مؤقتاً في ذاكرة المستخدم
     file = await context.bot.get_file(doc.file_id)
-            # تحميل الملف كبايتات مباشرة ومعالجته
+    
+    # تحميل الملف كبايتات مباشرة ومعالجته (كما ورد في الكود الأصلي تماماً)
     file_bytes = await file.download_as_bytearray()
     content = file_bytes.decode('utf-8')
 
-    context.user_data['pending_restore_content'] = content.decode('utf-8')
+    # استخدام المفتاح الأصلي لبيانات المستخدم
+    context.user_data['pending_restore_content'] = content
 
     keyboard = [
         [
@@ -1758,7 +1763,6 @@ async def start_restore_process(update: Update, context: ContextTypes.DEFAULT_TY
         "<b>هل أنت متأكد من رغبتك في التنفيذ؟</b>"
     )
     await update.message.reply_text(warn_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
 
 
 # --------------------------------------------------------------------------
