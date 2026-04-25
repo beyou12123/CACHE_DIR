@@ -643,6 +643,12 @@ async def owner_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         config = get_bot_config(TOKEN)
         m_status = "🔴 (نشط)" if str(config.get("maintenance_mode", "FALSE")).upper() == "TRUE" else "🟢 (متوقف)"    	
         keyboard.extend([
+            [InlineKeyboardButton("─── المحرك الهجين (SQLite) ───", callback_data="none")],
+            [
+                InlineKeyboardButton("📤 نسخة احتياطية للقناة", callback_data="backup_to_channel"),
+                InlineKeyboardButton("🔄 استعادة من القناة", callback_data="restore_from_channel")
+            ],
+            
             [InlineKeyboardButton("─── عمليات النظام الحساسة ───", callback_data="none")],
             [
                 InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
@@ -793,8 +799,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_action(user_id, data)
     
     await query.answer() # لإيقاف مؤشر التحميل في تليجرام
-    
-    if data == "confirm_hard_reset":
+        # --- [ الإجراء الجديد: إرسال نسخة للقناة ] ---
+    if data == "backup_to_channel":
+        if user_id != DEVELOPER_ID: return
+        
+        await query.edit_message_text("⏳ جاري تشفير قاعدة البيانات وإرسالها للقناة...")
+        try:
+            # استدعاء الدالة التي صممناها في كلاس DataManager
+            await db_manager.create_backup_to_telegram()
+            await query.edit_message_text("✅ تم إرسال النسخة الاحتياطية المشفرة إلى القناة بنجاح! 🛡️")
+        except Exception as e:
+            await query.edit_message_text(f"❌ فشل الإرسال: {str(e)}")
+
+    # --- [ الإجراء الجديد: استعادة يدوية من القناة ] ---
+    elif data == "restore_from_channel":
+        if user_id != DEVELOPER_ID: return
+        
+        await query.edit_message_text("⏳ جاري البحث عن آخر نسخة في القناة وفك تشفيرها...")
+        try:
+            await db_manager.restore_from_telegram()
+            await query.edit_message_text("✅ تمت الاستعادة بنجاح! يرجى إعادة تشغيل السيرفر لتطبيق البيانات.")
+        except Exception as e:
+            await query.edit_message_text(f"❌ فشل الاستعادة: {str(e)}")
+
+    elif data == "confirm_hard_reset":
         # --- [ إضافة جديدة: حماية المطور ] ---
         if user_id != DEVELOPER_ID:
             await deny_access(query, "⚠️ هذا الإجراء الخطير متاح للمطور الأساسي فقط.")

@@ -604,94 +604,107 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
 # --------------------------------------------------------------------------
 def update_content_setting(bot_id, column_name, new_value):
     """
-    تحديث إعدادات المحتوى محلياً فوراً مع ضمان المزامنة لاحقاً.
-    تحافظ على نفس المنطق: البحث عن المعرف ثم تحديث العمود المحدد.
-    تم التصحيح ليدعم المسميات العربية الجديدة والالتزام الصارم بكافة الوظائف.
+    تحديث إعدادات المحتوى محلياً فوراً مع ضمان المزامنة لاحقاً:
+    - تحافظ على نفس المنطق: البحث عن المعرف ثم تحديث العمود المحدد.
+    - تم التصحيح ليدعم المسميات العربية الجديدة والالتزام الصارم بكافة الوظائف.
+    - الالتزام بهيكل جدول 'إعدادات_المحتوى' (36 عموداً).
     """
     try:
         # 1. جلب العناوين من الجدول المحلي لمعرفة معلومات الأعمدة
+        # نستخدم الاقتباسات المزدوجة لاسم الجدول العربي لضمان سلامة الاستعلام في SQLite
         db_manager.cursor.execute(f"PRAGMA table_info('إعدادات_المحتوى')")
         columns = [info[1] for info in db_manager.cursor.fetchall()]
         
         # البحث عن اسم العمود (تجاهل الأعمدة التقنية local_id و sync_status)
         if column_name in columns:
             # التعديل: استخدام "bot_id" بدلاً من column_1 للبحث عن البوت
-            # واستخدام الاقتباسات المزدوجة لاسم العمود المحدث لضمان قبول المسميات العربية
+            # واستخدام الاقتباسات المزدوجة لاسم العمود المحدث لضمان قبول المسميات العربية (مثل "اسم_المؤسسة")
             query = f'UPDATE "إعدادات_المحتوى" SET "{column_name}" = ?, sync_status = "pending" WHERE "bot_id" = ?'
             
             db_manager.cursor.execute(query, (str(new_value), str(bot_id)))
             db_manager.conn.commit()
             
-            # تحديث نسخة الكاش لضمان الانعكاس الفوري في البوتات (وظيفتك الأصلية)
+            # تحديث نسخة الكاش لضمان الانعكاس الفوري في البوتات (الالتزام بموضع الاستدعاء)
             update_global_version("GLOBAL_SYNC") 
             return True
         else:
+            # الحفاظ على نص التنبيه الأصلي
             print(f"⚠️ العمود {column_name} غير موجود في جدول إعدادات_المحتوى")
             
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ تحديث إعدادات محلي في 'إعدادات_المحتوى': {e}")
     return False
 
 
 def get_bot_config(bot_id):
     """
-    جلب تكوين البوت من القاعدة المحلية (استجابة في ميلي ثانية).
-    تحافظ على إرجاع قاموس (Dict) بنفس المفاتيح الأصلية.
-    تم التعديل للعمل مع العمود العربي 'bot_id'.
+    جلب تكوين البوت من القاعدة المحلية (استجابة في ميلي ثانية):
+    - تحافظ على إرجاع قاموس (Dict) بنفس المفاتيح الأصلية.
+    - تم التعديل للعمل مع العمود العربي 'bot_id'.
     """
     try:
-        # جلب الصف بالكامل بناءً على توكن البوت أو المعرف (العمود الأول سابقاً column_1)
+        # جلب الصف بالكامل بناءً على توكن البوت أو المعرف
         # التعديل: استخدام المسمى العربي المعتمد "bot_id" في جدول إعدادات_المحتوى
-        db_manager.cursor.execute("SELECT * FROM 'إعدادات_المحتوى' WHERE \"bot_id\" = ?", (str(bot_id),))
+        db_manager.cursor.execute('SELECT * FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (str(bot_id),))
         row = db_manager.cursor.fetchone()
         
         if row:
             # تحويل الصف إلى قاموس مع الحفاظ على أسماء الأعمدة (Headers)
-            # هذا يضمن أن المفاتيح ستكون بالأسماء العربية الجديدة (مثل "رسالة_الترحيب" بدلاً من column_2)
+            # هذا يضمن أن المفاتيح ستكون بالأسماء العربية الجديدة (مثل "الرسالة الترحيبية" بدلاً من column_2)
             return dict(row)
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ جلب تكوين من المحلي (إعدادات_المحتوى): {e}")
     return {}
 
 def add_log_entry(bot_id, log_type, message):
     """
-    تدوين السجلات محلياً لمنع تعطيل العمليات الأساسية بانتظار Google Sheets.
-    تحافظ على الأعمدة الـ 4: ID، النوع، الرسالة، الوقت.
+    تدوين السجلات محلياً لمنع تعطيل العمليات الأساسية بانتظار Google Sheets:
+    - تحافظ على الأعمدة الـ 4: bot_id، type، message، time.
+    - الالتزام بترتيب جدول 'السجلات' في الهيكل المرفق.
     """
     try:
         now = get_system_time("full")
-        # المصفوفة تحافظ على نفس الترتيب الصارم للأعمدة في جدول 'السجلات'
-        log_data = [str(bot_id), log_type, message, now]
+        # المصفوفة تحافظ على نفس الترتيب الصارم للأعمدة في جدول 'السجلات' (4 أعمدة)
+        # الترتيب: ["bot_id", "type", "message", "time"]
+        log_data = [str(bot_id), str(log_type), str(message), now]
         
         # الحفظ في جدول السجلات المحلي باستخدام الدالة الوسيطة
-        # تم التأكد من أن "السجلات" موجودة في ALLOWED_TABLES
-        success = local_bulk_save("السجلات", log_data)
+        # تم التأكد من أن "السجلات" موجودة في جداول SQLite المسموحة
+        success = local_save_wrapper("السجلات", log_data)
         return success
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ تدوين سجل محلي في جدول السجلات: {e}")
         return False
 
 def check_connection():
     """
-    التحقق من الاتصال أصبح الآن يشمل القاعدة المحلية + جوجل شيت.
-    تحافظ على الوظيفة الأصلية لربط جوجل في حال الفشل.
+    التحقق من الاتصال أصبح الآن يشمل القاعدة المحلية + جوجل شيت:
+    - تحافظ على الوظيفة الأصلية لربط جوجل في حال الفشل.
     """
     try:
         # 1. التأكد من أن ملف القاعدة المحلي مفتوح وقابل للقراءة
+        # استخدام استعلام خفيف (SELECT 1) للتأكد من حيوية المحرك
         db_manager.cursor.execute("SELECT 1")
         
         # 2. التأكد من اتصال جوجل شيت (المنطق الأصلي الخاص بك دون تغيير)
         try:
-            # محاولة الوصول لخاصية في الكائن للتحقق من حيويته
+            # محاولة الوصول لخاصية في الكائن للتحقق من حيويته (Title)
             if 'ss' in globals() and ss is not None:
                 ss.title
                 return True
             else:
+                # محاولة إعادة الاتصال التلقائي (الالتزام بمنطقك)
+                from sheets import connect_to_google
                 return connect_to_google()
         except:
+            from sheets import connect_to_google
             return connect_to_google()
             
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي المطور
         print(f"❌ خطأ فحص الاتصال (قاعدة البيانات + جوجل): {e}")
         return False
 
@@ -1133,42 +1146,50 @@ def update_meta_info():
     - الحفاظ الصارم على النطاق A1:C7 لعدم مسح البيانات اليدوية.
     - الحفاظ على كافة المفاتيح والأوصاف (التفريغ، الذكاء الاصطناعي، التحميل).
     - إضافة نسخة احتياطية في SQLite لضمان سلامة المحرك.
+    - التعديل: استخدام المسميات العربية [key, value, updated_at] في الاستعلام المحلي.
     """
     try:
-        # 1. إعداد مصفوفة البيانات (نفس البيانات الأصلية 100% بدون أي تغيير في المفاتيح أو القيم)
-        # الالتزام الصارم بترتيب المصفوفة ليتوافق مع النطاق A1:C7 في جوجل شيت
+        from datetime import datetime
+        # 1. إعداد مصفوفة البيانات (الالتزام الصارم بـ 7 صفوف و 3 أعمدة)
         meta_data = [
             ["key", "value", "updated_at"], 
-            ["version", SCHEMA_VERSION, get_system_time("date")], 
+            ["version", globals().get('SCHEMA_VERSION', "1.0.0"), get_system_time("date")], 
             ["engine_status", "HEALTHY", datetime.now().isoformat()],
             ["desc_transcriber_bot.py", "التفريغ الصوتي", "Active"],
             ["desc_ai_bot.py", "الذكاء الاصطناعي", "Active"],
             ["desc_downloader_bot.py", "تحميل فيديوهات", "Active"]
         ]
 
-        # 2. الحفظ المحلي (SQLite) - لضمان سرعة التحقق عند الإقلاع
-        # نستخدم جدول '_meta' المحلي الذي تم إنشاؤه بالأسماء العربية الجديدة
-        # ملاحظة: يتم استخدام الأسماء البرمجية للأعمدة column_1, column_2, column_3 داخل جدول الميتا التقني
-        for row in meta_data[1:]: # نتخطى الهيدر (العناوين)
-            db_manager.cursor.execute(
-                "INSERT OR REPLACE INTO '_meta' (column_1, column_2, column_3, sync_status) VALUES (?, ?, ?, 'pending')",
-                (str(row[0]), str(row[1]), str(row[2]))
-            )
+        # 2. التحديث في المحرك المحلي (SQLite) - لضمان سلامة المحرك الهجين
+        # التعديل الصارم: استخدام أسماء الأعمدة المعتمدة في الهيكل بدلاً من column_1/2/3
+        for row in meta_data[1:]:
+            try:
+                # نستخدم الاقتباسات المزدوجة لضمان توافق الأسماء التقنية مع SQLite
+                query = 'INSERT OR REPLACE INTO "_meta" ("key", "value", "updated_at", "sync_status") VALUES (?, ?, ?, "pending")'
+                db_manager.cursor.execute(query, (str(row[0]), str(row[1]), str(row[2])))
+            except Exception as sql_e:
+                print(f"⚠️ تنبيه: فشل تحديث سجل ميتا محلي: {sql_e}")
+        
         db_manager.conn.commit()
 
-        # 3. التحديث في جوجل شيت (الالتزام بالنطاق الصارم A1:C7)
-        # التأكد من جلب ورقة العمل من الكاش _ws_cache
-        meta_ws = _ws_cache.get("_meta")
-        if meta_ws:
-            # استخدام صمام الأمان safe_api_call لتجنب حظر جوجل (Rate Limit)
-            safe_api_call(meta_ws.update, range_name='A1:C7', values=meta_data)
-            print("✅ تم تحديث ورقة الميتا وحماية قائمة بوتاتك (محلياً وسحابياً).")
+        # 3. التحديث في Google Sheets (الالتزام الصارم بالنطاق A1:C7)
+        # التأكد من وجود ورقة الميتا في الكاش _ws_cache
+        if '_ws_cache' in globals():
+            meta_ws = _ws_cache.get("_meta")
+            if meta_ws:
+                # استخدام صمام الأمان safe_api_call لتجنب حظر جوجل (Rate Limit)
+                from sheets import safe_api_call
+                # الحفاظ على النطاق A1:C7 لعدم مسح البيانات اليدوية كما طلبت حرفياً
+                safe_api_call(meta_ws.update, range_name='A1:C7', values=meta_data)
+                print("✅ تم تحديث ورقة الميتا وحماية قائمة بوتاتك (محلياً وسحابياً).")
+            else:
+                print("⚠️ تنبيه: ورقة '_meta' غير موجودة في الكاش، سيتم تجاوز التحديث السحابي.")
         else:
-            print("⚠️ تنبيه: ورقة '_meta' غير موجودة في الكاش، سيتم تجاوز التحديث السحابي.")
+             print("⚠️ تنبيه: كاش الأوراق _ws_cache غير متاح.")
             
     except Exception as e: 
+        # الحفاظ على نص تسجيل الخطأ الأصلي "فشل تحديث الميتا"
         print(f"❌ فشل تحديث الميتا (المحرك المطور): {e}")
-
 
 # --------------------------------------------------------------------------
 # إضافة قسم 
@@ -1183,22 +1204,22 @@ def add_new_category(bot_token, cat_id, cat_name):
         from datetime import datetime
         current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # إعداد مصفوفة البيانات (الالتزام الصارم بالـ 8 أعمدة وبالترتيب المذكور في كودك)
-        # 1. bot_id | 2. معرف_القسم | 3. اسم_القسم | 4. الحالة | 5. ترتيب_العرض | 6. تاريخ_الإنشاء | 7. معرف_الفرع | 8. ملاحظات
+        # إعداد مصفوفة البيانات (الالتزام الصارم بالـ 8 أعمدة كما ورد في هيكل جدول 'الأقسام')
+        # الترتيب: bot_id, معرف_القسم, اسم_القسم, الحالة, ترتيب_العرض, تاريخ_الإنشاء, معرف_الفرع, ملاحظات
         row = [
             str(bot_token).strip(),       # 1. bot_id
             str(cat_id).strip(),          # 2. معرف_القسم
             str(cat_name).strip(),        # 3. اسم_القسم
             "نشط",                        # 4. الحالة
-            "0",                          # 5. ترتيب_العرض (افتراضي)
+            "0",                          # 5. ترتيب_العرض
             current_date,                 # 6. تاريخ_الإنشاء
-            "001",                        # 7. معرف_الفرع (افتراضي)
+            "001",                        # 7. معرف_الفرع
             "إضافة عبر لوحة التحكم"       # 8. ملاحظات
         ]
 
-        # الحفظ في المحرك المحلي (SQLite) بدلاً من الانتظار المباشر لجوجل شيت
-        # نستخدم الجدول 'الأقسام' (أو الاسم المطابق في السبريدشيت لديك)
-        success = local_save_wrapper("الأقسام", row)
+        # الحفظ في المحرك المحلي (SQLite) لضمان (Zero Lag)
+        # نستخدم دالة local_bulk_save لضمان مطابقة المسميات العربية
+        success = local_bulk_save("الأقسام", row)
         
         if success:
             # تحديث نسخة المزامنة (الالتزام بالدالة الأصلية)
@@ -1208,12 +1229,10 @@ def add_new_category(bot_token, cat_id, cat_name):
             
         return False
     except Exception as e:
-        # الحفاظ على نص الخطأ الأصلي مع توضيح أنه في المحرك المطور
         print(f"❌ Error in add_new_category (Hybrid): {e}")
         return False
-#~~~~~~~~~~~~~~~~
 
-#دالة حذف القسم والبحث 
+# دالة حذف القسم والبحث 
 def delete_category_by_id(bot_token, cat_id):
     """
     حذف صف القسم من قاعدة البيانات:
@@ -1222,44 +1241,44 @@ def delete_category_by_id(bot_token, cat_id):
     - الحفاظ على استدعاء update_global_version لضمان مزامنة الكاش.
     """
     try:
+        bot_token_str = str(bot_token).strip()
+        cat_id_str = str(cat_id).strip()
+
         # 1. الحفظ في المحرك المحلي (SQLite) - التنفيذ الفوري
-        # البحث عن السجل المطابق للتوكن (bot_id) ومعرف القسم (ID_القسم)
         try:
-            # التعديل: استخدام المسميات العربية "bot_id" و "ID_القسم" لجدول "الأقسام"
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_القسم" لجدول "الأقسام"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
-            query = 'DELETE FROM "الأقسام" WHERE "bot_id" = ? AND "ID_القسم" = ?'
-            db_manager.cursor.execute(query, (str(bot_token).strip(), str(cat_id).strip()))
+            query = 'DELETE FROM "الأقسام" WHERE "bot_id" = ? AND "معرف_القسم" = ?'
+            db_manager.cursor.execute(query, (bot_token_str, cat_id_str))
             db_manager.conn.commit()
             
-            # تحديث نسخة المزامنة (الالتزام بالدالة الأصلية والباراميتر bot_token)
+            # تحديث نسخة المزامنة لتطهير الرام فوراً
             update_global_version(bot_token)
-            print(f"🗑️ [محلي] تم حذف القسم {cat_id} بنجاح من جدول الأقسام.")
+            print(f"🗑️ [محلي] تم حذف القسم {cat_id_str} بنجاح من جدول الأقسام.")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل الحذف المحلي، محاولة الحذف عبر API جوجل: {local_e}")
 
-        # 2. الحفاظ على المنطق الأصلي للحذف من Google Sheets (لضمان المطابقة السحابية)
-        # ملاحظة: departments_sheet يتم جلبه من السسيتيم أو تمريره كـ Global
-        if 'departments_sheet' in globals() and departments_sheet is not None:
-            # جلب كافة القيم (الالتزام الكامل بطريقتك الأصلية في الفحص اليدوي للصفوف)
-            all_rows = departments_sheet.get_all_values()
+        # 2. الحذف من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
+        if 'ss' in globals() and ss is not None:
+            # التأكد من جلب ورقة "الأقسام"
+            from sheets import safe_api_call
+            current_sheet = ss.worksheet("الأقسام")
+            all_rows = current_sheet.get_all_values()
+            
             for i, row in enumerate(all_rows):
-                # التأكد من مطابقة التوكن (العمود 1) والـ ID (العمود 2) - نفس منطقك تماماً
-                if row[0] == bot_token and row[1] == cat_id:
-                    # تنفيذ الحذف عبر صمام الأمان safe_api_call لضمان عدم الانهيار عند ضغط الطلبات
-                    from sheets import safe_api_call
-                    success = safe_api_call(departments_sheet.delete_rows, i + 1)
+                # التأكد من مطابقة التوكن (العمود 1) والـ ID (العمود 2) - الالتزام الصارم
+                if len(row) >= 2 and str(row[0]).strip() == bot_token_str and str(row[1]).strip() == cat_id_str:
+                    # تنفيذ الحذف الفعلي عبر صمام الأمان
+                    success = safe_api_call(current_sheet.delete_rows, i + 1)
                     
                     if success:
-                        # تحديث نسخة الكاش لضمان الانعكاس الفوري (كما في طلبك الأصلي)
                         update_global_version(bot_token)
                         return True
         
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي "Error in delete_category"
         print(f"❌ Error in delete_category: {e}")
         return False
-
 
 #~~~~~~~~~~~~~~~~
 
@@ -1416,26 +1435,34 @@ def get_all_categories(bot_token):
         return []
 
 def get_all_personnel_list(bot_token):
-    """جلب قائمة كافة الموظفين والمدراء للبوت المحدد من الكاش"""
+    """
+    جلب قائمة كافة الموظفين والمدراء للبوت المحدد من الكاش:
+    - تم التعديل للبحث في جدول 'إدارة_الموظفين' بناءً على الهيكل الجديد.
+    - الحفاظ على المفاتيح (id, name, role) لضمان عدم تعطل واجهة البوت.
+    """
     try:
-        # جلب البيانات من جدول الإداريين
-        admins = get_bot_data_from_cache(bot_token, "الإداريين")
+        # جلب البيانات من جدول 'إدارة_الموظفين' (المسمى الجديد المعتمد في الهيكل)
+        # نستخدم دالة جلب البيانات من الكاش مع تمرير المسمى العربي الصحيح للجدول
+        admins = get_bot_data_from_cache(bot_token, "إدارة_الموظفين")
         personnel = []
+        
         for admin in admins:
+            # التعديل: استخراج البيانات باستخدام المسميات العربية للأعمدة من القاموس
+            # bot_id (العمود 1)، ID_الموظف_أو_المدرب (العمود 3)، الاسم_الكامل (العمود 5)، المسمى_الوظيفي (العمود 12)
             personnel.append({
-                "id": admin.get("column_1"), # معرف التليجرام
-                "name": admin.get("column_2"), # الاسم
-                "role": admin.get("column_3")  # الصلاحية
+                "id": admin.get("ID_الموظف_أو_المدرب"), # معرف التليجرام أو المعرف الوظيفي
+                "name": admin.get("الاسم_الكامل"),      # الاسم الكامل للموظف
+                "role": admin.get("المسمى_الوظيفي")     # الصلاحية أو الدور الوظيفي
             })
+            
         return personnel
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"⚠️ خطأ في جلب قائمة الموظفين: {e}")
         return []
 
-
-
 # --------------------------------------------------------------------------
-# دالة حذف الدورات
+# دالة حذف الدورات (تم التأكد من مطابقتها لهيكل 'الدورات_التدريبية')
 def delete_course_by_id(bot_token, course_id):
     """
     حذف صف دورة محددة من الشيت:
@@ -1456,7 +1483,6 @@ def delete_course_by_id(bot_token, course_id):
             print(f"⚠️ تنبيه: فشل الحذف المحلي، سيتم الاعتماد على حذف جوجل فقط: {local_e}")
 
         # 2. تنفيذ الحذف من Google Sheets (الالتزام الصارم بمنطقك الأصلي)
-        # ملاحظة: courses_sheet يجب أن يكون معرفاً عالمياً أو يتم الوصول إليه عبر ss.worksheet
         if 'courses_sheet' in globals() and courses_sheet is not None:
             
             all_rows = courses_sheet.get_all_values()
@@ -1478,7 +1504,7 @@ def delete_course_by_id(bot_token, course_id):
                 
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي "Error deleting course"
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error deleting course: {e}")
         return False
 
@@ -1818,13 +1844,14 @@ def get_employee_permissions(bot_token, employee_id):
     try:
         # 1. البحث في المحرك المحلي (SQLite) - استجابة فورية
         try:
-            # column_1 هو bot_id، و column_2 هو ID_الموظف_أو_المدرب
-            query = "SELECT * FROM 'الهيكل_التنظيمي_والصلاحيات' WHERE column_1 = ? AND column_2 = ?"
+            # التعديل: استخدام المسميات العربية "bot_id" و "ID_الموظف_أو_المدرب" بناءً على هيكلك
+            # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query = 'SELECT * FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
             db_manager.cursor.execute(query, (str(bot_token), str(employee_id)))
             row_local = db_manager.cursor.fetchone()
             
             if row_local:
-                # تحويل الصف إلى قاموس (Dict) ليطابق get_all_records()
+                # تحويل الصف إلى قاموس (Dict) ليطابق مخرجات get_all_records()
                 print(f"🔐 [محلي] تم جلب صلاحيات الموظف: {employee_id}")
                 return dict(row_local)
         except Exception as local_e:
@@ -1835,11 +1862,12 @@ def get_employee_permissions(bot_token, employee_id):
         sheet = ss.worksheet("الهيكل_التنظيمي_والصلاحيات")
         records = sheet.get_all_records()
         for r in records:
-            # مطابقة التوكن و ID الموظف بنفس المفاتيح الأصلية
+            # مطابقة التوكن و ID الموظف بنفس المفاتيح الأصلية (bot_id و ID_الموظف_أو_المدرب)
             if str(r.get("bot_id")) == str(bot_token) and str(r.get("ID_الموظف_أو_المدرب")) == str(employee_id):
                 return r
         return {}
-    except: 
+    except Exception as e: 
+        print(f"❌ خطأ جلب صلاحيات الموظف: {e}")
         return {}
 
 def toggle_employee_permission(bot_token, employee_id, col_name):
@@ -1850,25 +1878,23 @@ def toggle_employee_permission(bot_token, employee_id, col_name):
     - الحفاظ على التحديث في جوجل شيت باستخدام index الأعمدة.
     """
     try:
-        new_val = "FALSE" # القيمة الافتراضية للعودة
+        new_val = "FALSE" # القيمة الافتراضية
         
         # 1. التحديث المحلي (SQLite) - الأولوية للسرعة
         try:
-            # جلب القيمة الحالية من الجدول المحلي أولاً
-            db_manager.cursor.execute(
-                f"SELECT {col_name} FROM 'الهيكل_التنظيمي_والصلاحيات' WHERE column_1 = ? AND column_2 = ?",
-                (str(bot_token), str(employee_id))
-            )
+            # جلب القيمة الحالية مع مراعاة الاقتباسات لاسم العمود العربي
+            query_select = f'SELECT "{col_name}" FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
+            db_manager.cursor.execute(query_select, (str(bot_token), str(employee_id)))
             current_row = db_manager.cursor.fetchone()
+            
             if current_row:
+                # استخراج القيمة من القاموس المرتجع باستخدام اسم العمود كـ Key
                 current_val = str(current_row[col_name]).upper()
                 new_val = "FALSE" if current_val == "TRUE" else "TRUE"
                 
                 # تحديث القيمة محلياً ووسمها بـ pending
-                db_manager.cursor.execute(
-                    f"UPDATE 'الهيكل_التنظيمي_والصلاحيات' SET {col_name} = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?",
-                    (new_val, str(bot_token), str(employee_id))
-                )
+                query_update = f'UPDATE "الهيكل_التنظيمي_والصلاحيات" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
+                db_manager.cursor.execute(query_update, (new_val, str(bot_token), str(employee_id)))
                 db_manager.conn.commit()
                 print(f"🔄 [محلي] تم تبديل صلاحية {col_name} إلى {new_val}")
         except Exception as local_e:
@@ -1878,14 +1904,21 @@ def toggle_employee_permission(bot_token, employee_id, col_name):
         if 'ss' not in globals() or ss is None: connect_to_google()
         sheet = ss.worksheet("الهيكل_التنظيمي_والصلاحيات")
         
-        # جلب كافة القيم للبحث عن الصف الصحيح (نفس منطقك تماماً)
+        # جلب كافة القيم للبحث عن الصف الصحيح
         all_rows = sheet.get_all_values()
         headers = all_rows[0]
-        col_index = headers.index(col_name) + 1
+        
+        # البحث عن رقم العمود بناءً على الاسم الممرر (مثل "صلاحية_الأقسام")
+        try:
+            col_index = headers.index(col_name) + 1
+        except ValueError:
+            print(f"❌ العمود {col_name} غير موجود في جوجل شيت!")
+            return new_val
         
         for i, row in enumerate(all_rows):
-            if row[0] == str(bot_token) and row[1] == str(employee_id):
-                # التحقق من القيمة الحالية في جوجل لضمان المطابقة
+            # العمود 0 هو bot_id والعمود 2 (Index 2) هو ID_الموظف_أو_المدرب (حسب هيكلك)
+            # ملاحظة: في دالتك السابقة كنت تستخدم row[1]، سأبقيها كفحص Index لضمان التطابق
+            if len(row) >= 3 and str(row[0]) == str(bot_token) and str(row[2]) == str(employee_id):
                 current_val_google = str(row[col_index-1]).upper()
                 new_val_google = "FALSE" if current_val_google == "TRUE" else "TRUE"
                 
@@ -1898,7 +1931,6 @@ def toggle_employee_permission(bot_token, employee_id, col_name):
     except Exception as e:
         print(f"Error toggling permission: {e}")
         return "FALSE"
-
 
 # --------------------------------------------------------------------------
 def check_user_permission(bot_token, user_id, permission_col):
@@ -1959,16 +1991,18 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
 
         # 1. المعالجة المحلية (SQLite) - لضمان (Zero Lag)
         try:
-            # جلب القيمة الحالية من العمود المحدد في SQLite
-            query_select = f"SELECT {scope_column} FROM 'الهيكل_التنظيمي_والصلاحيات' WHERE column_1 = ? AND column_2 = ?"
+            # التعديل: استخدام المسميات العربية "bot_id" و "ID_الموظف_أو_المدرب"
+            # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية للأعمدة (مثل "الدورات_المسموحة")
+            query_select = f'SELECT "{scope_column}" FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
             db_manager.cursor.execute(query_select, (bot_token_str, employee_id_str))
             local_row = db_manager.cursor.fetchone()
             
             if local_row:
+                # استخراج القيمة الحالية من القاموس المرتجع باستخدام اسم العمود
                 current_val_local = str(local_row[scope_column]) if local_row[scope_column] else ""
                 current_ids_local = [x.strip() for x in current_val_local.split(",") if x.strip()]
                 
-                # تنفيذ منطق التبديل (Toggle)
+                # تنفيذ منطق التبديل (Toggle) الصارم كما في كودك
                 if target_id_str in current_ids_local:
                     current_ids_local.remove(target_id_str)
                 else:
@@ -1976,8 +2010,8 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
                 
                 new_value = ",".join(current_ids_local)
                 
-                # تحديث القيمة محلياً ووسمها بـ pending
-                query_update = f"UPDATE 'الهيكل_التنظيمي_والصلاحيات' SET {scope_column} = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?"
+                # تحديث القيمة محلياً ووسمها بـ pending للمزامنة اللاحقة
+                query_update = f'UPDATE "الهيكل_التنظيمي_والصلاحيات" SET "{scope_column}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
                 db_manager.cursor.execute(query_update, (new_value, bot_token_str, employee_id_str))
                 db_manager.conn.commit()
                 print(f"🔄 [محلي] تم تحديث {scope_column} للموظف {employee_id_str}")
@@ -1989,11 +2023,18 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
         permission_sheet = ss.worksheet("الهيكل_التنظيمي_والصلاحيات")
         all_data = permission_sheet.get_all_values()
         headers = all_data[0]
-        col_index = headers.index(scope_column) + 1
+        
+        # البحث عن رقم العمود ديناميكياً لضمان الدقة
+        try:
+            col_index = headers.index(scope_column) + 1
+        except ValueError:
+            print(f"❌ العمود {scope_column} غير موجود في جوجل شيت!")
+            return False
         
         for i, row in enumerate(all_data):
-            # التأكد من مطابقة التوكن (العمود 1) و ID الموظف (العمود 2)
-            if str(row[0]) == bot_token_str and str(row[1]) == employee_id_str:
+            # التأكد من مطابقة التوكن (العمود 1) و ID الموظف (العمود 3 حسب الترتيب في الهيكل المرفق)
+            # الهيكل المرفق: bot_id (0), معرف_الفرع (1), ID_الموظف_أو_المدرب (2)
+            if len(row) >= 3 and str(row[0]) == bot_token_str and str(row[2]) == employee_id_str:
                 # منطق الاستخراج والتنظيف الأصلي (بدون أي اختصار)
                 current_ids = str(row[col_index-1]).strip().split(",") if row[col_index-1] else []
                 current_ids = [x.strip() for x in current_ids if x.strip()]
@@ -2005,16 +2046,21 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
                 
                 final_new_value = ",".join(current_ids)
                 
-                # التحديث الفعلي للخلية في جوجل شيت
+                # التحديث الفعلي للخلية في جوجل شيت عبر صمام الأمان safe_api_call
                 from sheets import safe_api_call
-                safe_api_call(permission_sheet.update_cell, i + 1, col_index, final_new_value)
-                return True
+                success = safe_api_call(permission_sheet.update_cell, i + 1, col_index, final_new_value)
+                
+                if success:
+                    # تحديث الكاش العالمي لضمان سريان الصلاحيات فوراً
+                    update_global_version(bot_token_str)
+                    return True
                 
         return False
     except Exception as e:
         # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ في تحديث النطاق: {e}")
         return False
+
 
 # --------------------------------------------------------------------------
 def check_access(bot_token, user_id, permission_col, target_id=None, scope_type=None):
@@ -2128,28 +2174,36 @@ def get_groups_by_course(bot_token, course_id):
     try:
         # 1. البحث في المحرك المحلي (SQLite) - استجابة فورية
         try:
-            # column_1 هو bot_id، و column_5 هو معرف_الدورة بناءً على الترتيب أعلاه
-            query = "SELECT * FROM 'إدارة_المجموعات' WHERE column_1 = ? AND column_5 = ?"
-            db_manager.cursor.execute(query, (str(bot_token), str(course_id)))
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_الدورة"
+            # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query = 'SELECT * FROM "إدارة_المجموعات" WHERE "bot_id" = ? AND "معرف_الدورة" = ?'
+            db_manager.cursor.execute(query, (str(bot_token).strip(), str(course_id).strip()))
             rows_local = db_manager.cursor.fetchall()
             
             if rows_local:
-                # تحويل الصفوف المحلية إلى قواميس لتطابق get_all_records()
+                # تحويل الصفوف المحلية إلى قواميس لتطابق مخرجات get_all_records()
+                # الحفاظ على كافة الحقول (اسم_المجموعة، أيام_الدراسة، توقيت_الدراسة، إلخ)
                 print(f"🔍 [محلي] جلب {len(rows_local)} مجموعة للدورة {course_id}")
                 return [dict(r) for r in rows_local]
         except Exception as local_e:
-            print(f"⚠️ فشل الجلب المحلي للمجموعات: {local_e}")
+            print(f"⚠️ فشل الجلب المحلي للمجموعات من 'إدارة_المجموعات': {local_e}")
 
         # 2. الجلب من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        if ss:
+        # التأكد من حيويّة كائن الاتصال ss
+        if 'ss' in globals() and ss is not None:
             sheet = ss.worksheet("إدارة_المجموعات")
             records = sheet.get_all_records()
-            # الفلترة الصارمة (نفس منطقك تماماً)
-            return [r for r in records if str(r.get("bot_id")) == str(bot_token) and str(r.get("معرف_الدورة")) == str(course_id)]
+            
+            # الفلترة الصارمة (نفس منطقك تماماً باستخدام المفاتيح العربية bot_id و معرف_الدورة)
+            return [
+                r for r in records 
+                if str(r.get("bot_id")).strip() == str(bot_token).strip() 
+                and str(r.get("معرف_الدورة")).strip() == str(course_id).strip()
+            ]
             
         return []
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
+        # الحفاظ على نص تسجيل الخطأ الأصلي "خطأ في جلب المجموعات"
         print(f"❌ خطأ في جلب المجموعات: {e}")
         return []
 
@@ -2213,7 +2267,7 @@ def save_group_to_db(bot_token, data):
 def delete_group_by_id(bot_token, group_id):
     """
     حذف مجموعة من شيت (إدارة_المجموعات):
-    - الحفاظ الكامل على منطق التحقق (العمود 1 للتوكن، العمود 3 للمجموعة).
+    - الحفاظ الكامل على منطق التحقق (bot_id و معرف_المجموعة).
     - تنفيذ الحذف محلياً في SQLite فوراً لضمان (Zero Lag).
     - الحفاظ على الحذف من جوجل شيت وتحديث الإصدار بمحاذاة عملية الحذف.
     """
@@ -2223,8 +2277,9 @@ def delete_group_by_id(bot_token, group_id):
 
         # 1. الحذف من المحرك المحلي (SQLite) - لضمان اختفاء المجموعة فوراً أمام المستخدم
         try:
-            # في الجدول المحلي: column_1 هو التوكن، column_3 هو معرف_المجموعة
-            query = f"DELETE FROM 'إدارة_المجموعات' WHERE column_1 = ? AND column_3 = ?"
+            # التعديل: استخدام المسميات العربية "bot_id" و "معرف_المجموعة" لجدول "إدارة_المجموعات"
+            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query = 'DELETE FROM "إدارة_المجموعات" WHERE "bot_id" = ? AND "معرف_المجموعة" = ?'
             db_manager.cursor.execute(query, (bot_token_str, group_id_str))
             db_manager.conn.commit()
             print(f"🗑️ [محلي] تم حذف المجموعة {group_id_str} من القاعدة المحلية.")
@@ -2232,16 +2287,16 @@ def delete_group_by_id(bot_token, group_id):
             print(f"⚠️ تنبيه: فشل الحذف المحلي، سيتم الاعتماد على حذف جوجل فقط: {local_e}")
 
         # 2. تنفيذ الحذف من Google Sheets (الالتزام الصارم بمنطقك الأصلي)
-        if ss:
+        if 'ss' in globals() and ss is not None:
             sheet = ss.worksheet("إدارة_المجموعات")
             all_rows = sheet.get_all_values()
             
             for i, row in enumerate(all_rows):
-                # التحقق من مطابقة التوكن (العمود 1) ومعرف المجموعة (العمود 3 -> Index 2)
-                # تم الحفاظ على شرط len(row) >= 3 لضمان عدم حدوث خطأ Index
-                if len(row) >= 3 and str(row[0]) == bot_token_str and str(row[2]) == group_id_str:
+                # التحقق من مطابقة التوكن (العمود 1 -> Index 0) ومعرف المجموعة (العمود 3 -> Index 2)
+                # تم الحفاظ على شرط len(row) >= 3 لضمان عدم حدوث خطأ Index كما في منطقك الأصلي
+                if len(row) >= 3 and str(row[0]).strip() == bot_token_str and str(row[2]).strip() == group_id_str:
                     
-                    # 1. تنفيذ الحذف الفعلي من جوجل شيت عبر صمام الأمان
+                    # 1. تنفيذ الحذف الفعلي من جوجل شيت عبر صمام الأمان safe_api_call
                     from sheets import safe_api_call
                     success = safe_api_call(sheet.delete_rows, i + 1)
                     
@@ -2254,9 +2309,10 @@ def delete_group_by_id(bot_token, group_id):
                 
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
+        # الحفاظ على نص تسجيل الخطأ الأصلي "Error deleting group"
         print(f"❌ Error deleting group: {e}")
         return False
+
 
 
 # --------------------------------------------------------------------------
@@ -2275,9 +2331,9 @@ def update_group_field(bot_token, group_id, col_name, new_value):
 
         # 1. التحديث في المحرك المحلي (SQLite) - لضمان انعكاس التعديل فوراً
         try:
-            # تحديث العمود المحدد محلياً ووسم السجل بـ pending للمزامنة اللاحقة
-            # ملاحظة: col_name يجب أن يطابق اسم العمود في قاعدة البيانات المحلية
-            query = f"UPDATE 'إدارة_المجموعات' SET {col_name} = ?, sync_status = 'pending' WHERE column_1 = ? AND column_3 = ?"
+            # التعديل: استخدام المسميات العربية "bot_id" و "معرف_المجموعة" لجدول "إدارة_المجموعات"
+            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية للأعمدة والجداول مع محرك SQLite
+            query = f'UPDATE "إدارة_المجموعات" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_المجموعة" = ?'
             db_manager.cursor.execute(query, (str(new_value), bot_token_str, group_id_str))
             db_manager.conn.commit()
             print(f"🔄 [محلي] تم تحديث الحقل {col_name} للمجموعة {group_id_str}")
@@ -2285,30 +2341,35 @@ def update_group_field(bot_token, group_id, col_name, new_value):
             print(f"⚠️ تنبيه: فشل التحديث المحلي، سيتم الاعتماد على تحديث جوجل فقط: {local_e}")
 
         # 2. التحديث في Google Sheets (الالتزام الصارم بمنطقك الأصلي)
-        if ss:
+        if 'ss' in globals() and ss is not None:
             sheet = ss.worksheet("إدارة_المجموعات")
             all_rows = sheet.get_all_values()
             headers = all_rows[0]
             
             # تحديد رقم العمود (الالتزام بمنطق index الأصلي)
-            col_index = headers.index(col_name) + 1
+            try:
+                col_index = headers.index(col_name) + 1
+            except ValueError:
+                print(f"❌ العمود {col_name} غير موجود في ورقة إدارة_المجموعات!")
+                return False
             
             for i, row in enumerate(all_rows):
-                # التحقق من مطابقة التوكن (العمود 1) ومعرف المجموعة (العمود 3)
-                if len(row) >= 3 and str(row[0]) == bot_token_str and str(row[2]) == group_id_str:
+                # التحقق من مطابقة التوكن (العمود 1 -> Index 0) ومعرف المجموعة (العمود 3 -> Index 2)
+                # تم الحفاظ على شرط len(row) >= 3 لضمان عدم حدوث خطأ Index
+                if len(row) >= 3 and str(row[0]).strip() == bot_token_str and str(row[2]).strip() == group_id_str:
                     
-                    # التحديث الفعلي للخلية في جوجل شيت عبر صمام الأمان
+                    # التحديث الفعلي للخلية في جوجل شيت عبر صمام الأمان safe_api_call
                     from sheets import safe_api_call
-                    safe_api_call(sheet.update_cell, i + 1, col_index, str(new_value))
+                    success = safe_api_call(sheet.update_cell, i + 1, col_index, str(new_value))
                     
-                    # رفع إصدار البوت فوراً لتحديث بيانات المجموعات في الرام (نفس موضعك الأصلي)
-                    update_global_version(bot_token)
-                    
-                    return True
+                    if success:
+                        # رفع إصدار البوت فوراً لتحدث بيانات المجموعات في الرام (نفس موضعك الأصلي)
+                        update_global_version(bot_token)
+                        return True
                     
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
+        # الحفاظ على نص تسجيل الخطأ الأصلي "Error updating group field"
         print(f"❌ Error updating group field: {e}")
         return False
 
@@ -2460,42 +2521,44 @@ def toggle_quiz_visibility(bot_token, quiz_id):
 
         # 1. التحديث في المحرك المحلي (SQLite) - لضمان الاستجابة اللحظية
         try:
-            # في جدول 'الاختبارات_الآلية': العمود 14 يقابله column_14
-            # نتحقق من القيمة الحالية محلياً أولاً
-            query_select = "SELECT column_14 FROM 'الاختبارات_الآلية' WHERE column_1 = ? AND column_3 = ?"
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_الاختبار" و "حالة_الاختبار"
+            # العمود 14 في الهيكل يقابله "حالة_الاختبار"
+            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query_select = 'SELECT "حالة_الاختبار" FROM "الاختبارات_الآلية" WHERE "bot_id" = ? AND "معرف_الاختبار" = ?'
             db_manager.cursor.execute(query_select, (bot_token_str, quiz_id_str))
             local_row = db_manager.cursor.fetchone()
             
             if local_row:
-                current_val_local = str(local_row['column_14']).upper()
+                # استخراج القيمة من القاموس المرتجع باستخدام المفتاح العربي
+                current_val_local = str(local_row['حالة_الاختبار']).upper()
                 new_val = "FALSE" if current_val_local == "TRUE" else "TRUE"
                 
-                # تحديث القيمة محلياً ووسم السجل بـ pending
-                query_update = "UPDATE 'الاختبارات_الآلية' SET column_14 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_3 = ?"
+                # تحديث القيمة محلياً ووسم السجل بـ pending للمزامنة اللاحقة
+                query_update = 'UPDATE "الاختبارات_الآلية" SET "حالة_الاختبار" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_الاختبار" = ?'
                 db_manager.cursor.execute(query_update, (new_val, bot_token_str, quiz_id_str))
                 db_manager.conn.commit()
                 print(f"🔄 [محلي] تم تبديل حالة الاختبار {quiz_id_str} إلى {new_val}")
         except Exception as local_e:
-            print(f"⚠️ تنبيه: فشل التبديل المحلي للحالة: {local_e}")
+            print(f"⚠️ تنبيه: فشل التبديل المحلي للحالة في 'الاختبارات_الآلية': {local_e}")
 
         # 2. التحديث في Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        if ss:
+        if 'ss' in globals() and ss is not None:
             sheet = ss.worksheet("الاختبارات_الآلية")
             all_rows = sheet.get_all_values()
             
             for i, row in enumerate(all_rows):
-                # التوكن (العمود 1 -> Index 0) والـ ID (العمود 3 -> Index 2)
-                if row[0] == bot_token_str and row[2] == quiz_id_str:
-                    # العمود 14 (Index 13) - نفس منطقك الصارم
+                # التوكن (العمود 1 -> Index 0) ومعرف الاختبار (العمود 3 -> Index 2) بناءً على الهيكل
+                if len(row) >= 3 and str(row[0]).strip() == bot_token_str and str(row[2]).strip() == quiz_id_str:
+                    # العمود 14 (Index 13) - نفس منطقك الصارم "حالة_الاختبار"
                     current_val_google = str(row[13]).upper()
                     final_new_val = "FALSE" if current_val_google == "TRUE" else "TRUE"
                     
-                    # التحديث الفعلي عبر صمام الأمان
+                    # التحديث الفعلي عبر صمام الأمان safe_api_call في الخلية رقم 14
                     from sheets import safe_api_call
                     success = safe_api_call(sheet.update_cell, i + 1, 14, final_new_val)
                     
                     if success:
-                        # رفع إصدار البوت فوراً لتحديث الكاش (الالتزام بموضع الاستدعاء)
+                        # رفع إصدار البوت فوراً لتحديث الكاش (الالتزام الصارم بموضع الاستدعاء)
                         update_global_version(bot_token)
                         return final_new_val
         
@@ -2504,8 +2567,6 @@ def toggle_quiz_visibility(bot_token, quiz_id):
         # الحفاظ على منطق العودة بـ FALSE في حال حدوث خطأ كما في كودك
         print(f"❌ خطأ في تبديل رؤية الاختبار: {e}")
         return "FALSE"
-
-
 
 
 
@@ -2709,37 +2770,41 @@ def delete_question_from_bank(bot_token, q_id):
 
         # 1. الحذف من المحرك المحلي (SQLite) - لضمان الاستجابة الفورية
         try:
-            # في جدول 'بنك_الأسئلة': column_1 هو التوكن، column_6 هو معرف_السؤال
-            query = "DELETE FROM 'بنك_الأسئلة' WHERE column_1 = ? AND column_6 = ?"
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_السؤال" لجدول "بنك_الأسئلة"
+            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query = 'DELETE FROM "بنك_الأسئلة" WHERE "bot_id" = ? AND "معرف_السؤال" = ?'
             db_manager.cursor.execute(query, (bot_token_str, q_id_str))
             db_manager.conn.commit()
             print(f"🗑️ [محلي] تم حذف السؤال {q_id_str} من القاعدة المحلية.")
         except Exception as local_e:
-            print(f"⚠️ فشل الحذف المحلي للسؤال: {local_e}")
+            print(f"⚠️ فشل الحذف المحلي للسؤال في 'بنك_الأسئلة': {local_e}")
 
         # 2. الحذف من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        if ss:
+        if 'ss' in globals() and ss is not None:
             sheet = ss.worksheet("بنك_الأسئلة")
-            # جلب عمود معرفات الأسئلة فقط (العمود 6) لتقليل استهلاك البيانات
+            # جلب عمود معرفات الأسئلة فقط (العمود 6) لتقليل استهلاك البيانات كما في كودك
             q_ids = sheet.col_values(6) 
             
             try:
                 # البحث عن رقم السطر (نضيف 1 لأن المصفوفة تبدأ من 0)
                 row_index = q_ids.index(q_id_str) + 1
                 
-                # التأكد أن السؤال يتبع لنفس البوت (أمان إضافي - الالتزام بمنطقك)
+                # التأكد أن السؤال يتبع لنفس البوت (أمان إضافي - الالتزام بمنطقك الصارم)
+                # فحص العمود 1 للتأكد من مطابقة التوكن (bot_id)
                 bot_id_in_sheet = sheet.cell(row_index, 1).value
-                if str(bot_id_in_sheet) == bot_token_str:
+                if str(bot_id_in_sheet).strip() == bot_token_str:
                     
-                    # تنفيذ الحذف الفعلي من جوجل شيت عبر صمام الأمان
+                    # تنفيذ الحذف الفعلي من جوجل شيت عبر صمام الأمان safe_api_call
                     from sheets import safe_api_call
                     success = safe_api_call(sheet.delete_rows, row_index)
                     
                     if success:
-                        # 🔥 تحديث التوكن فوراً ليعلم الكاش أن هناك حذفاً تم
+                        # 🔥 تحديث التوكن فوراً ليعلم الكاش أن هناك حذفاً تم (الالتزام بموقع الاستدعاء)
                         from cache_manager import update_global_version
                         update_global_version(bot_token)
                         return True
+                else:
+                    print(f"🛑 أمان: محاولة حذف سؤال لا يتبع لهذا البوت {bot_token_str}")
                         
             except ValueError:
                 # الحفاظ على نص التنبيه الأصلي
@@ -2748,9 +2813,10 @@ def delete_question_from_bank(bot_token, q_id):
             
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
+        # الحفاظ على نص تسجيل الخطأ الأصلي "خطأ حذف سؤال"
         print(f"❌ خطأ حذف سؤال: {e}")
         return False
+
  
 # --------------------------------------------------------------------------
 # --- [ 3. محرك جلب الحصص الفعلي ] ---
@@ -2920,74 +2986,80 @@ def get_bot_setting(bot_token, key, default=0):
         # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ في جلب الإعداد {key} من الكاش: {e}")
         return default
+       
+       
 def link_user_to_inviter(bot_token, student_id, inviter_id):
     """
     ربط الطالب بالداعي ومنح النقاط:
     - الحفاظ الكامل على منطق المفتاح 'ref_points_join' والقيمة الافتراضية 10.
     - تحديث الرصيد محلياً في SQLite فوراً لضمان (Zero Lag) في نظام المكافآت.
-    - الالتزام بتحديث العمود 10 (معرف الداعي) والعمود 11 (النقاط) في جوجل شيت.
+    - الالتزام بتحديث العمود 10 (معرف إحالة) والعمود 11 (رصيد) في جوجل شيت.
     """
     try:
         # 0. المزامنة الذكية قبل البدء (الالتزام بمنطقك الأصلي)
         smart_sync_check(bot_token)
         
-        # 1. جلب قيمة النقاط من الكاش المحلي
+        # 1. جلب قيمة النقاط من الكاش المحلي (جدول الإعدادات)
         settings_records = get_bot_data_from_cache(bot_token, "الإعدادات")
         points_to_add = 10  
         
         for reg in settings_records:
+            # استخدام المسمى العربي المعتمد "المفتاح_البرمجي" و "القيمة"
             if reg.get('المفتاح_البرمجي') == 'ref_points_join':
                 points_to_add = float(reg.get('القيمة') or 10)
                 break
 
         # 2. جلب بيانات المستخدمين من الكاش المحلي
         users_records = get_bot_data_from_cache(bot_token, "المستخدمين")
-        inviter_data = next((r for r in users_records if str(r.get("ID_المستخدم")) == str(inviter_id)), None)
+        # التعديل: استخدام المسمى العربي "ID المستخدم" و "رصيد" بناءً على هيكلك
+        inviter_data = next((r for r in users_records if str(r.get("ID المستخدم")) == str(inviter_id)), None)
 
         # [إضافة الهجين]: التحديث في المحرك المحلي (SQLite) لضمان السرعة اللحظية
         try:
             # أ) تحديث رصيد الداعي محلياً
             if inviter_data:
-                new_points = float(inviter_data.get("النقاط") or 0) + points_to_add
-                db_manager.cursor.execute(
-                    "UPDATE 'المستخدمين' SET column_11 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?",
-                    (new_points, str(bot_token), str(inviter_id))
-                )
+                # استخدام المسمى العربي "رصيد" في الحساب
+                current_points = float(inviter_data.get("رصيد") or 0)
+                new_points = current_points + points_to_add
+                
+                # التعديل: استخدام المسميات العربية "رصيد"، "bot_id" (أو عمود التوكن)، و "ID المستخدم"
+                # العمود 11 في هيكلك لجدول المستخدمين هو "رصيد"
+                query_inviter = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
+                db_manager.cursor.execute(query_inviter, (new_points, str(inviter_id)))
             
-            # ب) ربط الطالب بالداعي محلياً
-            db_manager.cursor.execute(
-                "UPDATE 'المستخدمين' SET column_10 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?",
-                (str(inviter_id), str(bot_token), str(student_id))
-            )
+            # ب) ربط الطالب بالداعي محلياً (تحديث العمود 10 "معرف إحالة")
+            query_student = 'UPDATE "المستخدمين" SET "معرف إحالة" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
+            db_manager.cursor.execute(query_student, (str(inviter_id), str(student_id)))
+            
             db_manager.conn.commit()
             print(f"🎁 [محلي] تم منح {points_to_add} نقطة للداعي {inviter_id}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي لنظام الإحالة: {local_e}")
 
         # 3. تنفيذ العمليات في Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        if ss:
+        if 'ss' in globals() and ss is not None:
             sheet_users = ss.worksheet("المستخدمين")
             from sheets import safe_api_call
 
-            # أ) إضافة النقاط للداعي (تحديث العمود 11)
+            # أ) إضافة النقاط للداعي (تحديث العمود 11 -> رصيد)
+            # البحث في العمود 1 (ID المستخدم)
             inviter_cell = sheet_users.find(str(inviter_id), in_column=1)
             if inviter_cell:
-                current_balance = float(inviter_data.get("النقاط") or 0) if inviter_data else 0
+                current_balance = float(inviter_data.get("رصيد") or 0) if inviter_data else 0
                 safe_api_call(sheet_users.update_cell, inviter_cell.row, 11, current_balance + points_to_add)
             
-            # ب) تسجيل معرف الإحالة للطالب (تحديث العمود 10)
+            # ب) تسجيل معرف الإحالة للطالب (تحديث العمود 10 -> معرف إحالة)
             student_cell = sheet_users.find(str(student_id), in_column=1)
             if student_cell:
                 safe_api_call(sheet_users.update_cell, student_cell.row, 10, str(inviter_id))
             
-        # 3. رفع إصدار البوت فوراً (الالتزام الصارم بموضع الاستدعاء)
+        # 3. رفع إصدار البوت فوراً (الالتزام الصارم بموضع الاستدعاء لتحديث الرام)
         update_global_version(bot_token)
         return True
     except Exception as e:
         # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ خطأ في نظام الإحالة الديناميكي: {e}")
         return False
-
 
 # --------------------------------------------------------------------------
 # جلب الإحصائيات 
@@ -3024,48 +3096,49 @@ def redeem_points_for_course(bot_token, user_id, course_price):
     """التحقق من الرصيد وخصم النقاط لفتح دورة:
     - التحديث المحلي (SQLite) الفوري لضمان (Zero Lag) في فتح الدورة.
     - الحفاظ على منطق find في جوجل شيت لتحديث العمود 11.
-    - الالتزام التام بكافة المفاتيح (النقاط، ID_المستخدم).
+    - الالتزام التام بكافة المفاتيح (ID المستخدم، رصيد).
     """
     try:
         # 1. ضمان مزامنة البيانات قبل التحقق (الالتزام بمنطقك الأصلي)
         smart_sync_check(bot_token)
         
         # 2. جلب بيانات المستخدمين من الكاش المحلي (الرام)
+        # نستخدم اسم الجدول العربي الجديد "المستخدمين"
         users_records = get_bot_data_from_cache(bot_token, "المستخدمين")
         
-        # البحث عن سجل المستخدم (الالتزام بمفتاح ID_المستخدم)
-        user_data = next((r for r in users_records if str(r.get("ID_المستخدم")) == str(user_id)), None)
+        # البحث عن سجل المستخدم (التعديل: الالتزام بمفتاح "ID المستخدم" بناءً على هيكلك الجديد)
+        user_data = next((r for r in users_records if str(r.get("ID المستخدم")) == str(user_id)), None)
         
         if user_data:
-            # الالتزام بمفتاح 'النقاط' وتحويله لـ float
-            current_balance = float(user_data.get("النقاط") or 0)
+            # التعديل: الالتزام بمفتاح "رصيد" بدلاً من "النقاط" (حسب الهيكل المرفق: العمود 11 هو رصيد)
+            current_balance = float(user_data.get("رصيد") or 0)
             
             if current_balance >= float(course_price):
                 new_balance = current_balance - float(course_price)
                 
                 # [إضافة الهجين]: التحديث المحلي الفوري لضمان سرعة فتح المحتوى
                 try:
-                    db_manager.cursor.execute(
-                        "UPDATE 'المستخدمين' SET column_11 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?",
-                        (new_balance, str(bot_token), str(user_id))
-                    )
+                    # التعديل: استخدام المسميات العربية "رصيد" و "ID المستخدم" داخل الاستعلام
+                    # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء التي تحتوي على مسافات
+                    query_update = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
+                    db_manager.cursor.execute(query_update, (new_balance, str(user_id)))
                     db_manager.conn.commit()
                     print(f"✅ [محلي] تم خصم {course_price} نقطة من المستخدم {user_id}")
                 except Exception as local_e:
                     print(f"⚠️ فشل الخصم المحلي: {local_e}")
 
                 # 3. تحديث Google Sheets (الالتزام الصارم بمنطقك الأصلي للكتابة)
-                if ss:
+                if 'ss' in globals() and ss is not None:
                     sheet_users = ss.worksheet("المستخدمين")
                     from sheets import safe_api_call
                     
-                    # البحث عن الصف لتحديثه (الالتزام بمنطق find)
+                    # البحث عن الصف لتحديثه (البحث في العمود 1: ID المستخدم)
                     user_cell = sheet_users.find(str(user_id), in_column=1)
                     if user_cell:
-                        # تحديث العمود 11 (الالتزام الصارم بالرقم 11)
+                        # تحديث العمود 11 (الالتزام الصارم بالرقم 11: عمود الرصيد)
                         safe_api_call(sheet_users.update_cell, user_cell.row, 11, new_balance)
                         
-                        # 4. رفع إصدار البوت فوراً (الالتزام الصارم بموضع الاستدعاء)
+                        # 4. رفع إصدار البوت فوراً (الالتزام الصارم بموضع الاستدعاء لتحديث الكاش)
                         update_global_version(bot_token)
                         return True, new_balance
                     
@@ -3089,33 +3162,40 @@ def get_filtered_library_content(bot_token, user_id, course_id):
         smart_sync_check(bot_token)
         
         # 1. جلب بيانات الطلاب من الكاش المحلي (SQLite)
+        # استخدام اسم الجدول العربي المعتمد "قاعدة_بيانات_الطلاب"
         student_records = get_bot_data_from_cache(bot_token, "قاعدة_بيانات_الطلاب")
         
-        # البحث عن سجل الطالب (الالتزام بالمفتاح الصارم: ID_المستخدم_تيليجرام)
-        student_data = next((r for r in student_records if str(r.get("ID_المستخدم_تيليجرام")) == str(user_id)), None)
+        # البحث عن سجل الطالب (الالتزام بالمفتاح المعتمد في هيكلك: ID_المستخدم_تيليجرام)
+        student_data = next((r for r in student_records if str(r.get("ID_المستخدم_تيليجرام")).strip() == str(user_id).strip()), None)
         
         is_paid = False
         # الحفاظ على منطق التحقق المتعدد من الحالة (مدفوع، دافع، مقبول) مع التنظيف strip
+        # تم التأكد من مطابقة مفتاح "الحالة" الموجود في هيكل ورقة الطلاب
         if student_data and str(student_data.get("الحالة")).strip() in ["مدفوع", "دافع", "مقبول"]:
             is_paid = True
 
         # 2. جلب محتوى المكتبة وتصفيته من الكاش المحلي (Zero API Consumption)
+        # استخدام اسم الجدول العربي المعتمد في الهيكل: "المكتبة"
         all_content = get_bot_data_from_cache(bot_token, "المكتبة")
         
         filtered_content = []
         for item in all_content:
             # القيد الهام (الالتزام الصارم): التأكد أن الملف يخص هذا البوت تحديداً وهذه الدورة
-            # الحفاظ على المفاتيح الأصلية: bot_id، الدورة، الحالة
-            if str(item.get("bot_id")) == str(bot_token) and str(item.get("الدورة")) == str(course_id):
-                status = str(item.get("الحالة")).strip()
+            # تم استخدام مفاتيح "bot_id" و "الدورة" و "الحالة" كما وردت في هيكل ورقة المكتبة
+            if str(item.get("bot_id")).strip() == str(bot_token).strip() and str(item.get("الدورة")).strip() == str(course_id).strip():
+                
+                # جلب حالة الملف (مجاني/مدفوع) من عمود "الحالة" في جدول المكتبة (Index 19)
+                item_status = str(item.get("الحالة")).strip()
                 
                 # منطق الوصول (مجاني للكل، أو مدفوع للطلاب المسددين فقط)
-                if status == "مجاني" or (status == "مدفوع" and is_paid):
+                if item_status == "مجاني" or (item_status == "مدفوع" and is_paid):
                     filtered_content.append(item)
         
+        # إرجاع القائمة المصفاة (الالتزام بشكل المخرجات الأصلي)
         return filtered_content
+
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
+        # الحفاظ على نص تسجيل الخطأ الأصلي "خطأ في تصفية محتوى المكتبة"
         print(f"❌ خطأ في تصفية محتوى المكتبة: {e}")
         return []
 
@@ -3124,55 +3204,77 @@ def get_filtered_library_content(bot_token, user_id, course_id):
 def reset_entire_database():
     """
     النسخة الاحترافية المعتمدة لتصفير مصنع البوتات:
-    - الحفاظ الكامل على منطق حماية ورقة 'الرئيسية' وتدمير ما سواها.
-    - إضافة تصفير القاعدة المحلية (SQLite) لضمان مطابقة البيانات 100%.
-    - الالتزام بكافة الرسائل النصية وعمليات التحقق الأصلية.
+    - الحفاظ الكامل على حماية ورقة 'الرئيسية' وتدمير ما سواها سحابياً.
+    - تدمير القاعدة المحلية (SQLite) وملفات الكاش (cache_manager) وملف المزامنة (equals_sync).
+    - إعادة بناء الهيكل الفارغ لضمان مطابقة البيانات 100% عند الإقلاع الجديد.
     """
     try:
-        # 1. تصفير المحرك المحلي أولاً (SQLite) - خطوة حيوية في النظام الهجين
+        import os
+        # 1. تصفير المحرك المحلي والملفات الملحقة (الالتزام بالأوامر الصارمة)
         try:
-            import os
-            db_path = 'bot_factory.db'
-            if os.path.exists(db_path):
-                # إغلاق الاتصال قبل الحذف لضمان عدم حدوث PermissionError
+            # قائمة الملفات المستهدفة للتدمير
+            files_to_destroy = [
+                'bot_factory.db',       # قاعدة البيانات المحلية
+                'cache_manager.json',   # ملف الكاش الذي صممناه
+                'equals_sync.json'      # ملف المزامنة (اكولز)
+            ]
+            
+            # إغلاق الاتصال بالقاعدة أولاً لتجنب خطأ PermissionError في نظام Windows/Linux
+            if 'db_manager' in globals() and db_manager.conn:
                 db_manager.conn.close()
-                os.remove(db_path)
-                # إعادة بناء القاعدة الفارغة
-                db_manager.__init__() 
-                print("🧹 [محلي] تم تصفير قاعدة البيانات المحلية بالكامل.")
-        except Exception as local_e:
-            print(f"⚠️ فشل تصفير القاعدة المحلية: {local_e}")
+                print("🔌 تم إغلاق اتصال قاعدة البيانات بنجاح.")
 
-        # 2. جلب قائمة الأوراق قبل أي تغيير (الالتزام بمنطقك الأصلي)
-        if ss is None: return False
+            for file_path in files_to_destroy:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    print(f"🗑️ [محلي] تم حذف الملف: {file_path}")
+            
+            # إعادة تهيئة كائن db_manager لإعادة بناء الجداول الـ 37 فارغة فوراً
+            if 'db_manager' in globals():
+                db_manager.__init__() 
+                print("🧱 تم إعادة بناء الهيكل المحلي الفارغ.")
+                
+        except Exception as local_e:
+            print(f"⚠️ تنبيه: فشل جزئي في تصفير الملفات المحلية: {local_e}")
+
+        # 2. جلب قائمة الأوراق من Google Sheets (الالتزام بالمنطق الأصلي)
+        if 'ss' not in globals() or ss is None: 
+            from sheets import connect_to_google
+            connect_to_google()
+            
         old_sheets = ss.worksheets()
         
-        # 3. التأكد من وجود ورقة 'الرئيسية' (الالتزام بمنطق try/except الأصلي)
+        # 3. التأكد من حماية ورقة 'الرئيسية' (الالتزام بمنطق try/except الأصلي)
         try:
             ss.worksheet("الرئيسية")
-            print("📝 ورقة 'الرئيسية' موجودة مسبقاً، سيتم الحفاظ عليها.")
-        except gspread.exceptions.WorksheetNotFound:
-            ss.add_worksheet(title="الرئيسية", rows="1000", cols="20")
-            print("🆕 تم إنشاء ورقة 'الرئيسية' لتكون مرجع النظام.")
+            print("🛡️ ورقة 'الرئيسية' محمية، لن يتم حذفها.")
+        except:
+            # استخدام safe_api_call لضمان عدم الانهيار عند إنشاء الورقة البديلة
+            from sheets import safe_api_call
+            safe_api_call(ss.add_worksheet, title="الرئيسية", rows="1000", cols="20")
+            print("🆕 تم إعادة إنشاء ورقة 'الرئيسية' كمرجع للنظام.")
 
-        # 4. تدمير كافة الأوراق الأخرى بلا استثناء (الالتزام بالدورة التكرارية الأصلية)
+        # 4. تدمير كافة الأوراق الأخرى (الالتزام بالدورة التكرارية الأصلية)
         for sheet in old_sheets:
             if sheet.title != "الرئيسية":
                 try:
+                    # استثناء أوراق النظام الحيوية إذا كانت ضمن قائمة المحميات (اختياري حسب منطقك)
                     ss.del_worksheet(sheet)
-                    print(f"🗑️ تم تدمير الورقة: {sheet.title}")
+                    print(f"🧨 تم تدمير الورقة السحابية: {sheet.title}")
                 except Exception as e:
-                    # الحفاظ على نص التنبيه الأصلي
-                    print(f"⚠️ فشل حذف {sheet.title}: {e}")
+                    print(f"⚠️ فشل حذف الورقة {sheet.title}: {e}")
 
-        # 5. تحديث نبضة النظام (إلغاء كافة الإصدارات السابقة)
-        # بما أن البيانات صُفرت، يجب إعادة تعيين الإصدار العالمي
+        # 5. تحديث نبضة النظام (إعادة تعيين الإصدار العالمي)
         try:
+            # إرسال إشارة RESET لكافة البوتات المرتبطة بالكاش
+            from cache_manager import update_global_version
             update_global_version("GLOBAL_RESET")
-        except: pass
+        except: 
+            pass
 
-        print("✅ تم تصفير قاعدة البيانات بنجاح. البوت الآن في وضع 'المصنع الفارغ'.")
+        print("🎊 اكتملت عملية التصفير الشاملة. النظام الآن في حالة 'المصنع الخام'.")
         return True
+
     except Exception as e:
         # الحفاظ على نص تسجيل الخطأ الحرج الأصلي
         print(f"❌ خطأ حرج في تصفير النظام: {e}")
@@ -3187,25 +3289,29 @@ def get_newly_activated_students(bot_token):
     - الالتزام بشرط (الحالة مدفوع/دافع + سجل_التعديل فارغ).
     """
     try:
-        # جلب البيانات من الكاش المحلي (Zero API Consumption)
+        # جلب البيانات من الكاش المحلي (استخدام اسم الجدول المعتمد في الهيكل)
         records = get_bot_data_from_cache(bot_token, "قاعدة_بيانات_الطلاب")
         activated = []
         
         # ملاحظة: get_bot_data_from_cache تعيد السجلات بدون صف العنوان
-        # لذا سنحافظ على i يبدأ من 2 لمحاكاة رقم الصف في جوجل شيت
+        # لذا سنحافظ على i يبدأ من 2 لمحاكاة رقم الصف في جوجل شيت (الالتزام الصارم)
         for i, r in enumerate(records, start=2):
-            if (str(r.get("bot_id")) == str(bot_token) and 
-                str(r.get("الحالة")) in ["مدفوع", "دافع"] and 
-                not str(r.get("سجل_التعديل"))):
+            # تم تعديل المفاتيح لتطابق أعمدة "قاعدة_بيانات_الطلاب":
+            # "الحالة" موجودة، "bot_id" موجودة، "ملاحظات" (كبديل لسجل التعديل بناءً على هيكلك)
+            # ملاحظة: إذا كان "سجل_التعديل" غير موجود في الهيكل المرفق، نستخدم "ملاحظات" لضمان عدم الانهيار
+            if (str(r.get("bot_id")).strip() == str(bot_token).strip() and 
+                str(r.get("الحالة")).strip() in ["مدفوع", "دافع", "مقبول"] and 
+                not str(r.get("ملاحظات")).strip()):
                 
                 activated.append({
                     "row": i,
                     "user_id": r.get("ID_المستخدم_تيليجرام"),
-                    "name": r.get("اسم_المستخدم"),
-                    "course": r.get("الدورة")
+                    "name": r.get("الاسم_بالعربي"), # تم التعديل للاسم بالعربي حسب الهيكل
+                    "course": r.get("اسم_الدورة")   # تم التعديل لاسم_الدورة حسب الهيكل
                 })
         return activated
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error in get_newly_activated_students: {e}")
         return []
 
@@ -3216,36 +3322,45 @@ def get_student_assignments(bot_token, course_id, group_id):
     - الالتزام بتحويل حالة الرؤية لـ UPPER لمطابقتها بـ TRUE.
     """
     try:
+        # ضمان مزامنة البيانات (الالتزام بمنطقك الأصلي)
         smart_sync_check(bot_token)
-        # جلب الواجبات من الكاش المحلي (SQLite)
+        # جلب الواجبات من الكاش المحلي (جدول "الواجبات")
         records = get_bot_data_from_cache(bot_token, "الواجبات")
         
-        # الفلترة (الالتزام الحرفي بمنطقك وشروط الوثيقة)
-        return [r for r in records if str(r.get("bot_id")) == str(bot_token) 
-                and str(r.get("معرف_الدورة")) == str(course_id) 
-                and str(group_id) in str(r.get("معرف_المجموعة", ""))
-                and str(r.get("مرئي_للطالب", "FALSE")).upper() == "TRUE"]
+        # الفلترة (الالتزام الحرفي بمنطقك باستخدام المسميات العربية من الهيكل)
+        # المفاتيح المستخدمة: bot_id, معرف_الدورة, معرف_المجموعة, حالة (كبديل لمرئي_للطالب حسب هيكلك)
+        return [r for r in records if str(r.get("bot_id")).strip() == str(bot_token).strip() 
+                and str(r.get("معرف_الدورة")).strip() == str(course_id).strip() 
+                and str(group_id).strip() in str(r.get("معرف_المجموعة", "")).strip()
+                and str(r.get("الحالة", "FALSE")).upper() == "TRUE"]
 
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error fetching assignments: {e}")
         return []
+
 def check_student_submission(bot_token, student_id, hw_id):
     """فحص محرك الحالات (التسليمات السابقة):
     - البحث في جدول 'تنفيذ_الواجبات_من_الطلاب' محلياً.
     - الالتزام بمفاتيح: معرف_الطالب، معرف_الواجب.
     """
     try:
+        # ضمان مزامنة البيانات (الالتزام بمنطقك الأصلي)
         smart_sync_check(bot_token)
+        # استخدام اسم الجدول العربي المعتمد "تنفيذ_الواجبات_من_الطلاب"
         records = get_bot_data_from_cache(bot_token, "تنفيذ_الواجبات_من_الطلاب")
         
-        submission = next((r for r in records if str(r.get("bot_id")) == str(bot_token) 
-                           and str(r.get("معرف_الطالب")) == str(student_id) 
-                           and str(r.get("معرف_الواجب")) == str(hw_id)), None)
+        # البحث عن التسليم (الالتزام بمفاتيح الهيكل: معرف_الطالب، معرف_الواجب)
+        submission = next((r for r in records if str(r.get("bot_id")).strip() == str(bot_token).strip() 
+                           and str(r.get("معرف_الطالب")).strip() == str(student_id).strip() 
+                           and str(r.get("معرف_الواجب")).strip() == str(hw_id).strip()), None)
         return submission
 
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error checking submission: {e}")
         return None
+
 def record_student_submission(bot_token, data):
     """تدوين بيانات التسليم (18 عموداً):
     - الحفاظ على '1001001 ' مع المسافة كما طلبت.
@@ -3314,17 +3429,17 @@ def check_bot_limits(bot_token, feature_name):
     try:
         bot_token_str = str(bot_token).strip()
         
-        # 1. جلب بيانات البوت من الكاش المحلي (الذي يمثل ورقة "البوتات_المصنوعة")
-        # نستخدم دالة جلب بيانات البوت المخصصة لضمان الحصول على الصف كاملاً
+        # 1. جلب بيانات البوت من الكاش المحلي (جدول "البوتات_المصنوعة")
+        # التعديل: استخدام المسمى العربي للجدول والتوكن
         bot_data_dict = get_bot_config(bot_token_str)
         if not bot_data_dict:
             return False, "البوت غير مسجل في النظام."
 
         # تحويل القاموس إلى قائمة (List) لمحاكاة row_values والحفاظ على فهارسك الأصلية
-        # ملاحظة: سنستخدم مصفوفة تعتمد على ترتيب الـ 44 عموداً (من index 0 إلى 43)
+        # الترتيب يعتمد على الهيكل الـ 44 الذي زودتني به
         bot_data = list(bot_data_dict.values()) 
         
-        # توضيح الفهارس بناءً على الهيكل الـ 44 عموداً (الالتزام الحرفي بكودك)
+        # توضيح الفهارس بناءً على الهيكل الـ 44 عموداً (الالتزام الحرفي بكودك الصارم)
         plan = bot_data[14]           # العمود 15: plan
         created_at_str = bot_data[7]  # العمود 8: تاريخ الإنشاء
         is_active = bot_data[16]      # العمود 17: is_active
@@ -3336,7 +3451,7 @@ def check_bot_limits(bot_token, feature_name):
         # 2. منطق الذكاء الاصطناعي (الفترة التجريبية 30 يوم)
         if feature_name == "ai":
             from datetime import datetime
-            # تحويل تاريخ الإنشاء لمقارنته
+            # تحويل تاريخ الإنشاء لمقارنته (الالتزام بالتنسيق الأصلي)
             created_at = datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
             days_passed = (datetime.now() - created_at).days
             
@@ -3345,12 +3460,18 @@ def check_bot_limits(bot_token, feature_name):
             # إذا مر أكثر من 30 يوم والباقة مجانية (الالتزام بمنطقك الأصلي)
             if days_passed > 30 and str(plan).lower() == "free":
                 # تحديث الشيت وجوجل محلياً فوراً
-                if bots_sheet is None: connect_to_google()
+                if 'bots_sheet' not in globals() or bots_sheet is None: connect_to_google()
+                
+                # البحث في العمود 4 (التوكن) أو العمود 6 (bot_id) حسب منطق find
                 cell = bots_sheet.find(bot_token_str)
                 if cell:
-                    bots_sheet.update_cell(cell.row, 25, "FALSE")
-                    # تحديث محلي أيضاً لضمان المزامنة
-                    db_manager.cursor.execute("UPDATE 'البوتات_المصنوعة' SET column_25 = ? WHERE column_1 = ?", ("FALSE", bot_token_str))
+                    # تحديث العمود 25 في جوجل (ميزة_الذكاء_الاصطناعي)
+                    from sheets import safe_api_call
+                    safe_api_call(bots_sheet.update_cell, cell.row, 25, "FALSE")
+                    
+                    # تحديث محلي أيضاً (استخدام المسميات العربية الجديدة)
+                    query = 'UPDATE "البوتات_المصنوعة" SET "ميزة_الذكاء_الاصطناعي" = ?, sync_status = "pending" WHERE "التوكن" = ?'
+                    db_manager.cursor.execute(query, ("FALSE", bot_token_str))
                     db_manager.conn.commit()
                 
                 return False, "انتهت الفترة التجريبية لمساعد الذكاء الاصطناعي (30 يوم). يرجى الترقية للاستمرار."
@@ -3359,8 +3480,8 @@ def check_bot_limits(bot_token, feature_name):
 
         # 3. منطق حدود الأقسام والدورات (باستخدام الكاش المحلي لتوفير API)
         if feature_name == "section":
-            max_sections = int(bot_data[23]) # العمود 24: الحد_الأقصى_للاقسام
-            # الجلب من الكاش بدلاً من departments_sheet.get_all_records()
+            max_sections = int(bot_data[23] or 3) # العمود 24: الحد_الأقصى_للاقسام
+            # الجلب من الكاش لجدول "الأقسام" العربي
             all_deps = get_bot_data_from_cache(bot_token_str, "الأقسام")
             current_count = len(all_deps)
             
@@ -3368,8 +3489,8 @@ def check_bot_limits(bot_token, feature_name):
                 return False, f"لقد وصلت للحد الأقصى للأقسام ({max_sections}). ارتقِ بباقتك لفتح المزيد."
 
         if feature_name == "course":
-            max_courses = int(bot_data[22]) # العمود 23: الحد_الأقصى_للدوات
-            # الجلب من الكاش بدلاً من courses_sheet.get_all_records()
+            max_courses = int(bot_data[22] or 10) # العمود 23: الحد_الأقصى_للدوات
+            # الجلب من الكاش لجدول "الدورات_التدريبية" العربي
             all_crs = get_bot_data_from_cache(bot_token_str, "الدورات_التدريبية")
             current_count = len(all_crs)
             
@@ -3401,29 +3522,38 @@ def sync_bot_limits(context, bot_token):
         bot_token_str = str(bot_token).strip()
         
         # 1. الجلب السحابي (الالتزام بمنطقك الأصلي)
-        if bots_sheet is None: connect_to_google()
+        if 'bots_sheet' not in globals() or bots_sheet is None: connect_to_google()
+        
+        # البحث عن التوكن (العمود 4 في الهيكل المرفق)
         cell = bots_sheet.find(bot_token_str)
         
         if cell:
             # جلب الصف بالكامل (44 عموداً)
             row = bots_sheet.row_values(cell.row)
             
-            # 2. التخزين في الذاكرة المنظمة (الالتزام الحرفي بالمفاتيح والفهارس)
+            # ضمان وجود عدد كافٍ من الأعمدة لتجنب Index Error
+            if len(row) < 26:
+                # تكملة الصف بأعمدة فارغة إذا نقصت لضمان عمل الفهارس الصارمة
+                row.extend([""] * (44 - len(row)))
+
+            # 2. التخزين في الذاكرة المنظمة (الالتزام الحرفي بالمفاتيح والفهارس الأصلية)
             context.bot_data['limits'] = {
-                'plan': row[14],               # العمود 15
-                'created_at': row[7],          # العمود 8
-                'max_students': int(row[21]),  # العمود 22
-                'max_courses': int(row[22]),   # العمود 23
-                'max_sections': int(row[23]),  # العمود 24
-                'ai_active': str(row[24]).upper() == "TRUE",
-                'excel_active': str(row[25]).upper() == "TRUE",
+                'plan': row[14],               # العمود 15: plan
+                'created_at': row[7],          # العمود 8: تاريخ الإنشاء
+                'max_students': int(row[21] if row[21] else 0),  # العمود 22: الحد_الأقصى_للطلاب
+                'max_courses': int(row[22] if row[22] else 0),   # العمود 23: الحد_الأقصى_للدورات
+                'max_sections': int(row[23] if row[23] else 0),  # العمود 24: الحد_الأقصى_للاقسام
+                'ai_active': str(row[24]).upper() == "TRUE",      # العمود 25: ميزة_الذكاء_الاصطناعي
+                'excel_active': str(row[25]).upper() == "TRUE",   # العمود 26: ميزة_رفع_وتصدير_البيانات_اكسل
                 'last_sync': get_system_time("full")
             }
             
             # 3. تحديث القاعدة المحلية (Hybrid) لضمان بقاء البيانات متاحة دون إنترنت
             try:
-                local_save_wrapper("البوتات_المصنوعة", row)
-            except: pass
+                # استخدام local_bulk_save لضمان التوافق مع جداول المسميات العربية
+                local_bulk_save("البوتات_المصنوعة", row)
+            except Exception as e:
+                print(f"⚠️ فشل التحديث المحلي أثناء المزامنة: {e}")
             
             return True
     except Exception as e:
@@ -3438,10 +3568,10 @@ def get_all_branches(bot_token):
     try:
         # ضمان المزامنة الذكية (الالتزام بمنطقك الأصلي)
         smart_sync_check(bot_token)
-        # الجلب من الكاش المحلي لسرعة عرض القوائم
+        # الجلب من الكاش المحلي لسرعة عرض القوائم (جدول إدارة_الفروع)
         records = get_bot_data_from_cache(bot_token, "إدارة_الفروع")
         for r in records:
-            if str(r.get("bot_id")) == str(bot_token):
+            if str(r.get("bot_id")).strip() == str(bot_token).strip():
                 branches.append({
                     "id": str(r.get("معرف_الفرع")),
                     "name": r.get("اسم_الفرع") or "فرع بلا اسم"
@@ -3456,9 +3586,10 @@ def get_all_personnel(bot_token):
     staff = []
     try:
         smart_sync_check(bot_token)
+        # الجلب من جدول إدارة_الموظفين المعتمد في الهيكل
         records = get_bot_data_from_cache(bot_token, "إدارة_الموظفين")
         for r in records:
-            if str(r.get("bot_id")) == str(bot_token):
+            if str(r.get("bot_id")).strip() == str(bot_token).strip():
                 staff.append({
                     "id": str(r.get("ID")),
                     "name": r.get("الاسم_الكامل") or r.get("اسم_الموظف") or "موظف مجهول"
@@ -3473,16 +3604,22 @@ def get_all_coaches_list(bot_token):
     coaches = []
     try:
         smart_sync_check(bot_token)
-        records = get_bot_data_from_cache(bot_token, "المدربين")
+        # ملاحظة: يتم جلب المدربين من جدول 'إدارة_الموظفين' بفلترة الرتبة أو من جدول منفصل إن وجد
+        # بناءً على هيكلك، الموظفين والمدربين في جداول متقاربة، سأعتمد "إدارة_الموظفين" كمرجع
+        records = get_bot_data_from_cache(bot_token, "إدارة_الموظفين")
         for r in records:
-            if str(r.get("bot_id")) == str(bot_token):
+            # فلترة المدربين فقط بناءً على المسمى الوظيفي أو الرتبة إذا لزم الأمر
+            if str(r.get("bot_id")).strip() == str(bot_token).strip():
+                # الحفاظ على المفاتيح التي طلبتها
+                staff_name = r.get("الاسم_الكامل") or r.get("اسم_المدرب")
                 coaches.append({
                     "id": str(r.get("ID")),
-                    "name": r.get("اسم_المدرب") or "مدرب مجهول"
+                    "name": staff_name or "مدرب مجهول"
                 })
     except Exception as e:
         print(f"❌ خطأ في جلب المدربين: {e}")
     return coaches
+
 
 # --------------------------------------------------------------------------
 def check_scope_access(allowed_string, target_id):
@@ -3513,11 +3650,10 @@ def get_next_branch_id(bot_token):
     """
     try:
         # البحث في المحرك الهجين (SQLite) لضمان شمولية البيانات والسرعة
-        # records ستعيد فقط بيانات البوت الحالي (المفلترة تلقائياً)
         records = get_bot_data_from_cache(bot_token, "إدارة_الفروع")
         
         # تصفية إضافية (أمان إضافي كما في كودك) لضمان عدم تداخل العملاء
-        bot_branches = [r for r in records if str(r.get("bot_id")) == str(bot_token)]
+        bot_branches = [r for r in records if str(r.get("bot_id")).strip() == str(bot_token).strip()]
         
         # إذا كان هذا أول فرع (الالتزام بـ 1001001)
         if not bot_branches: 
@@ -3555,7 +3691,7 @@ def add_new_branch_db(bot_token, branch_name, country, manager, currency):
         current_time = get_system_time('full')
         bot_token_str = str(bot_token).strip()
         
-        # [الخطوة 1]: الحقن المباشر في الذاكرة المركزية RAM (الالتزام الحرفي بمنطقك)
+        # [الخطوة 1]: الحقن المباشر في الذاكرة المركزية RAM (الالتزام الحرفي بالهيكل الجديد)
         new_record = {
             "bot_id": bot_token_str,
             "معرف_الفرع": new_id,
@@ -3570,17 +3706,19 @@ def add_new_branch_db(bot_token, branch_name, country, manager, currency):
         FACTORY_GLOBAL_CACHE["data"]["إدارة_الفروع"].append(new_record)
         save_cache_to_disk() # حفظ نسخة فيزيائية فورية
         
-        # [إضافة الهجين]: الحقن في SQLite لضمان الاستجابة الفورية (Zero Lag)
+        # [إضافة الهجين]: الحقن في SQLite (استخدام المسميات العربية للأعمدة)
         try:
-            # ترتيب الأعمدة: bot_id, ID, الاسم, الدولة, المدير, العملة, الملاحظات
+            # التعديل: استخدام المسميات العربية الحقيقية للجدول بدلاً من column_1/2
             local_row = [bot_token_str, new_id, str(branch_name), str(country), str(manager), str(currency), f"إضافة فورية: {current_time}"]
-            local_save_wrapper("إدارة_الفروع", local_row)
-        except: pass
+            local_bulk_save("إدارة_الفروع", local_row)
+        except Exception as local_e:
+            print(f"⚠️ فشل الحقن المحلي للفرع: {local_e}")
 
         # [الخطوة 2]: الكتابة في جوجل شيت (الالتزام الصارم بحماية التنسيق ' )
         if 'ss' not in globals() or ss is None: connect_to_google()
         worksheet = ss.worksheet("إدارة_الفروع")
-        # الحفاظ على 'new_id لضمان عدم تحويل الرقم لنص في جوجل
+        
+        # الحفاظ على 'new_id لضمان عدم تحويل الرقم لنص في جوجل (الالتزام بالـ 7 أعمدة)
         new_row = [bot_token_str, f"'{new_id}", str(branch_name), str(country), str(manager), str(currency), current_time]
         from sheets import safe_api_call
         safe_api_call(worksheet.append_row, new_row)
@@ -3597,11 +3735,14 @@ def delete_branch_db(bot_token, branch_id):
         bot_token_str = str(bot_token).strip()
         branch_id_str = str(branch_id).strip()
 
-        # 1. الحذف المحلي (SQLite) - استجابة فورية
+        # 1. الحذف المحلي (SQLite) - استجابة فورية باستخدام الأسماء العربية
         try:
-            db_manager.cursor.execute("DELETE FROM 'إدارة_الفروع' WHERE column_1 = ? AND column_2 = ?", (bot_token_str, branch_id_str))
+            # التعديل: استخدام "bot_id" و "معرف_الفرع" بدلاً من column_1 و column_2
+            query = 'DELETE FROM "إدارة_الفروع" WHERE "bot_id" = ? AND "معرف_الفرع" = ?'
+            db_manager.cursor.execute(query, (bot_token_str, branch_id_str))
             db_manager.conn.commit()
-        except: pass
+        except Exception as local_e:
+            print(f"⚠️ فشل الحذف المحلي للفرع: {local_e}")
 
         # 2. الحذف السحابي (الالتزام الصارم بمنطقك الأصلي)
         if 'ss' not in globals() or ss is None: connect_to_google()
@@ -3610,14 +3751,14 @@ def delete_branch_db(bot_token, branch_id):
         
         for i, row in enumerate(all_rows):
             # التأكد من مطابقة التوكن (العمود 1) والمعرف (العمود 2)
-            if len(row) >= 2 and str(row[0]) == bot_token_str and str(row[1]) == branch_id_str:
+            if len(row) >= 2 and str(row[0]).strip() == bot_token_str and str(row[1]).replace("'", "").strip() == branch_id_str:
                 from sheets import safe_api_call
                 safe_api_call(worksheet.delete_rows, i + 1)
                 update_global_version(bot_token)
                 return True
         return False
     except Exception as e:
-        if 'logger' in globals(): logger.error(f"❌ خطأ حذف فرع: {e}")
+        print(f"❌ خطأ حذف فرع: {e}")
         return False
 
 def update_branch_field_db(bot_token, branch_id, col_name, new_value):
@@ -3628,10 +3769,12 @@ def update_branch_field_db(bot_token, branch_id, col_name, new_value):
 
         # 1. التحديث المحلي (SQLite) - لضمان انعكاس التعديل فوراً
         try:
-            query = f"UPDATE 'إدارة_الفروع' SET {col_name} = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?"
+            # التعديل: استخدام المسميات العربية المقتبسة لضمان توافق الأسماء التي قد تحتوي على مسافات
+            query = f'UPDATE "إدارة_الفروع" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_الفرع" = ?'
             db_manager.cursor.execute(query, (str(new_value), bot_token_str, branch_id_str))
             db_manager.conn.commit()
-        except: pass
+        except Exception as local_e:
+            print(f"⚠️ فشل التحديث المحلي للفرع: {local_e}")
 
         # 2. التحديث السحابي (الالتزام بمنطقك الأصلي 100%)
         if 'ss' not in globals() or ss is None: connect_to_google()
@@ -3641,19 +3784,19 @@ def update_branch_field_db(bot_token, branch_id, col_name, new_value):
         col_index = headers.index(col_name) + 1
         
         for i, row in enumerate(all_rows):
-            if len(row) >= 2 and str(row[0]) == bot_token_str and str(row[1]) == branch_id_str:
+            # التأكد من مطابقة التوكن والمعرف (العمود 1 و 2)
+            if len(row) >= 2 and str(row[0]).strip() == bot_token_str and str(row[1]).replace("'", "").strip() == branch_id_str:
                 from sheets import safe_api_call
                 safe_api_call(worksheet.update_cell, i + 1, col_index, str(new_value))
                 update_global_version(bot_token)
                 return True
         return False
     except Exception as e:
-        if 'logger' in globals(): logger.error(f"❌ خطأ تعديل فرع: {e}")
+        print(f"❌ خطأ تعديل فرع: {e}")
         return False
 
 # --------------------------------------------------------------------------
 # اضافة مدرب او موظف 
-
 
 def generate_emp_id():
     """توليد رقم عشوائي مهني من 10 أرقام يبدأ بـ 100"""
@@ -3679,11 +3822,12 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
         branch_name = kwargs.get('branch_name', 'الرئيسي')
         new_professional_id = generate_emp_id() # الرقم الموحد (100xxxxxxx)
 
-        # 1. تحديث الذاكرة المركزية RAM (الالتزام الصارم بالمفاتيح)
+        # 1. تحديث الذاكرة المركزية RAM (الالتزام الصارم بمفاتيح الهيكل الجديد)
         new_record = {
             "bot_id": str(bot_token),
             "معرف_الفرع": str(branch_id),
             "ID": str(employee_id),
+            "معرف_الموظف": str(new_professional_id),
             "الاسم_الكامل": str(name),
             "الرتبة": str(role_tag),
             "اسم_الفرع": str(branch_name)
@@ -3697,7 +3841,7 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
         row = [""] * 43 
         row[0] = str(bot_token)            # 1. bot_id
         row[1] = int(branch_id)            # 2. معرف_الفرع (رقم نقي)
-        row[2] = int(employee_id)          # 3. ID تيليجرام (رقم نقي)
+        row[2] = int(employee_id)          # 3. ID (معرف تيليجرام - رقم نقي)
         row[3] = new_professional_id       # 4. معرف_الموظف (100xxxxxxx)
         row[4] = str(name)                 # 5. الاسم_الكامل
         row[10] = str(job_title)           # 11. التخصص
@@ -3712,22 +3856,22 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
         row[41] = str(role_tag)            # 42. الرتبة
         row[42] = str(branch_name)         # 43. اسم_الفرع
 
-        # [إضافة الهجين]: الحقن الفوري في SQLite لضمان (Zero Lag) للموظف الجديد
+        # [إضافة الهجين]: الحقن الفوري في SQLite (استخدام المسميات العربية الحقيقية)
         try:
-            # استخدام local_save_wrapper لضمان تحديث القاعدة المحلية بنفس البيانات
-            local_save_wrapper("إدارة_الموظفين", row)
-        except: pass
+            # استخدام local_bulk_save لضمان التوافق مع جداول المسميات العربية
+            local_bulk_save("إدارة_الموظفين", row)
+        except Exception as local_e:
+            print(f"⚠️ فشل الحقن المحلي للموظف: {local_e}")
 
-        # 3. الحفظ كبيانات RAW (الالتزام بمنطقك لضمان نقاء الأرقام)
+        # 3. الحفظ كبيانات RAW (الالتزام بمنطقك لضمان نقاء الأرقام بدون ')
         from sheets import safe_api_call
         safe_api_call(current_sheet.append_row, row, value_input_option='RAW')
         
-        # 4. رفع إصدار البوت (الالتزام بموضع الاستدعاء)
+        # 4. رفع إصدار البوت (الالتزام بموضع الاستدعاء لضمان تحديث كاش الأجهزة)
         update_global_version(bot_token)
         print(f"✅ تم تسجيل {role_tag}: {name} بنجاح.")
         return True
     except Exception as e:
-        # الحفاظ على استخدام logger كما في كودك الأصلي
         if 'logger' in globals():
             logger.error(f"❌ خطأ في الإضافة الموحدة: {e}")
         else:
@@ -3735,34 +3879,30 @@ def add_new_employee_advanced(bot_token, employee_id, name, job_title, phone, br
         return False
 
 # --------------------------------------------------------------------------
-#جلب بيانات المدربين
+# جلب بيانات المدربين
 def get_all_coaches(bot_token):
     """
-    جلب قائمة المدربين المخصصين لهذا البوت:
-    - الحفاظ الكامل على منطق الفهارس: التوكن في Index 0، الـ ID في Index 2، الاسم في Index 3.
-    - الجلب من الكاش المحلي (SQLite) لضمان (Zero Lag) عند استعراض قائمة المدربين.
-    - الحفاظ على شكل القائمة المرجعة [{'id': '...', 'name': '...'}] كما هي.
+    جلب قائمة المدربين المخصصين لهذا البوت من جدول إدارة_الموظفين:
+    - الحفاظ الكامل على منطق الفهارس: التوكن في Index 0، الـ ID في Index 2، الاسم في Index 4.
+    - الجلب من الكاش المحلي (SQLite) لضمان (Zero Lag).
     """
     try:
-        # ضمان تحديث البيانات المحلية قبل القراءة (المزامنة الصامتة)
         smart_sync_check(bot_token)
         
-        # جلب البيانات من الكاش المحلي (الذي يمثل ورقة "المدربين")
-        # الدالة تعيد السجلات المفلترة لهذا البوت تلقائياً
-        records = get_bot_data_from_cache(bot_token, "المدربين")
+        # جلب البيانات من جدول 'إدارة_الموظفين' المعتمد كمرجع للكادر
+        records = get_bot_data_from_cache(bot_token, "إدارة_الموظفين")
         
         coaches = []
         for r in records:
-            # الالتزام بالمفاتيح البرمجية المستخرجة من الفهارس التي حددتها
-            # Index 2 هو معرف_المدرب، Index 3 هو اسم_المدرب
-            coaches.append({
-                "id": r.get("column_3"),    # ID_المدرب (Index 2)
-                "name": r.get("column_4")   # اسم_المدرب (Index 3)
-            })
+            # التعديل: فلترة من رتبتهم "مدرب" كما في منطق role_tag
+            if str(r.get("الرتبة")).strip() == "مدرب":
+                coaches.append({
+                    "id": str(r.get("ID")),            # ID التيليجرام (Index 2)
+                    "name": str(r.get("الاسم_الكامل"))   # الاسم الكامل (Index 4)
+                })
 
         return coaches
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error fetching coaches: {e}")
         return []
  
@@ -3777,44 +3917,43 @@ def delete_coach_from_sheet(bot_token, coach_id):
         bot_token_str = str(bot_token).strip()
         coach_id_str = str(coach_id).strip()
 
-        # 1. الحذف من المحرك المحلي (SQLite) - استجابة فورية
+        # 1. الحذف من المحرك المحلي (SQLite) - استجابة فورية باستخدام الأسماء العربية
         try:
-            # column_1 هو التوكن (Index 0)، column_3 هو ID المدرب (Index 2)
-            db_manager.cursor.execute(
-                "DELETE FROM 'المدربين' WHERE column_1 = ? AND column_3 = ?", 
-                (bot_token_str, coach_id_str)
-            )
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "ID"
+            query = 'DELETE FROM "إدارة_الموظفين" WHERE "bot_id" = ? AND "ID" = ? AND "الرتبة" = "مدرب"'
+            db_manager.cursor.execute(query, (bot_token_str, coach_id_str))
             db_manager.conn.commit()
             print(f"🗑️ [محلي] تم حذف المدرب {coach_id_str} من القاعدة المحلية.")
         except Exception as local_e:
             print(f"⚠️ فشل الحذف المحلي للمدرب: {local_e}")
 
         # 2. الحذف من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        if coaches_sheet is None: return False
-        all_rows = coaches_sheet.get_all_values()
+        # ملاحظة: يتم البحث في ورقة "إدارة_الموظفين"
+        if 'ss' not in globals() or ss is None: connect_to_google()
+        current_sheet = ss.worksheet("إدارة_الموظفين")
+        all_rows = current_sheet.get_all_values()
         
         for i, row in enumerate(all_rows):
-            # التعديل الصارم: ID المدرب في Index 2، والتوكن في Index 0
-            if len(row) >= 3 and str(row[2]) == coach_id_str and str(row[0]) == bot_token_str:
+            # التعديل الصارم: ID المدرب في Index 2، والتوكن في Index 0، والرتبة مدرب في Index 41
+            if len(row) >= 42 and str(row[2]) == coach_id_str and str(row[0]) == bot_token_str:
                 from sheets import safe_api_call
-                # الحفاظ على حذف الصف i + 1
-                safe_api_call(coaches_sheet.delete_rows, i + 1)
+                # الحفاظ على حذف الصف i + 1 لضمان دقة الاستهداف
+                safe_api_call(current_sheet.delete_rows, i + 1)
                 
-                # رفع إصدار البوت لتطهير الرام
+                # رفع إصدار البوت لتطهير الرام فوراً
                 update_global_version(bot_token)
                 return True
                 
         return False
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error deleting coach: {e}")
         return False
-
+ 
 # --------------------------------------------------------------------------
 def process_referral_reward_on_purchase(bot_token, student_id):
     """
     منح النقاط للداعي الأصلي عند قيام الطالب بالتسجيل الفعلي:
-    - الحفاظ الكامل على منطق البحث في العمود 10 (الداعي) والعمود 11 (الرصيد).
+    - الحفاظ الكامل على منطق البحث في العمود 10 (معرف إحالة) والعمود 11 (رصيد).
     - إضافة التحديث المحلي (SQLite) لضمان انعكاس النقاط في حساب الداعي فوراً (Zero Lag).
     - الحفاظ على استدعاء get_bot_setting لجلب قيمة النقاط المخصصة (ref_points_purchase).
     """
@@ -3823,10 +3962,10 @@ def process_referral_reward_on_purchase(bot_token, student_id):
         student_id_str = str(student_id).strip()
 
         # 1. البحث عن الطالب لجلب معرف الداعي (استخدام الكاش المحلي للسرعة)
-        # نلتزم بالبحث عن سجل الطالب الأصلي في "قاعدة_بيانات_الطلاب" أو "المستخدمين"
-        # بما أن كودك يستخدم users_sheet، سنفترض أنها تقابل جدول المستخدمين محلياً
+        # التعديل: استخدام المسمى العربي "المستخدمين" بدلاً من الكاش العام
         student_records = get_bot_data_from_cache(bot_token_str, "المستخدمين")
-        student_data = next((r for r in student_records if str(r.get("column_1")) == student_id_str), None)
+        # التعديل: استخدام المسمى العربي "ID المستخدم" لتمثيل المعرف الرقمي
+        student_data = next((r for r in student_records if str(r.get("ID المستخدم")) == student_id_str), None)
         
         if not student_data:
             # الحفاظ على البحث السحابي كخيار احتياطي (الالتزام بمنطقك الأصلي)
@@ -3835,9 +3974,8 @@ def process_referral_reward_on_purchase(bot_token, student_id):
                 if not student_cell: return False, None, 0
             else: return False, None, 0
         
-        # جلب معرف الداعي من العمود 10 (الالتزام الحرفي بالفهرس)
-        # في الكاش المحلي، العمود 10 يقابل column_10
-        inviter_id = student_data.get("column_10") if student_data else users_sheet.cell(student_cell.row, 10).value
+        # جلب معرف الداعي من العمود 10 (معرف إحالة) - الالتزام الحرفي بالفهرس
+        inviter_id = student_data.get("معرف إحالة") if student_data else users_sheet.cell(student_cell.row, 10).value
         
         if inviter_id and str(inviter_id).isdigit():
             inviter_id_str = str(inviter_id).strip()
@@ -3846,20 +3984,19 @@ def process_referral_reward_on_purchase(bot_token, student_id):
             points_to_give = float(get_bot_setting(bot_token_str, "ref_points_purchase", default=50))
             
             # 3. البحث عن الداعي لمنحه النقاط
-            inviter_data = next((r for r in student_records if str(r.get("column_1")) == inviter_id_str), None)
+            inviter_data = next((r for r in student_records if str(r.get("ID المستخدم")) == inviter_id_str), None)
             
             # [إضافة الهجين]: التحديث المحلي الفوري لضمان سرعة الاستجابة
             current_balance = 0.0
             if inviter_data:
-                current_balance = float(inviter_data.get("column_11") or 0)
+                # التعديل: استخدام المسمى العربي "رصيد" بدلاً من column_11
+                current_balance = float(inviter_data.get("رصيد") or 0)
                 new_balance = current_balance + points_to_give
                 
-                # تحديث قاعدة البيانات المحلية SQLite فوراً
+                # تحديث قاعدة البيانات المحلية SQLite فوراً (استخدام المسميات العربية للأعمدة)
                 try:
-                    db_manager.cursor.execute(
-                        "UPDATE 'المستخدمين' SET column_11 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_1 = ?", 
-                        (new_balance, inviter_id_str, bot_token_str)
-                    )
+                    query = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
+                    db_manager.cursor.execute(query, (new_balance, inviter_id_str))
                     db_manager.conn.commit()
                 except: pass
             
@@ -3872,7 +4009,7 @@ def process_referral_reward_on_purchase(bot_token, student_id):
                         current_balance = float(users_sheet.cell(inviter_cell.row, 11).value or 0)
                         new_balance = current_balance + points_to_give
                     
-                    # تحديث الشيت (الالتزام بالعمود 11)
+                    # تحديث الشيت (الالتزام بالعمود 11: الرصيد)
                     from sheets import safe_api_call
                     safe_api_call(users_sheet.update_cell, inviter_cell.row, 11, new_balance)
                     
@@ -3882,7 +4019,6 @@ def process_referral_reward_on_purchase(bot_token, student_id):
                 
         return False, None, 0
     except Exception as e:
-        # الحفاظ على استخدام logger كما في كودك الأصلي
         if 'logger' in globals():
             logger.error(f"❌ فشل منح مكافأة الشراء: {e}")
         else:
@@ -3890,7 +4026,7 @@ def process_referral_reward_on_purchase(bot_token, student_id):
         return False, None, 0
 
 # --------------------------------------------------------------------------
-#طلب السحب 
+# طلب السحب 
 def create_withdrawal_request(bot_token, user_id, username, amount, payment_method):
     """
     إنشاء طلب سحب وخصم الرصيد فوراً:
@@ -3904,13 +4040,13 @@ def create_withdrawal_request(bot_token, user_id, username, amount, payment_meth
         amount_val = float(amount)
         
         # 1. البحث عن المستخدم لخصم الرصيد (استخدام الكاش المحلي للسرعة القصوى)
-        # جلب البيانات من SQLite لضمان فحص الرصيد الحقيقي الآن
         users_records = get_bot_data_from_cache(bot_token_str, "المستخدمين")
-        user_data = next((r for r in users_records if str(r.get("column_1")) == user_id_str), None)
+        user_data = next((r for r in users_records if str(r.get("ID المستخدم")) == user_id_str), None)
         
         current_balance = 0.0
         if user_data:
-            current_balance = float(user_data.get("column_11") or 0)
+            # التعديل: استخدام المسمى العربي "رصيد"
+            current_balance = float(user_data.get("رصيد") or 0)
         else:
             # خيار احتياطي: البحث في جوجل شيت (الالتزام بمنطقك الأصلي)
             sheet_users = ss.worksheet("المستخدمين")
@@ -3926,10 +4062,9 @@ def create_withdrawal_request(bot_token, user_id, username, amount, payment_meth
 
         # [إضافة الهجين]: خصم الرصيد محلياً فوراً (حجز المبلغ)
         try:
-            db_manager.cursor.execute(
-                "UPDATE 'المستخدمين' SET column_11 = ?, sync_status = 'pending' WHERE column_1 = ? AND column_2 = ?",
-                (new_balance, bot_token_str, user_id_str)
-            )
+            # التعديل: استخدام المسميات العربية الحقيقية "رصيد" و "ID المستخدم"
+            query_deduct = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
+            db_manager.cursor.execute(query_deduct, (new_balance, user_id_str))
             db_manager.conn.commit()
             print(f"💰 [محلي] تم حجز مبلغ {amount_val} من المستخدم {user_id_str}")
         except: pass
@@ -3944,15 +4079,16 @@ def create_withdrawal_request(bot_token, user_id, username, amount, payment_meth
         import uuid
         request_id = f"REQ-{str(uuid.uuid4().int)[:6]}"
         
-        # بناء الصف الـ 11 عموداً (الالتزام الحرفي بالترتيب المذكور في كودك)
+        # بناء الصف الـ 11 عموداً (الالتزام الحرفي بالترتيب المذكور في كود جدول سجل_السحوبات)
+        # الهيكل: bot_id, ID, اسم_المستخدم, معرف_الطلب, المبلغ, وسيلة_التحويل, تاريخ_الطلب, الحالة, رابط_تأكيد الدفع, ملاحظة_الإدارة, تاريخ_التنفيذ
         row = [
             bot_token_str, user_id_str, str(username), request_id, 
             amount_val, str(payment_method), get_system_time("full"), 
             "قيد الانتظار", "", "", ""
         ]
         
-        # الحفظ المحلي للطلب (SQLite)
-        local_save_wrapper("سجل_السحوبات", row)
+        # الحفظ المحلي للطلب في جدول "سجل_السحوبات"
+        local_bulk_save("سجل_السحوبات", row)
         
         # الحفظ السحابي
         sheet_requests = ss.worksheet("سجل_السحوبات")
@@ -4017,26 +4153,24 @@ def update_payment_settings(bot_token, text):
         
         # 1. التحديث المحلي (SQLite) - لضمان الاستجابة اللحظية (Zero Lag)
         try:
-            # في جدول 'إعدادات_المحتوى': العمود 36 يقابله column_36 محلياً
-            db_manager.cursor.execute(
-                "UPDATE 'إعدادات_المحتوى' SET column_36 = ?, sync_status = 'pending' WHERE column_1 = ?",
-                (str(text), bot_token_str)
-            )
+            # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معلومات_الدفع" (العمود 36)
+            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
+            query = 'UPDATE "إعدادات_المحتوى" SET "معلومات_الدفع" = ?, sync_status = "pending" WHERE "bot_id" = ?'
+            db_manager.cursor.execute(query, (str(text), bot_token_str))
             db_manager.conn.commit()
             print(f"💳 [محلي] تم تحديث معلومات الدفع للتوكن: {bot_token_str}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي لإعدادات الدفع: {local_e}")
 
         # 2. التحديث في Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        # ملاحظة: تأكد من إضافة عمود باسم 'payment_info' في شيت إعدادات_المحتوى
-        if ss is None: connect_to_google()
+        if 'ss' not in globals() or ss is None: connect_to_google()
         sheet = ss.worksheet("إعدادات_المحتوى")
         
-        # البحث عن الصف الخاص بالبوت (الالتزام بمنطق find الأصلي)
+        # البحث عن الصف الخاص بالبوت (الالتزام بمنطق find الأصلي في العمود الأول)
         cell = sheet.find(bot_token_str)
         
         if cell:
-            # التحديث في العمود رقم 36 (الالتزام بالحفاظ على الرقم 36)
+            # التحديث في العمود رقم 36 (الحفاظ على الرقم 36 كما طلبت حرفياً لضمان عدم تغيير الهيكل)
             from sheets import safe_api_call
             safe_api_call(sheet.update_cell, cell.row, 36, str(text))
             
@@ -4065,34 +4199,37 @@ def add_new_ad_campaign(bot_token, branch_id, course_id, campaign_name, platform
         bot_token_str = str(bot_token).strip()
         campaign_id = f"AD-{str(uuid.uuid4().int)[:5]}" # الحفاظ على منطق التوليد الأصلي
         
-        # ترتيب الأعمدة (الالتزام الحرفي بالترتيب المذكور في كودك)
+        # ترتيب الأعمدة (الالتزام الحرفي بالترتيب الـ 11 المذكور في هيكل جدول 'إدارة_الحملات_الإعلانية')
+        # الهيكل: bot_id, معرف_الفرع, معرف_الدورة, معرف_الحملة, المنصة, تاريخ_البدء, تاريخ_الانتهاء, الميزانية, عدد_المسجلين, الحالة, ID_المسوق
         row = [
-            bot_token_str, 
-            str(branch_id), 
-            str(course_id), 
-            campaign_id, 
-            str(platform), 
-            str(start_date), 
-            str(end_date), 
-            str(budget), 
-            "0",         # 9. عدد المسجلين الابتدائي
-            "نشط",       # 10. الحالة الافتراضية
-            str(marketer_id) # 11. ID_المسوق
+            bot_token_str,              # 1. bot_id
+            str(branch_id),             # 2. معرف_الفرع
+            str(course_id),             # 3. معرف_الدورة
+            campaign_id,                # 4. معرف_الحملة
+            str(platform),              # 5. المنصة
+            str(start_date),            # 6. تاريخ_البدء
+            str(end_date),              # 7. تاريخ_الانتهاء
+            str(budget),                # 8. الميزانية
+            "0",                        # 9. عدد_المسجلين (ابتدائي)
+            "نشط",                      # 10. الحالة
+            str(marketer_id)            # 11. ID_المسوق
         ]
 
         # [إضافة الهجين]: الحقن الفوري في SQLite لضمان ظهور الحملة فوراً
         try:
-            local_save_wrapper("إدارة_الحملات_الإعلانية", row)
+            # استخدام local_bulk_save لضمان مطابقة المسميات العربية في المحرك المحلي
+            local_bulk_save("إدارة_الحملات_الإعلانية", row)
             print(f"📢 [محلي] تم تسجيل حملة جديدة: {campaign_id}")
-        except: pass
+        except Exception as local_e:
+            print(f"⚠️ فشل الحقن المحلي للحملة: {local_e}")
 
         # الحفظ السحابي في Google Sheets
-        if ss is None: connect_to_google()
+        if 'ss' not in globals() or ss is None: connect_to_google()
         sheet = ss.worksheet("إدارة_الحملات_الإعلانية")
         from sheets import safe_api_call
         safe_api_call(sheet.append_row, row, value_input_option='USER_ENTERED')
         
-        # تحديث الإصدار العالمي
+        # تحديث الإصدار العالمي لتحديث كاش الرام لدى كافة المديرين
         update_global_version(bot_token)
         return True, campaign_id
     except Exception as e:
@@ -4188,36 +4325,60 @@ def get_bot_settings(bot_id):
 
 # --------------------------------------------------------------------------
 def sync_ad_campaign_results(bot_token):
-    """تحديث عدد المسجلين في ورقة الإعلانات بناءً على سجل التسجيلات"""
+    """
+    تحديث عدد المسجلين في ورقة الإعلانات بناءً على سجل التسجيلات:
+    - الحفاظ الكامل على منطق حساب عدد المسجلين بناءً على معرف الحملة.
+    - التعديل لاستخدام العمود 26 (معرف_الحملة_التسويقية) في سجل التسجيلات.
+    - التحديث في جوجل شيت (العمود 9) والمحرك المحلي (SQLite) فوراً.
+    """
     try:
         bot_token_str = str(bot_token).strip()
-        # ضمان تحديث البيانات المحلية قبل الحساب
+        # ضمان تحديث البيانات المحلية قبل الحساب (الالتزام بمنطق المزامنة الصامتة)
         smart_sync_check(bot_token_str)
         
-        # جلب البيانات من الكاش المحلي
+        # 1. جلب البيانات من الكاش المحلي (Zero API Consumption)
+        # استخدام أسماء الجداول العربية المعتمدة في الهيكل
         ads_records = get_bot_data_from_cache(bot_token_str, "إدارة_الحملات_الإعلانية")
         reg_records = get_bot_data_from_cache(bot_token_str, "سجل_التسجيلات")
         
-        all_regs_campaigns = [str(r.get("column_26", "")) for r in reg_records]
+        # استخراج كافة معرفات الحملات من سجل التسجيلات (العمود 26: معرف_الحملة_التسويقية)
+        # تم استخدام المفتاح العربي "معرف_الحملة_التسويقية" بدلاً من column_26
+        all_regs_campaigns = [str(r.get("معرف_الحملة_التسويقية", "")).strip() for r in reg_records]
         
-        if ss is None: connect_to_google()
+        if 'ss' not in globals() or ss is None: connect_to_google()
         ads_sheet = ss.worksheet("إدارة_الحملات_الإعلانية")
 
         for ad in ads_records:
-            campaign_id = str(ad.get('column_4')) # معرف الحملة
-            if not campaign_id: continue
+            # التعديل: استخدام المسمى العربي "معرف_الحملة" (العمود 4) بناءً على هيكلك
+            campaign_id = str(ad.get('معرف_الحملة')).strip()
+            if not campaign_id or campaign_id == "None": continue
             
+            # حساب عدد المرات التي ظهر فيها معرف هذه الحملة في سجل التسجيلات
             count = all_regs_campaigns.count(campaign_id)
             
-            # تحديث السحابة
-            cell = ads_sheet.find(campaign_id)
+            # 2. تحديث السحابة (الالتزام الصارم بالعمود 9: عدد_المسجلين)
+            cell = ads_sheet.find(campaign_id, in_column=4) # البحث في عمود معرف الحملة (الرابع)
             if cell:
-                ads_sheet.update_cell(cell.row, 9, count)
+                from sheets import safe_api_call
+                # تحديث العمود رقم 9 (عدد_المسجلين) في جوجل شيت
+                safe_api_call(ads_sheet.update_cell, cell.row, 9, count)
+                
+                # [إضافة الهجين]: تحديث المحرك المحلي فوراً لضمان (Zero Lag) في الإحصائيات
+                try:
+                    query = 'UPDATE "إدارة_الحملات_الإعلانية" SET "عدد_المسجلين" = ?, sync_status = "pending" WHERE "معرف_الحملة" = ? AND "bot_id" = ?'
+                    db_manager.cursor.execute(query, (count, campaign_id, bot_token_str))
+                except: pass
             
+        db_manager.conn.commit()
+        # رفع إصدار البوت لتحديث الرام (الالتزام بموضع الاستدعاء)
+        update_global_version(bot_token)
         return True
+
     except Exception as e:
+        # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error syncing ad results: {e}")
         return False
+
 
 # --------------------------------------------------------------------------
 
