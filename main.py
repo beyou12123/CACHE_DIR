@@ -1999,7 +1999,8 @@ async def main_factory_launcher():
 
         # [ إكمال بقية المعالجات الـ Handlers كما هي في كودك بدون تغيير ]
         app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("Delete_database", delete_database_handler))        
+        app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
+        app.add_handler(CommandHandler(backup_to_channel, restore_from_channel))        
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
         app.add_handler(broadcast_handler)
