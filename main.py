@@ -1982,33 +1982,34 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
 async def main_factory_launcher():
     global app
     try:
-        # [سجل]: استخدام datetime بعد استيرادها
+        # [سجل]: استيراد datetime واستخدامها محلياً لضمان الدقة
         from datetime import datetime 
         print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
         
-        # 1. تنظيف التضارب (Conflict)
+        # 1. تنظيف التضارب (Conflict) لضمان عدم وجود جلسات معلقة
         temp_bot = Bot(token=TOKEN)
         await temp_bot.delete_webhook(drop_pending_updates=True)
-        print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح.")
+        print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح لضمان عدم وجود تضارب.")
 
-        # 2. فحص حالة قاعدة البيانات
+        # 2. فحص حالة قاعدة البيانات قبل أي إجراء
         from cache_manager import DB_PATH
         if os.path.exists(DB_PATH):
             size = os.path.getsize(DB_PATH)
-            print(f"📦 [LOG]: تم العثور على ملف القاعدة. الحجم: {size} بايت")
+            print(f"📦 [LOG]: تم العثور على ملف القاعدة. المسار: {DB_PATH} | الحجم: {size} بايت")
             
             if size > 0:
-                print("🛡️ [LOG]: بدء عملية التأمين التلقائي...")
+                print("🛡️ [LOG]: بدء عملية التأمين التلقائي (إرسال نسخة للقناة)...")
                 backup_success = await db_manager.create_backup_to_telegram()
                 if backup_success:
                     print("✅ [LOG]: النسخة الاحتياطية وصلت القناة بنجاح.")
-                    # db_manager.hard_reset() # (معطل بناءً على طلبك)
+                    # db_manager.hard_reset() # (معطل بناءً على طلبك للحفاظ على البيانات)
                 else:
-                    print("⚠️ [LOG]: فشل إرسال النسخة.")
+                    print("⚠️ [LOG]: تنبيه! فشل إرسال النسخة التلقائية.")
         else:
-            print("ℹ️ [LOG]: ملف القاعدة غير موجود (بيئة Railway جديدة).")
+            print("ℹ️ [LOG]: ملف القاعدة غير موجود (بيئة تشغيل جديدة أو تم مسحها بواسطة Railway).")
 
-        # 3. بناء المحرك (الحفاظ على كل الـ Handlers)
+        # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل)
+        print("🔧 [LOG]: جاري بناء محرك البوت الرئيسي وتسجيل المعالجات...")
         app = ApplicationBuilder().token(TOKEN).build()
 
         # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
@@ -2027,8 +2028,8 @@ async def main_factory_launcher():
             pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel)$"
         ))
         
-        # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي
-        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|start_manual_sync)$"))
+        # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
+        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|start_manual_sync|confirm_restore_yes|confirm_restore_no)$"))
 
         app.add_handler(CommandHandler("admin_export", export_admins))
         app.add_handler(CommandHandler("import_admin", import_admins_handler))
@@ -2037,13 +2038,12 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         # تشغيل محرك المصنع
-        print("🚀 محرك المصنع جاهز بانتظار التعليمات اليدوية...")
         await app.initialize()
         await app.updater.start_polling(drop_pending_updates=True)
         await app.start()
-        print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة.")
+        print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة وبانتظار التعليمات.")
         
-        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي بعد النجاح ] ---
+        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي ] ---
         keyboard = [
             [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
             [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
@@ -2054,47 +2054,90 @@ async def main_factory_launcher():
         
         success_msg = (
             "🎊 **تمت عملية الإقلاع بنجاح!**\n\n"
-            "نظام القاعدة الآن: `خالٍ تماماً (Clean)`\n"
-            "المزامنة التلقائية: `معطلة 🛑`\n\n"
-            "يرجى اختيار الإجراء التالي لبدء العمل:"
+            "نظام القاعدة الآن: `خالٍ تماماً (Clean)` أو بانتظار التحديث.\n"
+            "المزامنة التلقائية: `معطلة 🛑` بانتظار قرارك.\n\n"
+            "يرجى اختيار الإجراء التالي:"
         )
         
         try:
             # 1. إرسال للمطور في الخاص
             await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
             
-            # 2. إرسال للقناة (استخدام BACKUP_CHANNEL_ID المستورد من cache_manager)
+            # 2. إرسال للقناة
             from cache_manager import BACKUP_CHANNEL_ID
             await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
-            print("🚀 [LOG]: تم إرسال رسالة الى القناة والخاص والبوت يعمل الآن بكفاءة.")
+            print("📨 [LOG]: تم إرسال رسالة التحكم اليدوي إلى القناة والخاص بنجاح.")
         except Exception as msg_err:
-            print(f"⚠️ فشل إرسال رسائل الإقلاع: {msg_err}")
+            print(f"⚠️ [LOG]: فشل إرسال رسائل الإقلاع: {msg_err}")
         
         while True:
             await asyncio.sleep(3600)
 
     except Exception as e:
-        print(f"🔴 [LOG - CRITICAL]: خطأ حرج في الإقلاع: {e}")
+        print(f"🔴 [LOG - CRITICAL]: خطأ حرج في إقلاع المصنع: {e}")
+
+
+
 
 # --- [ دالة معالجة الأزرار اليدوية ] ---
+# --- [ دالة معالجة الأزرار اليدوية المحدثة بنظام التأكيد ] ---
 async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer("جاري المعالجة...")
     data = query.data
-    
     from sheets import get_sheets_structure
     structure = get_sheets_structure()
 
     if data == "pull_google_data":
+        await query.answer("جاري الاتصال بجوجل...")
+        print("⏳ [MANUAL LOG]: تم طلب سحب البيانات من جوجل شيت.")
         await query.edit_message_text("⏳ جاري سحب البيانات الكاملة من جوجل (قد يستغرق وقتاً بسبب الـ Quota)...")
         db_manager.sync_schema(structure)
-        await query.message.reply_text("✅ تمت المزامنة بنجاح.")
+        await query.message.reply_text("✅ تمت المزامنة بنجاح من جوجل شيت.")
         
     elif data == "init_tables_only":
-        await query.edit_message_text("⚙️ جاري بناء الهياكل المحلية فقط...")
-        # هنا يتم تمرير الهيكل لإنشاء الجداول في SQLite بدون جلب بيانات مكثفة
+        await query.answer("جاري تهيئة الهيكل...")
+        print("⚙️ [MANUAL LOG]: تم طلب تهيئة الجداول المحلية فقط.")
+        await query.edit_message_text("⚙️ جاري بناء الهياكل المحلية (SQLite) فقط...")
         db_manager.sync_schema(structure, spreadsheet=None) 
-        await query.message.reply_text("✅ تم إنشاء الجداول محلياً.")
+        await query.message.reply_text("✅ تم إنشاء الجداول محلياً بنجاح.")
+
+    elif data == "restore_last_backup":
+        await query.answer()
+        print("❓ [MANUAL LOG]: طلب استعادة نسخة - إظهار رسالة التأكيد.")
+        # إرسال رسالة التأكيد بوجود زرين (نعم / لا)
+        confirm_keyboard = [
+            [
+                InlineKeyboardButton("✅ نعم، ابدأ الاستعادة", callback_data="confirm_restore_yes"),
+                InlineKeyboardButton("❌ لا، إلغاء", callback_data="confirm_restore_no")
+            ]
+        ]
+        await query.edit_message_text(
+            "⚠️ **تأكيد الاستعادة:**\nهل أنت متأكد أنك تريد استعادة آخر نسخة احتياطية؟\nسيتم استبدال القاعدة الحالية تماماً.",
+            reply_markup=InlineKeyboardMarkup(confirm_keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif data == "confirm_restore_yes":
+        await query.answer("بدء الاستعادة...")
+        print("📥 [MANUAL LOG]: تم تأكيد الاستعادة. جاري جلب الملف...")
+        # 1. إظهار رسالة بدء الاستعادة
+        await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة واستبدال البيانات المحلية.")
+        
+        # 2. تنفيذ عملية الاستعادة الفعلية
+        success = await db_manager.restore_from_telegram()
+        
+        # 3. تغيير الرسالة عند الانتهاء
+        if success:
+            print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح.")
+            await query.edit_message_text("✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية بآخر نسخة.")
+        else:
+            print("❌ [MANUAL LOG]: فشلت عملية الاستعادة.")
+            await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nيرجى التحقق من وجود ملفات في القناة أو راجع سجلات السيرفر.")
+
+    elif data == "confirm_restore_no":
+        await query.answer("تم الإلغاء")
+        print("🚫 [MANUAL LOG]: تم إلغاء عملية الاستعادة من قبل المستخدم.")
+        await query.edit_message_text("❌ تم إلغاء عملية الاستعادة. يمكنك اختيار إجراء آخر من اللوحة الرئيسية.")
 
 
 
