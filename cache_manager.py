@@ -777,6 +777,28 @@ class DataManager:
         except Exception as e:
             logger.error(f"❌ خطأ حرج أثناء المزامنة الشاملة: {e}")
 
+
+    def hard_reset(self):
+        """
+        تصفير كامل لقاعدة البيانات المحلية:
+        1. مسح جميع الجداول الموجودة.
+        2. إعادة إنشاء قاعدة بيانات فارغة.
+        """
+        try:
+            # جلب أسماء جميع الجداول
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+            tables = self.cursor.fetchall()
+            
+            for table in tables:
+                self.cursor.execute(f"DROP TABLE IF EXISTS '{table[0]}'")
+            
+            self.conn.commit()
+            print("🗑️ تم مسح كافة الجداول المحلية بنجاح (Hard Reset).")
+            return True
+        except Exception as e:
+            print(f"❌ خطأ أثناء تصفير القاعدة: {e}")
+            return False
+
 #~~~~~~~~~~~~~~~~
 
 #~~~~~~~~~~~~~~~~

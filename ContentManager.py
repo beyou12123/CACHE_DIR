@@ -41,7 +41,7 @@ def get_main_config_keyboard():
         [InlineKeyboardButton("🌃 الليلية", callback_data="edit_welcome_night"), InlineKeyboardButton("🌆 ترحيب المساء", callback_data="set_welcome_evening"), InlineKeyboardButton("🌙 ترحيب الليل", callback_data="set_welcome_night")],
         [InlineKeyboardButton("🚫 المحظورات", callback_data="set_banned_words"), InlineKeyboardButton("👮‍♂️ الأدمن", callback_data="manage_admins")],
         [InlineKeyboardButton("🔘 الأزرار", callback_data="set_buttons"), InlineKeyboardButton("⌨️ الأوامر", callback_data="set_commands")],
-        [InlineKeyboardButton("💳 معلومات الدفع", callback_data="set_payment")]
+        [InlineKeyboardButton("💳 معلومات الدفع", callback_data="set_payment")], 
         [InlineKeyboardButton("🌐 اللغة", callback_data="set_language"), InlineKeyboardButton("⏱️ وقت الرد", callback_data="set_delay")],
         [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
     ]

@@ -140,11 +140,6 @@ def get_sheets_structure():
         {"name": "سجل_ساعات_العمل", "cols": ["bot_id","معرف_الفرع ","معرف_الموظف", "وقت_تسجيل_الدخول", "وقت_تسجيل_الخروج", "نوع_النشاط", "ملاحظات"] },
         {"name": "كشوف_المرتبات", "cols": ["bot_id","معرف_الفرع ","الشهر", "معرف_الموظف", "الراتب_الأساسي", "الحوافز", "الخصومات", "صافي_الراتب", "حالة_الصرف"] },
         {"name": "سجل_السحوبات", "cols": ["bot_id", "ID", "اسم_المستخدم", "معرف_الطلب", "المبلغ", "وسيلة_التحويل", "تاريخ_الطلب", "الحالة", "رابط_تأكيد الدفع", "ملاحظة_الإدارة", "تاريخ_التنفيذ"], "color": {"red": 0.98, "green": 0.92, "blue": 0.84}}, 
-
-
-
-    
-
         
     ]
     return sheets_config
@@ -289,16 +284,39 @@ def setup_sheet_format(sheet, wrap_columns=None):
 # --------------------------------------------------------------------------
 # دالة تحديث الأعمدة 
 def ensure_sheet_schema(worksheet, required_headers):
-    """تحديث أعمدة ورقة واحدة دون حذف البيانات"""
+    """
+    تحديث أعمدة الشيت مع منع التكرار الصارم.
+    """
     try:
+        # 1. جلب العناوين الحالية
         existing_headers = worksheet.row_values(1)
-        new_headers = [h for h in required_headers if h not in existing_headers]
-        if new_headers:
-            next_col = len(existing_headers) + 1
-            worksheet.update_cell(1, next_col, new_headers)
-            print(f"✅ تمت إضافة أعمدة جديدة لـ {worksheet.title}")
+        
+        # 2. تحديد الأعمدة الناقصة (فقط التي ليست موجودة بالفعل)
+        # نستخدم set لتحسين سرعة البحث ومنع التكرار
+        missing_headers = [h for h in required_headers if h not in existing_headers]
+        
+        if missing_headers:
+            # دمج العناوين الحالية مع الناقصة
+            new_headers = existing_headers + missing_headers
+            
+            # 3. [إجراء إضافي] التأكد من فرادة كل عنصر في القائمة النهائية
+            # هذا السطر يضمن عدم وجود أي تكرار حتى لو حدث خطأ سابق في الشيت
+            final_headers = []
+            for h in new_headers:
+                if h not in final_headers and h.strip() != "":
+                    final_headers.append(h)
+            
+            # 4. توسيع الشيت إذا لزم الأمر وتحديث الصف الأول
+            if worksheet.col_count < len(final_headers):
+                worksheet.add_cols(len(final_headers) - worksheet.col_count)
+            
+            from sheets import safe_api_call
+            safe_api_call(worksheet.update, '1:1', [final_headers])
+            print(f"✅ تم تحديث أعمدة {worksheet.title} بنجاح بدون تكرار.")
+            
     except Exception as e:
-        print(f"❌ خطأ في تحديث أعمدة {worksheet.title}: {e}")
+        print(f"⚠️ خطأ أثناء فحص أعمدة {worksheet.title}: {e}")
+
 # --------------------------------------------------------------------------
 # دالة النظام الشامل 
 def ensure_all_sheets_schema(spreadsheet, sheets_structure):

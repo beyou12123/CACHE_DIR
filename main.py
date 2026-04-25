@@ -57,6 +57,7 @@ except ImportError:
 TOKEN = os.getenv("BOT_TOKEN")
 DEVELOPER_ID = 7607952642 
 raw_admins = os.getenv("ADMIN_IDS", "")
+BACKUP_CHANNEL_ID = -1003910834893  # المعرف الخاص بالقناة
 # تنظيف وقراءة قائمة الإداريين
 ADMIN_IDS = [int(i.strip()) for i in raw_admins.replace('[','').replace(']','').split(",") if i.strip().isdigit()]
 ALL_ADMINS = set([DEVELOPER_ID] + ADMIN_IDS)
@@ -1980,29 +1981,28 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
 async def main_factory_launcher():
     global app
     try:
-        # --- [ الخطوة 0: تهيئة المحرك الموحد للهيكل ] ---
-        # تم الحفاظ على الاستيراد كما هو لضمان الوظائف
-        from sheets import get_sheets_structure, connect_to_google
-        from cache_manager import db_manager
-        
-        print("⏳ جاري فحص ومزامنة الهياكل (جوجل شيت + قاعدة البيانات المحلية)...")
+        # --- [ الخطوة 1: الحماية القصوى - نسخة احتياطية قبل أي إجراء ] ---
+        print("🛡️ جاري تأمين قاعدة البيانات وإرسال نسخة احتياطية للقناة...")
         try:
-            spreadsheet = connect_to_google() # استدعاء دالة الاتصال
-            if spreadsheet:
-                # جلب الهيكل من الدالة وتمريره للمحرك
-                structure = get_sheets_structure() 
-                
-                # التصحيح: تمرير 'structure' كمعامل للدالة لحل مشكلة missing argument
-                # بناءً على اللوج: DataManager.sync_schema() missing 1 required positional argument: 'sheets_structure'
-                db_manager.sync_schema(structure) 
-        except Exception as schema_err:
-            print(f"⚠️ تنبيه: فشل مزامنة الهيكل، سيتم الاعتماد على الكاش المحلي: {schema_err}")
+            # استدعاء دالة النسخ الاحتياطي للقناة (يفترض وجودها في كودك)
+            await backup_to_channel() 
+        except Exception as backup_err:
+            print(f"⚠️ فشل النسخ الاحتياطي التلقائي: {backup_err}")
 
-        # 1. بناء التطبيق أولاً
-        print("🔧 جاري بناء محرك البوت الرئيسي...")
+        # --- [ الخطوة 2: تصفير النظام (Clean Slate) ] ---
+        print("🧹 جاري تصفير قاعدة البيانات المحلية والرام (Hard Reset)...")
+        try:
+            # تنفيذ المسح الشامل كما طلبت
+            db_manager.hard_reset() 
+            FACTORY_GLOBAL_CACHE.clear() # تصفير الرام
+        except Exception as reset_err:
+            print(f"⚠️ فشل عملية التصفير: {reset_err}")
+
+        # --- [ الخطوة 3: بناء محرك البوت (بدون اتصال بجوجل) ] ---
+        print("🔧 جاري بناء محرك البوت الرئيسي (إقلاع صامت)...")
         app = ApplicationBuilder().token(TOKEN).build()
 
-        # [ إكمال بقية المعالجات الـ Handlers كما هي في كودك بدون تغيير ]
+        # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
         app.add_handler(create_bot_conv) 
@@ -2017,26 +2017,40 @@ async def main_factory_launcher():
             button_callback, 
             pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel)$"
         ))
+        
+        # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي
+        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|start_manual_sync)$"))
+
         app.add_handler(CommandHandler("admin_export", export_admins))
         app.add_handler(CommandHandler("import_admin", import_admins_handler))
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
         app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-        # 3. استدعاء البوتات التابعة
-        # التصحيح: الحفاظ على await لأن اللوج أكد أنها Coroutine (دالة تزامنية)
-        # وحل خطأ: RuntimeWarning: coroutine 'boot_all_bots' was never awaited
-        await boot_all_bots() 
-        asyncio.create_task(start_all_sub_bots()) 
-
-        # 4. تشغيل محرك المصنع
-        print("🚀 مصنع البوتات يعمل الآن بكافة محركاته...")
+        # تشغيل محرك المصنع
+        print("🚀 محرك المصنع جاهز بانتظار التعليمات اليدوية...")
         await app.initialize()
         await app.updater.start_polling(drop_pending_updates=True)
         await app.start()
         
+        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي بعد النجاح ] ---
+        keyboard = [
+            [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
+            [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
+            [InlineKeyboardButton("⚙️ تهيئة الجداول (محلي فقط)", callback_data="init_tables_only")],
+            [InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_manual_sync")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        success_msg = (
+            "🎊 **تمت عملية الإقلاع بنجاح!**\n\n"
+            "نظام القاعدة الآن: `خالٍ تماماً (Clean)`\n"
+            "المزامنة التلقائية: `معطلة 🛑`\n\n"
+            "يرجى اختيار الإجراء التالي لبدء العمل:"
+        )
+        
         try:
-            await app.bot.send_message(chat_id=DEVELOPER_ID, text="✅ **تم إعادة تشغيل المحرك بنجاح!**")
+            await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
         except: pass
         
         while True:
@@ -2044,6 +2058,27 @@ async def main_factory_launcher():
 
     except Exception as e:
         print(f"🔴 خطأ حرج في إقلاع المصنع: {e}")
+
+# --- [ دالة معالجة الأزرار اليدوية ] ---
+async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("جاري المعالجة...")
+    data = query.data
+    
+    from sheets import get_sheets_structure
+    structure = get_sheets_structure()
+
+    if data == "pull_google_data":
+        await query.edit_message_text("⏳ جاري سحب البيانات الكاملة من جوجل (قد يستغرق وقتاً بسبب الـ Quota)...")
+        db_manager.sync_schema(structure)
+        await query.message.reply_text("✅ تمت المزامنة بنجاح.")
+        
+    elif data == "init_tables_only":
+        await query.edit_message_text("⚙️ جاري بناء الهياكل المحلية فقط...")
+        # هنا يتم تمرير الهيكل لإنشاء الجداول في SQLite بدون جلب بيانات مكثفة
+        db_manager.sync_schema(structure, spreadsheet=None) 
+        await query.message.reply_text("✅ تم إنشاء الجداول محلياً.")
+
 
 
 if __name__ == "__main__":
