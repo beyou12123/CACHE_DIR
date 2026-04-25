@@ -4202,6 +4202,57 @@ def create_withdrawal_request(bot_token, user_id, username, amount, payment_meth
         if 'logger' in globals(): logger.error(f"❌ خطأ في معالجة طلب السحب: {e}")
         return False, None
 
+def update_withdrawal_status(bot_token, request_id, new_status, admin_note="", proof_link=""):
+    """
+    تحديث حالة طلب السحب في شيت 'سجل_السحوبات' والمزامنة مع الكاش المحلي.
+    الالتزام بالأعمدة: الحالة (8)، رابط_تأكيد الدفع (9)، ملاحظة_الإدارة (10)، تاريخ_التنفيذ (11)
+    """
+    try:
+        bot_token_str = str(bot_token).strip()
+        
+        # 1. التحديث المحلي (SQLite) لضمان عدم وجود تأخير (Zero Lag)
+        try:
+            execution_date = get_system_time("full") if new_status == "مكتمل" else ""
+            query = '''
+                UPDATE "سجل_السحوبات" 
+                SET "الحالة" = ?, "ملاحظة_الإدارة" = ?, "رابط_تأكيد الدفع" = ?, "تاريخ_التنفيذ" = ?, sync_status = 'pending'
+                WHERE "معرف_الطلب" = ? AND "bot_id" = ?
+            '''
+            db_manager.cursor.execute(query, (new_status, admin_note, proof_link, execution_date, request_id, bot_token_str))
+            db_manager.conn.commit()
+        except Exception as local_e:
+            print(f"⚠️ تنبيه: فشل التحديث المحلي للسحب: {local_e}")
+
+        # 2. التحديث السحابي (Google Sheets)
+        from sheets import safe_api_call, ss
+        sheet_requests = ss.worksheet("سجل_السحوبات")
+        
+        # البحث عن الصف باستخدام معرف الطلب (REQ-xxxxxx) في العمود 4
+        cell = sheet_requests.find(str(request_id), in_column=4)
+        
+        if cell:
+            # تحديث الحالة (العمود 8)
+            safe_api_call(sheet_requests.update_cell, cell.row, 8, new_status)
+            # تحديث رابط تأكيد الدفع (العمود 9)
+            safe_api_call(sheet_requests.update_cell, cell.row, 9, proof_link)
+            # تحديث ملاحظة الإدارة (العمود 10)
+            safe_api_call(sheet_requests.update_cell, cell.row, 10, admin_note)
+            
+            if new_status == "مكتمل":
+                # تحديث تاريخ التنفيذ (العمود 11)
+                safe_api_call(sheet_requests.update_cell, cell.row, 11, execution_date)
+            
+            # رفع إصدار البوت لتحديث الرام لدى جميع المشغلين
+            update_global_version(bot_token)
+            return True
+            
+        return False
+    except Exception as e:
+        print(f"❌ خطأ في تحديث حالة السحب: {e}")
+        return False
+
+
+
 
 # --------------------------------------------------------------------------
 #دالة توليد رابط كوبون للمسوقين
