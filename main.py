@@ -914,24 +914,27 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
     # 3. تنفيذ عملية الترقية (يدعم المدة الزمنية التراكمية)
+    # 3. تنفيذ عملية الترقية (يدعم المدة الزمنية التراكمية)
     elif data.startswith("exec_sub_"):
         # تنسيق الداتا الجديد: exec_sub_TOKEN_PLAN_DAYS
         parts = data.split("_")
+        if len(parts) < 4: return
+        
         target_token = parts[2]
         target_plan = parts[3]
         target_days = int(parts[4]) if len(parts) > 4 else 30
 
         from SubscriptionManager import upgrade_bot_plan
-        if await upgrade_bot_plan(target_token, target_plan, duration_days=target_days):        
         
         await query.edit_message_text(f"⏳ جاري تنفيذ الترقية لباقة {target_plan} لمدة {target_days} يوم...")
         
-        # تنفيذ الترقية مع دعم التراكم الزمني
+        # تنفيذ الترقية الفعلية والتحقق من النتيجة
         if await upgrade_bot_plan(target_token, target_plan, duration_days=target_days):
             await query.edit_message_text(
                 f"✅ تم تحديث اشتراك البوت بنجاح!\n"
                 f"📦 الباقة: **{target_plan}**\n"
-                f"🗓️ المدة المضافة: **{target_days} يوم**"
+                f"🗓️ المدة المضافة: **{target_days} يوم**",
+                parse_mode="Markdown"
             )
         else:
             await query.edit_message_text("❌ فشلت عملية الترقية، راجع سجلات السيرفر (SUB LOG).")
