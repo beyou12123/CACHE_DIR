@@ -511,7 +511,7 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
     except Exception as e:
         print(f"❌ خطأ حفظ محلي في [{table_name}]: {e}")
         return False
-# حفظ البوت
+# حفظ البوت 
 def save_bot(owner_id, bot_type, bot_name, bot_token):
     """
     تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite)
@@ -1414,6 +1414,25 @@ def get_all_categories(bot_token):
         # الحفاظ على نص تسجيل الخطأ الأصلي
         print(f"❌ Error fetching categories: {e}")
         return []
+
+def get_all_personnel_list(bot_token):
+    """جلب قائمة كافة الموظفين والمدراء للبوت المحدد من الكاش"""
+    try:
+        # جلب البيانات من جدول الإداريين
+        admins = get_bot_data_from_cache(bot_token, "الإداريين")
+        personnel = []
+        for admin in admins:
+            personnel.append({
+                "id": admin.get("column_1"), # معرف التليجرام
+                "name": admin.get("column_2"), # الاسم
+                "role": admin.get("column_3")  # الصلاحية
+            })
+        return personnel
+    except Exception as e:
+        print(f"⚠️ خطأ في جلب قائمة الموظفين: {e}")
+        return []
+
+
 
 # --------------------------------------------------------------------------
 # دالة حذف الدورات

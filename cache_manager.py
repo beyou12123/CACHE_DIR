@@ -242,12 +242,15 @@ def smart_sync_check(bot_id):
 # --------------------------------------------------------------------------
 def update_global_version(bot_id):
     """تحديث الإصدار في نظام_المزامنة باستخدام المطابقة المباشرة للمصفوفة لضمان الدقة"""
-
+    # تصحيح حرج: يجب استيراد ss أيضاً من ملف sheets لتجنب خطأ NameError
+    from sheets import connect_to_google, ss 
     try:
         # التأكد من الاتصال
-        if 'ss' not in globals() or ss is None:
-
+        # تم تعديل الشرط للتحقق من الكائن المستورد 'ss' مباشرة
+        if ss is None:
             connect_to_google()
+            # بعد الاتصال نحتاج لإعادة استيراد ss لأنه قد يكون تغير قيمته بعد الدالة
+            from sheets import ss
 
         sync_sheet = ss.worksheet("نظام_المزامنة")
         # جلب العمود الأول بالكامل (معرفات البوتات) لضمان المطابقة النصية الدقيقة
@@ -278,6 +281,8 @@ def update_global_version(bot_id):
             # تحديث الخلايا في جوجل شيت باستخدام الوسيط الآمن safe_api_call لمنع الحظر
             # إضافة سطر تحديث الرام قبل الرفع
             FACTORY_GLOBAL_CACHE["versions"][str(bot_id)] = new_v
+            
+            # ملاحظة: تأكد من تعريف safe_api_call في ملفك أو استبدلها بـ sync_sheet.update_cell مباشرة
             safe_api_call(sync_sheet.update_cell, target_row, 2, new_v)
             safe_api_call(sync_sheet.update_cell, target_row, 3, now_time)
 
@@ -304,6 +309,7 @@ def update_global_version(bot_id):
             return new_v
             
     except Exception as e:
+        # تأكد من أن logger معرف في كودك (عادة موجود في بداية ملف cache_manager)
         logger.error(f"❌ فشل رفع الإصدار: {e}")
         return None
 
