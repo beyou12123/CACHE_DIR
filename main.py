@@ -5,6 +5,7 @@ import asyncio
 import time
 import importlib # استيراد الموديولات ديناميكياً لتشغيل الملفات المرفوعة
 import signal
+from datetime import datetime
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
@@ -1981,35 +1982,34 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
 async def main_factory_launcher():
     global app
     try:
-        # [سجل]: بداية محرك الإقلاع
+        # [سجل]: استخدام datetime بعد استيرادها
+        from datetime import datetime 
         print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
         
         # 1. تنظيف التضارب (Conflict)
         temp_bot = Bot(token=TOKEN)
         await temp_bot.delete_webhook(drop_pending_updates=True)
-        print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح لضمان عدم وجود تضارب.")
+        print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح.")
 
         # 2. فحص حالة قاعدة البيانات
         from cache_manager import DB_PATH
         if os.path.exists(DB_PATH):
             size = os.path.getsize(DB_PATH)
-            print(f"📦 [LOG]: تم العثور على ملف القاعدة. المسار: {DB_PATH} | الحجم: {size} بايت")
+            print(f"📦 [LOG]: تم العثور على ملف القاعدة. الحجم: {size} بايت")
             
             if size > 0:
-                print("🛡️ [LOG]: بدء عملية التأمين التلقائي (النسخ الاحتياطي)...")
+                print("🛡️ [LOG]: بدء عملية التأمين التلقائي...")
                 backup_success = await db_manager.create_backup_to_telegram()
                 if backup_success:
                     print("✅ [LOG]: النسخة الاحتياطية وصلت القناة بنجاح.")
-                    # # db_manager.hard_reset()  # (معطل بناءً على طلبك)
+                    # db_manager.hard_reset() # (معطل بناءً على طلبك)
                 else:
-                    print("⚠️ [LOG]: تنبيه! فشل إرسال النسخة. تم إلغاء أي عملية حذف تلقائية.")
+                    print("⚠️ [LOG]: فشل إرسال النسخة.")
         else:
             print("ℹ️ [LOG]: ملف القاعدة غير موجود (بيئة Railway جديدة).")
 
-        # 3. بناء المحرك
-        print("⚙️ [LOG]: جاري ربط المعالجات (Handlers) وبناء Application...")
+        # 3. بناء المحرك (الحفاظ على كل الـ Handlers)
         app = ApplicationBuilder().token(TOKEN).build()
-        
 
         # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
         app.add_handler(CommandHandler("start", start))
@@ -2041,7 +2041,7 @@ async def main_factory_launcher():
         await app.initialize()
         await app.updater.start_polling(drop_pending_updates=True)
         await app.start()
-        print("🚀 [LOG]: البوت الرئيسي يعمل الآن (Polling Mode).") 
+        print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة.")
         
         # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي بعد النجاح ] ---
         keyboard = [
@@ -2066,7 +2066,7 @@ async def main_factory_launcher():
             # 2. إرسال للقناة (استخدام BACKUP_CHANNEL_ID المستورد من cache_manager)
             from cache_manager import BACKUP_CHANNEL_ID
             await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
-            print("📨 [LOG]: تم إرسال لوحة التحكم بنجاح.")
+            print("🚀 [LOG]: تم إرسال رسالة الى القناة والخاص والبوت يعمل الآن بكفاءة.")
         except Exception as msg_err:
             print(f"⚠️ فشل إرسال رسائل الإقلاع: {msg_err}")
         
