@@ -672,35 +672,51 @@ class DataManager:
         scheduler.start()
         logger.info("⏰ تم تفعيل مجدول المزامنة التلقائية (03:30).")
 
-    def sync_schema(self, spreadsheet, sheets_structure):
+    def sync_schema(self, sheets_structure, spreadsheet=None):
         """
         المحرك الموحد (Unified Schema Engine):
         1. يتأكد من وجود الأوراق في جوجل شيت (وإنشائها إذا نقصت).
         2. يتأكد من مطابقة الأعمدة في جوجل شيت (ترميم الأعمدة).
         3. ينشئ جداول SQLite مطابقة تماماً لما هو موجود في جوجل.
+        
+        التصحيح المعتمد: جعل spreadsheet اختيارياً وتوفير اتصال تلقائي إذا لم يُمرر،
+        وذلك لحل تضارب الاستدعاء من ملف main.py.
         """
-        from sheets import ensure_sheet_schema # استيراد محلي لمنع التكرار
+        from sheets import ensure_sheet_schema, connect_to_google # استيراد محلي لمنع التكرار
+        import time # التأكد من وجود المكتبة للـ sleep
+        
         try:
-            # أولاً: جلب أسماء الأوراق الحالية في جوجل لتوفير طلبات الـ API
-            existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()}
+            # إصلاح التضارب: إذا لم يتم تمرير spreadsheet، نحاول الاتصال تلقائياً
+            if spreadsheet is None:
+                spreadsheet = connect_to_google()
+            
+            # إذا فشل الاتصال تماماً، نكتفي بالمزامنة المحلية لضمان عدم توقف النظام
+            existing_ws = {}
+            if spreadsheet:
+                # جلب أسماء الأوراق الحالية في جوجل لتوفير طلبات الـ API
+                existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()}
             
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
                 cols = sheet_def.get("cols", [])
-                    # --- [ إضافة تأخير بسيط هنا ] ---
-                time.sleep(2.2)             
-                # --- أ: ضمان وجود الورقة في جوجل شيت ---
-                if name not in existing_ws:
-                    worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
-                    logger.info(f"🆕 تم إنشاء ورقة جديدة في جوجل: {name}")
-                else:
-                    worksheet = existing_ws[name]
                 
-                # --- ب: ضمان مطابقة الأعمدة في جوجل شيت (الترميم) ---
-                ensure_sheet_schema(worksheet, cols)
+                # --- [ إضافة تأخير بسيط هنا ] ---
+                time.sleep(2.2)             
+                
+                # العمليات على جوجل شيت (تتم فقط في حال وجود اتصال)
+                if spreadsheet:
+                    # --- أ: ضمان وجود الورقة في جوجل شيت ---
+                    if name not in existing_ws:
+                        worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
+                        logger.info(f"🆕 تم إنشاء ورقة جديدة في جوجل: {name}")
+                    else:
+                        worksheet = existing_ws[name]
+                    
+                    # --- ب: ضمان مطابقة الأعمدة في جوجل شيت (الترميم) ---
+                    ensure_sheet_schema(worksheet, cols)
                 
                 # --- ج: ضمان مطابقة الجدول في SQLite المحلي ---
-                # نستخدم الكولومز الفعلية الآن لإنشاء الجدول محلياً
+                # نستخدم الكولومز الفعلية الآن لإنشاء الجدول محلياً (تعمل دائماً لضمان ثبات القاعدة)
                 columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
                 create_table_query = f"""
                 CREATE TABLE IF NOT EXISTS '{name}' (

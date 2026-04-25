@@ -1991,8 +1991,9 @@ async def main_factory_launcher():
             if spreadsheet:
                 # جلب الهيكل من الدالة وتمريره للمحرك
                 structure = get_sheets_structure() 
-                # تصحيح: تمرير الهيكل فقط إذا كانت الدالة تطلبه كما ظهر في اللوج السابق
-                # أو تمرير spreadsheet و structure إذا كان db_manager معدلاً لذلك
+                
+                # التصحيح: تمرير 'structure' كمعامل للدالة لحل مشكلة missing argument
+                # بناءً على اللوج: DataManager.sync_schema() missing 1 required positional argument: 'sheets_structure'
                 db_manager.sync_schema(structure) 
         except Exception as schema_err:
             print(f"⚠️ تنبيه: فشل مزامنة الهيكل، سيتم الاعتماد على الكاش المحلي: {schema_err}")
@@ -2023,7 +2024,9 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         # 3. استدعاء البوتات التابعة
-        boot_all_bots() 
+        # التصحيح: الحفاظ على await لأن اللوج أكد أنها Coroutine (دالة تزامنية)
+        # وحل خطأ: RuntimeWarning: coroutine 'boot_all_bots' was never awaited
+        await boot_all_bots() 
         asyncio.create_task(start_all_sub_bots()) 
 
         # 4. تشغيل محرك المصنع
