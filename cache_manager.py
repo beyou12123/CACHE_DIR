@@ -616,45 +616,53 @@ class DataManager:
         self.conn.row_factory = sqlite3.Row  # للوصول للبيانات بأسماء الأعمدة
         self.cursor = self.conn.cursor()
 
-    async def restore_from_telegram(self):
-        """جلب آخر نسخة احتياطية من التلجرام إذا لم يوجد ملف محلي"""
-        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
-            logger.info("✅ القاعدة المحلية موجودة، لا داعي للاستعادة.")
-            return
-
-        try:
-            bot = Bot(token=self.bot_token)
-            # جلب آخر رسالة في القناة لاستعادة قاعدة البيانات
-            messages = await bot.get_chat_history(chat_id=BACKUP_CHANNEL_ID, limit=1)
-            
-            if messages:
-                backup_data = messages[0].text
-                # فك تشفير Base64 وتحويله لملف DB
-                with open(DB_PATH, "wb") as f:
-                    f.write(base64.b64decode(backup_data))
-                logger.info("🔄 تم استعادة قاعدة البيانات من تلجرام بنجاح!")
-        except Exception as e:
-            logger.error(f"❌ فشل في استعادة النسخة الاحتياطية: {e}")
 
     async def create_backup_to_telegram(self):
-        """تحويل ملف SQL إلى Base64 وإرساله للقناة الخاصة لضمان الأمان القصوى"""
+        """إرسال قاعدة البيانات كملف وثيقة لضمان الأمان والتعامل مع الأحجام الكبيرة"""
         try:
             if not os.path.exists(DB_PATH):
                 logger.warning("⚠️ لا يوجد ملف قاعدة بيانات لعمل نسخة احتياطية.")
                 return
 
-            with open(DB_PATH, "rb") as f:
-                encoded_string = base64.b64encode(f.read()).decode('utf-8')
-            
             bot = Bot(token=self.bot_token)
-            await bot.send_message(
-                chat_id=BACKUP_CHANNEL_ID,
-                text=encoded_string,
-                disable_notification=True
-            )
-            logger.info("💾 تم إرسال نسخة احتياطية جديدة مشفرة إلى التلجرام.")
+            # إرسال الملف مباشرة كوثيقة لضمان عدم التقيد بعدد الحروف
+            with open(DB_PATH, "rb") as db_file:
+                await bot.send_document(
+                    chat_id=BACKUP_CHANNEL_ID,
+                    document=db_file,
+                    filename=f"Factory_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db",
+                    caption=f"🛡️ **نسخة احتياطية لقاعدة البيانات**\n📅 التاريخ: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`",
+                    disable_notification=True
+                )
+            logger.info("💾 تم إرسال نسخة احتياطية (ملف) إلى قناة قواعد المصنع بنجاح.")
         except Exception as e:
-            logger.error(f"❌ فشل في إنشاء نسخة احتياطية: {e}")
+            logger.error(f"❌ فشل في إنشاء نسخة احتياطية للقناة: {e}")
+
+    async def restore_from_telegram(self):
+        """البحث عن آخر ملف نسخة احتياطية في القناة وتحميله"""
+        # إذا كانت القاعدة موجودة وحجمها سليم، لا داعي للمخاطرة بالاستبدال
+        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 100:
+            logger.info("✅ القاعدة المحلية موجودة، تم تخطي الاستعادة التلقائية.")
+            return
+
+        try:
+            bot = Bot(token=self.bot_token)
+            # جلب آخر 10 رسائل للبحث عن آخر ملف مرفوع
+            updates = await bot.get_chat_history(chat_id=BACKUP_CHANNEL_ID, limit=10)
+            
+            for msg in updates:
+                if msg.document and msg.document.file_name.startswith("Factory_Backup_"):
+                    # جلب الملف من سيرفرات تليجرام
+                    file = await bot.get_file(msg.document.file_id)
+                    await file.download_to_drive(DB_PATH)
+                    logger.info(f"🔄 تم استعادة قاعدة البيانات بنجاح من الملف: {msg.document.file_name}")
+                    return True
+            
+            logger.warning("⚠️ لم يتم العثور على أي ملفات نسخ احتياطي في القناة.")
+        except Exception as e:
+            logger.error(f"❌ فشل استعادة القاعدة من تليجرام: {e}")
+        return False
+
 
     def setup_sync_scheduler(self):
         """ضبط المزامنة والنسخ الاحتياطي التلقائي في الساعة 03:30 فجراً"""
