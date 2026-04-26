@@ -352,8 +352,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- [ 3. تسجيل المستخدم في القاعدة (استدعاء واحد فقط) ] ---
     # نمرر inviter_id (سواء كان ID أو None) ليتم الحفظ في العمود 10 مرة واحدة
-    save_user(user.id, user.username, inviter_id)
-    
+    save_user(user.id, user.username, inviter_id, bot_token=context.bot.token)
 
     # --- [ 3. محرك اختيار الكليشة الذكي ] ---
     hour = datetime.now().hour
