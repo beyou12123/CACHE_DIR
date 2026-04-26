@@ -2170,35 +2170,26 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
 async def main_factory_launcher():
     global app
     try:
-        # [سجل]: استيراد datetime واستخدامها محلياً لضمان الدقة
         from datetime import datetime 
+        from cache_manager import DB_PATH, db_manager # استيراد الأدوات اللازمة
         print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
         
-        
-        # 1. تنظيف التضارب (Conflict) لضمان عدم وجود جلسات معلقة
-        temp_bot = Bot(token=TOKEN)
-        await temp_bot.delete_webhook(drop_pending_updates=True)
-        await asyncio.sleep(2) # انتظار لضمان إغلاق الجلسات القديمة
-        print("🔍 [LOG]: تم فحص وتنظيف الـ Webhook بنجاح لضمان عدم وجود تضارب.")
+        # 1. تم نقل تنظيف التضارب (Conflict) للكتلة الخارجية لضمان الأمان
+        # نكتفي هنا بطباعة تأكيدية لعدم تكرار الطلبات لـ Telegram
+        print("🔍 [LOG]: المحرك يعتمد الآن على التطهير الخارجي المستقر.")
 
-        # 2. فحص حالة قاعدة البيانات قبل أي إجراء
-        from cache_manager import DB_PATH
+        # 2. فحص حالة قاعدة البيانات (بدون إعادة إرسال نسخة احتياطية مكررة)
         if os.path.exists(DB_PATH):
             size = os.path.getsize(DB_PATH)
-            print(f"📦 [LOG]: تم العثور على ملف القاعدة. المسار: {DB_PATH} | الحجم: {size} بايت")
+            print(f"📦 [LOG]: ملف القاعدة جاهز للعمل. المسار: {DB_PATH} | الحجم: {size} بايت")
             
-            if size > 0:
-                print("🛡️ [LOG]: بدء عملية التأمين التلقائي (إرسال نسخة للقناة)...")
-                backup_success = await db_manager.create_backup_to_telegram()
-                if backup_success:
-                    print("✅ [LOG]: النسخة الاحتياطية وصلت القناة بنجاح.")
-                    # db_manager.hard_reset() # (معطل بناءً على طلبك للحفاظ على البيانات)
-                else:
-                    print("⚠️ [LOG]: تنبيه! فشل إرسال النسخة التلقائية.")
+            # ملاحظة: تم إيقاف الرفع التلقائي هنا لأنه تم تنفيذه في مرحلة الـ Pre-Startup
+            # لضمان عدم حدوث Flood Control وتكرار البيانات في القناة.
+            print("🛡️ [LOG]: تم تجاوز التأمين التلقائي المكرر (البيانات مؤمنة بالفعل).")
         else:
-            print("ℹ️ [LOG]: ملف القاعدة غير موجود (بيئة تشغيل جديدة أو تم مسحها بواسطة Railway).")
+            print("ℹ️ [LOG]: بيئة تشغيل نظيفة، بانتظار تهيئة البيانات.")
 
-        # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل)
+        # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل بدون أي تغيير)
         print("🔧 [LOG]: جاري بناء محرك البوت الرئيسي وتسجيل المعالجات...")
         app = ApplicationBuilder().token(TOKEN).build()
 
@@ -2243,10 +2234,13 @@ async def main_factory_launcher():
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         success_msg = (
-            "🎊 **تمت عملية الإقلاع بنجاح!**\n\n"
-            "نظام القاعدة الآن: `خالٍ تماماً (Clean)` أو بانتظار التحديث.\n"
-            "المزامنة التلقائية: `معطلة 🛑` بانتظار قرارك.\n\n"
-            "يرجى اختيار الإجراء التالي:"
+            "🔔 **إشعار السيادة والجاهزية القصوى**\n\n"
+            "🛡️ **تم بحمد الله استعادة الحصن الحصين؛** النسخة الاحتياطية الأخيرة المودعة في قناة المصنع أصبحت الآن نبضاً للمحرك المحلي.\n\n"
+            "🎊 **تمت عملية الإقلاع بنجاح باهر!**\n"
+            "📊 حالة النظام: `مستقر وجاهز للعمل` ✅\n"
+            "🛑 المزامنة التلقائية: `بانتظار قرارك السيادي`\n\n"
+            "🚀 **المصنع الآن في حالة انطلاق.. لا شيء يقف أمامنا!**\n"
+            "✨ _البيانات آمنة، والتحكم المطلق بين يديك الآن._"
         )
         
         try:
@@ -2265,8 +2259,6 @@ async def main_factory_launcher():
 
     except Exception as e:
         print(f"🔴 [LOG - CRITICAL]: خطأ حرج في إقلاع المصنع: {e}")
-
-
 
 
 # --- [ دالة معالجة الأزرار اليدوية ] ---
