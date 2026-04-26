@@ -533,18 +533,22 @@ def local_save_wrapper(table_name, data_list):
         print(f"❌ خطأ حرج في الحفظ المحلي (الجدول: {table_name}): {e}")
         return False
 # دالة حفط  المستخدمين النسخة المحدثة
-def save_user(user.id, user.username, inviter_id, bot_token=context.bot.token):
+def save_user(user_id, username, inviter_id=None, bot_token=None):
     """
     تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 11 عموداً:
     - التعديل: إرجاع True للعضو الجديد فقط، و False للعضو الموجود مسبقاً.
     """
     try:
+        # استيراد الدوال اللازمة من داخل الدالة لضمان عدم حدوث Circular Import
+        from sheets import get_system_time, local_bulk_save
+        from cache_manager import db_manager
+
         now = get_system_time("full")
-        user_id = str(user_id)
+        user_id_str = str(user_id)
         
         # 1. بناء مصفوفة البيانات (11 عموداً بالترتيب الدقيق للورقة المعتمدة)
         user_row = [
-            user_id,                                # 1. ID المستخدم
+            user_id_str,                            # 1. ID المستخدم
             f"@{username}" if username else "بدون",  # 2. اسم المستخدم
             now,                                    # 3. تاريخ التسجيل
             "نشط",                                  # 4. الحالة
@@ -553,45 +557,46 @@ def save_user(user.id, user.username, inviter_id, bot_token=context.bot.token):
             now,                                    # 7. آخر نشاط
             "ar",                                   # 8. اللغة
             "Telegram",                             # 9. مصدر التسجيل
-            "None",                                 # 10. معرف إحالة
+            str(inviter_id) if inviter_id else "None", # 10. معرف إحالة
             "0"                                     # 11. رصيد
         ]
 
-        # 2. التحقق من وجود المستخدم ومعالجة التكرار القديم
-        db_manager.cursor.execute('SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ?', (user_id,))
+        # 2. التحقق من وجود المستخدم ومعالجة التكرار
+        db_manager.cursor.execute('SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ?', (user_id_str,))
         results = db_manager.cursor.fetchall() 
 
         if results:
-            # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم)
+            # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم) وتطهيره
             if len(results) > 1:
                 db_manager.cursor.execute('''
                     DELETE FROM "المستخدمين" 
                     WHERE "ID المستخدم" = ? 
                     AND local_id NOT IN (SELECT min(local_id) FROM "المستخدمين" WHERE "ID المستخدم" = ?)
-                ''', (user_id, user_id))
+                ''', (user_id_str, user_id_str))
                 db_manager.conn.commit()
-                print(f"🧹 تم تطهير تكرار قديم للمستخدم: {user_id}")
+                print(f"🧹 تم تطهير تكرار قديم للمستخدم: {user_id_str}")
 
-            # ب- تحديث البيانات الحالية
+            # ب- تحديث بيانات النشاط للمستخدم الحالي
             update_query = '''
                 UPDATE "المستخدمين" 
                 SET "اسم المستخدم" = ?, "آخر نشاط" = ?, sync_status = "pending" 
                 WHERE "ID المستخدم" = ?
             '''
-            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id))
+            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id_str))
             db_manager.conn.commit()
-            return False  # <--- تصحيح: العضو موجود مسبقاً، لا ترسل إشعاراً جديداً
+            return False  # العضو موجود مسبقاً
 
         else:
             # ج- إضافة مستخدم جديد تماماً
             local_bulk_save("المستخدمين", user_row)
-            print(f"👤 مستخدم جديد مسجل محلياً: {user_id}")
+            print(f"👤 مستخدم جديد مسجل محلياً: {user_id_str}")
             db_manager.conn.commit()
-            return True  # <--- تصحيح: العضو جديد فعلاً، سيتم إرسال إشعار للمطور
+            return True  # العضو جديد فعلاً
 
     except Exception as e:
         print(f"❌ خطأ في حفظ المستخدم محلياً: {e}")
         return False
+
 
 
 # --------------------------------------------------------------------------
