@@ -426,14 +426,34 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- المحرك الديناميكي الأوتوماتيكي المطور ---
 # --------------------------------------------------------------------------
 async def run_dynamic_bot(bot_token, bot_type, user_id):
-    """الحل الجذري: ربط الاسم الوصفي بالملف البرمجي وتشغيل المحرك مع التحقق الفيزيائي"""
+    """الحل الجذري: قتل الجلسات القديمة، ربط الملف البرمجي، وتشغيل المحرك الجديد"""
     try:
         from sheets import meta_sheet
         import importlib
         import importlib.util
         import os
-        import sys  # تصحيح: إضافة مكتبة النظام لضمان تسجيل الموديولات
+        import sys
+        import asyncio
         from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ChatMemberHandler, filters
+
+        # --- [ الخطوة 0: بروتوكول القتل الإجباري للنسخة القديمة ] ---
+        # لضمان عدم حدوث Conflict 409 عند إعادة التشغيل اليدوي
+        if 'ACTIVE_RUNTIME_BOTS' in globals():
+            if bot_token in ACTIVE_RUNTIME_BOTS:
+                print(f"⚔️ [SLAUGHTER]: تم رصد جلسة نشطة للتوكن {bot_token[:10]}... جاري التصفية.")
+                try:
+                    old_app = ACTIVE_RUNTIME_BOTS[bot_token]
+                    # إيقاف المحدث والمحرك تماماً وتحرير التوكن من سيرفرات تليجرام
+                    if old_app.updater and old_app.updater.running:
+                        await old_app.updater.stop()
+                    await old_app.stop()
+                    await old_app.shutdown()
+                    # تنظيف الذاكرة
+                    del ACTIVE_RUNTIME_BOTS[bot_token]
+                    print(f"✅ [SLAUGHTER]: تم إنهاء الجلسة السابقة بنجاح.")
+                    await asyncio.sleep(1.2) # وقت مستقطع لضمان تحرير المنفذ
+                except Exception as kill_err:
+                    print(f"⚠️ [WARNING]: تنبيه أثناء محاولة التصفية: {kill_err}")
 
         # 1. تحديد اسم الملف البرمجي الحقيقي (Mapping)
         module_file_name = None
@@ -442,20 +462,17 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         try:
             if meta_sheet:
                 records = meta_sheet.get_all_records()
-                # نبحث عن السطر الذي يحتوي على الاسم الوصفي في العمود الثاني
                 for r in records:
-                    # تنظيف المدخلات لضمان المطابقة
                     key_val = str(r.get('key', '')).strip()
                     target_key = f"desc_{str(bot_type).strip()}.py"
                     
                     if key_val == target_key:
-                        # نأخذ اسم الملف من الـ key (نزيل منه desc_ و .py)
                         module_file_name = key_val.replace('desc_', '').replace('.py', '')
                         break
         except Exception as e:
             print(f"⚠️ خطأ أثناء فحص الميتا: {e}")
 
-        # إذا لم يجد في الميتا، نستخدم التحويلات اليدوية كخطة بديلة (بدون تغيير مفاتيحك)
+        # الخطة البديلة للمسميات (بدون تغيير مفاتيحك)
         if not module_file_name:
             bot_type_str = str(bot_type)
             if "تواصل" in bot_type_str: module_file_name = "contact_bot"
@@ -463,50 +480,42 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
             elif "تعليمية" in bot_type_str or "education" in bot_type_str: module_file_name = "education_bot"
             elif "متجر" in bot_type_str: module_file_name = "store_bot"
             else: 
-                # آخر محاولة: تنظيف الاسم القادم من الشيت من أي لاحقة .py
                 module_file_name = bot_type_str.replace('.py', '').strip()
 
-        # --- [ الخطوة التصحيحية الكبرى: التحقق الفيزيائي من المسار ] ---
+        # التحقق الفيزيائي من المسار
         file_path = os.path.join(os.getcwd(), f"{module_file_name}.py")
         
         if not os.path.exists(file_path):
             print(f"❌ [خطأ فيزيائي]: الملف {module_file_name}.py غير موجود في المسار: {file_path}")
-            # محاولة أخيرة للبحث عن الملف في المجلد الحالي في حال كان الاسم مختلفاً قليلاً
             possible_files = [f for f in os.listdir('.') if f.endswith('.py')]
             print(f"📂 الملفات المتاحة حالياً في السيرفر: {possible_files}")
-            return # التوقف لضمان عدم انهيار المصنع
+            return
 
-        # 2. استيراد الموديول برمجياً بطريقة Spec (الأكثر أماناً للمصانع)
+        # 2. استيراد الموديول برمجياً وتسجيله في النظام
         print(f"📦 محاولة تحميل الملف: {module_file_name}.py للنوع: {bot_type}")
         
         spec = importlib.util.spec_from_file_location(module_file_name, file_path)
         module = importlib.util.module_from_spec(spec)
         
-        # --- [التصحيح الحرج]: تسجيل الموديول في ذاكرة النظام لمنع خطأ module not in sys.modules ---
+        # تسجيل الموديول لمنع خطأ module not in sys.modules
         sys.modules[module_file_name] = module 
         
         spec.loader.exec_module(module)
-        
-        # إعادة التحميل لضمان تطبيق التعديلات البرمجية الأخيرة
         importlib.reload(module) 
 
         # 3. بناء تطبيق البوت وتجهيزه
         new_app = ApplicationBuilder().token(bot_token).build()
         new_app.bot_data["owner_id"] = int(user_id)
 
-        # 4. ربط المعالجات (Handlers) - الترتيب هنا هو سر النجاح
-        
-        # أ: معالج /start
+        # 4. ربط المعالجات (Handlers)
         if hasattr(module, 'start_handler'):
             new_app.add_handler(CommandHandler("start", module.start_handler))
         
-        # ب: معالج الأزرار (Callback)
         if hasattr(module, 'callback_handler'):
             new_app.add_handler(CallbackQueryHandler(module.callback_handler))
         elif hasattr(module, 'contact_callback_handler'):
             new_app.add_handler(CallbackQueryHandler(module.contact_callback_handler))
 
-        # ج: الحل الجذري للرسائل (توجيه شامل للموديول)
         main_filter = filters.ALL & (~filters.COMMAND)
         
         if hasattr(module, 'handle_message'):
@@ -514,25 +523,21 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         elif hasattr(module, 'handle_contact_message'):
             new_app.add_handler(MessageHandler(main_filter, module.handle_contact_message))
 
-        # د: معالج الحظر وتغيير الحالة
         if hasattr(module, 'track_chats'):
             new_app.add_handler(ChatMemberHandler(module.track_chats, ChatMemberHandler.MY_CHAT_MEMBER))
 
-        # 5. تشغيل البوت وتسجيله في نظام ACTIVE_RUNTIME_BOTS (الذي أنشأته أنت)
+        # 5. تشغيل البوت وتسجيله
         await new_app.initialize()
         await new_app.start()
         
-        # تسجيل التطبيق في الذاكرة لمنع تكرار التشغيل (تكامل مع كود السطر 58 الخاص بك)
         if 'mark_bot_running' in globals():
             mark_bot_running(bot_token, new_app)
             
         await new_app.updater.start_polling(drop_pending_updates=True)
-        print(f"🚀 [نجاح]: البوت بنوع [{bot_type}] يعمل الآن عبر ملف [{module_file_name}.py]")
+        print(f"🚀 [نجاح]: البوت بنوع [{bot_type}] يعمل الآن بنسخة نظيفة عبر ملف [{module_file_name}.py]")
 
-    except ModuleNotFoundError:
-        print(f"❌ [خطأ]: فشل استيراد الموديول {module_file_name}.py - تأكد من وجوده بجانب main.py")
     except Exception as e:
-        print(f"⚠️ [خطأ حرج]: في محرك التشغيل الديناميكي للنوع {bot_type}: {e}")
+        print(f"⚠️ [خطأ حرج]: في محرك التشغيل للنوع {bot_type}: {e}")
 
 
 
