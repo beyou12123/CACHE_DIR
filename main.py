@@ -2339,106 +2339,76 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         print("🚫 [MANUAL LOG]: تم إلغاء عملية الاستعادة من قبل المستخدم.")
         await query.edit_message_text("❌ تم إلغاء عملية الاستعادة. يمكنك اختيار إجراء آخر من اللوحة الرئيسية.")
 
-# دالة التطهير (يتم تعريفها قبل الجزء الذي أرسلته أنت)
-async def force_kill_old_sessions(token: str):
-    """دالة القتل الإجباري والصارم لأي جلسات تليجرام عالقة"""
-    from telegram import Bot
-    print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
-    temp_bot = Bot(token=token)
-    try:
-        # حذف الويب هوك ومسح الرسائل العالقة (drop_pending_updates)
-        await temp_bot.delete_webhook(drop_pending_updates=True)
-        # إغلاق الجلسة في سيرفرات تليجرام
-        await temp_bot.close()
-        await asyncio.sleep(2) 
-        print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
-    except Exception as e:
-        print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير: {e}")
-
-
-async def force_kill_old_sessions(token: str):
-    """
-    دالة القتل الإجباري والصارم: 
-    تنهي أي اتصال قديم، تحذف الـ Webhook، وتطهر الجلسة في سيرفرات تليجرام.
-    """
-    print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
-    temp_bot = Bot(token=token)
-    try:
-        # 1. حذف الـ Webhook مع مسح كافة التحديثات المعلقة إجبارياً
-        print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح الرسائل العالقة...")
-        await temp_bot.delete_webhook(drop_pending_updates=True)
-        
-        # 2. إجبار السيرفر على إغلاق الجلسة الحالية
-        # ملاحظة: دالة close() تجعل التوكن متاحاً فوراً لطلب getUpdates جديد
-        print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
-        await temp_bot.close()
-        
-        # فاصل زمني صغير لضمان معالجة السيرفر للأوامر
-        await asyncio.sleep(2)
-        print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح. الطريق آمن الآن.")
-    except Exception as e:
-        print(f"⚠️ [SLAUGHTER]: فشل جزء من التطهير (قد لا يكون هناك جلسة أصلاً): {e}")
-    finally:
-        # تأكيد الإغلاق النهائي لكائن البوت المؤقت
-        await temp_bot.shutdown()
 
 # --- [ تعديل كتلة التشغيل الخاصة بك ] ---
 if __name__ == "__main__":
     import asyncio
     import logging
     import os
+    from telegram import Bot
+    from cache_manager import db_manager, DB_PATH
 
-    # 1. دالة القتل الإجباري (Force Kill)
+    # 1. دالة القتل الإجباري والصارم المدمجة
     async def force_kill_old_sessions(token: str):
-        """تنهي أي اتصال قديم وتغلق الجلسات العالقة في سيرفرات تليجرام"""
-        from telegram import Bot
+        """تنهي أي اتصال قديم وتطهر الجلسة في سيرفرات تليجرام لفتح الطريق للنسخة الجديدة"""
+        print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
+        temp_bot = Bot(token=token)
         try:
-            print("⚔️ [PURGE]: بدء عملية التطهير العرقي للنسخ القديمة...")
-            temp_bot = Bot(token=token)
-            # مسح الـ Webhook والرسائل المعلقة
+            print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح كافة التحديثات المعلقة...")
             await temp_bot.delete_webhook(drop_pending_updates=True)
-            # إغلاق الجلسة برمجياً لتحرير التوكن
+            print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
             await temp_bot.close()
-            await asyncio.sleep(2) 
-            print("✅ [PURGE]: تمت إبادة الجلسات القديمة بنجاح.")
+            await asyncio.sleep(2)
+            print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
         except Exception as e:
-            print(f"⚠️ [PURGE]: تنبيه أثناء التطهير: {e}")
+            print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير: {e}")
+        finally:
+            try: await temp_bot.shutdown()
+            except: pass
 
-    # 2. المشغل الاستراتيجي المطور
+    # 2. المشغل الاستراتيجي المطور (الاحتيال على حذف الاستضافة)
     async def final_launcher():
-        """المشغل النهائي: تأمين البيانات -> تطهير البيئة -> إطلاق المحرك"""
+        """المشغل النهائي: استعادة (عند الحذف) -> تأمين (إذا وجد) -> تطهير -> إطلاق"""
         try:
-            # جلب التوكن من النظام
             token = os.getenv("BOT_TOKEN")
             if not token:
                 print("🔴 خطأ حرج: BOT_TOKEN غير موجود!")
                 return
 
-            # --- [ الخطوة الأولى: النسخ الاحتياطي (الأولوية القصوى) ] ---
-            from cache_manager import db_manager
-            if db_manager:
-                print("💾 [PRE-STARTUP]: تأمين نسخة احتياطية كاملة إلى تليجرام أولاً...")
-                # استدعاء دالة النسخ (الملف) لضمان سلامة البيانات قبل أي إجراء
+            # --- [ الخطوة 1: فحص وجود البيانات (الاحتيال على الاستضافة) ] ---
+            # إذا حذفت الاستضافة الملف أو كان 0 بايت، نستعيده من القناة فوراً
+            db_exists = os.path.exists(DB_PATH)
+            db_size = os.path.getsize(DB_PATH) if db_exists else 0
+
+            if db_size == 0:
+                print("🚨 [CRITICAL]: تم اكتشاف مسح البيانات! جاري الاستعادة التلقائية من التليجرام...")
+                # دالة الاستعادة التي تبحث عن آخر ملف مثبت (Pinned) في قناتك
+                restore_success = await db_manager.restore_from_telegram()
+                if restore_success:
+                    print("✅ [RESTORE]: تمت استعادة قاعدة البيانات بنجاح قبل الإقلاع.")
+                else:
+                    print("⚠️ [RESTORE]: فشلت الاستعادة (قد لا توجد نسخة مثبتة). سيتم بدء قاعدة جديدة.")
+            else:
+                # إذا الملف موجود، نؤمنه بنسخة احتياطية قبل أي حركة
+                print("💾 [PRE-STARTUP]: تأمين نسخة احتياطية إضافية إلى تليجرام...")
                 await db_manager.create_backup_to_telegram()
                 print("✅ [PRE-STARTUP]: تم تأمين البيانات بنجاح.")
 
-            # --- [ الخطوة الثانية: القتل الإجباري ] ---
-            # الآن بعد أن أمنا البيانات، نقوم بقتل أي نسخة قديمة عالقة
+            # --- [ الخطوة 2: القتل الإجباري ] ---
             await force_kill_old_sessions(token)
 
-            # --- [ الخطوة الثالثة: الإقلاع الفعلي ] ---
-            print("🚀 [LAUNCH]: انطلاق المحرك الرئيسي للمصنع...")
+            # --- [ الخطوة 3: الإقلاع الفعلي للمصنع ] ---
+            print("🚀 [LAUNCH]: انطلاق المحرك الرئيسي للمصنع الآن...")
             from main import main_factory_launcher
             await main_factory_launcher()
 
         except Exception as e:
             print(f"🔴 فشل تسلسل الإقلاع الحرج: {e}")
 
-    # 3. نقطة انطلاق البرنامج
+    # 3. تشغيل الحلقة (Event Loop) الوحيدة للنظام
     try:
-        # تشغيل التسلسل الموحد
         asyncio.run(final_launcher())
     except (KeyboardInterrupt, SystemExit):
         print("🛑 تم إيقاف المصنع يدوياً.")
     except Exception as e:
-        print(f"🔴 انهيار المحرك الرئيسي: {e}")
+        print(f"🔴 انهيار المحرك الرئيسي الحرج: {e}")

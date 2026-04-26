@@ -617,7 +617,7 @@ class DataManager:
         self.cursor = self.conn.cursor()
 
     async def create_backup_to_telegram(self):
-        """إرسال قاعدة البيانات كملف وثيقة لضمان الأمان والتعامل مع الأحجام الكبيرة"""
+        """إرسال قاعدة البيانات كملف وثيقة لضمان الأمان والتعامل مع الأحجام الكبيرة مع التثبيت التلقائي"""
         try:
             from datetime import datetime
             # سجل بداية العملية
@@ -629,6 +629,7 @@ class DataManager:
                 return False
 
             bot = Bot(token=self.bot_token)
+            
             # إرسال الملف مباشرة كوثيقة لضمان عدم التقيد بعدد الحروف
             with open(DB_PATH, "rb") as db_file:
                 sent_msg = await bot.send_document(
@@ -638,18 +639,32 @@ class DataManager:
                     caption=f"🛡️ **نسخة احتياطية لقاعدة البيانات**\n📅 التاريخ: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`",
                     disable_notification=True
                 )
-            
-            # حفظ معرف الملف في الكاش لتسهيل الاستعادة الفورية إذا لزم الأمر
+
+            # --- [ بروتوكول التثبيت التلقائي للاستعادة الآلية ] ---
+            if sent_msg:
+                try:
+                    # تثبيت الرسالة لكي تجدها دالة الاستعادة (restore_from_telegram) عند الإقلاع القادم بعد تحديث الاستضافة
+                    await bot.pin_chat_message(chat_id=BACKUP_CHANNEL_ID, message_id=sent_msg.message_id)
+                    print("📌 [BACKUP LOG]: تم تثبيت النسخة الجديدة في القناة للاستعادة التلقائية بنجاح.")
+                except Exception as pin_err:
+                    print(f"⚠️ [BACKUP LOG]: فشل تثبيت الرسالة (قد لا يملك البوت صلاحية): {pin_err}")
+
+            # حفظ معرف الملف في الكاش لتسهيل الاستعادة الفورية إذا لزم الأمر خلال جلسة التشغيل الحالية
             if sent_msg and sent_msg.document:
                 FACTORY_GLOBAL_CACHE['last_backup_file_id'] = sent_msg.document.file_id
                 print(f"✅ [BACKUP LOG]: تم رفع الملف بنجاح. معرف الملف (File ID): {sent_msg.document.file_id[:15]}...")
 
-            logger.info("💾 تم إرسال نسخة احتياطية (ملف) إلى قناة قواعد المصنع بنجاح.")
+            logger.info("💾 تم إرسال نسخة احتياطية (ملف) وتثبيتها في قناة قواعد المصنع بنجاح.")
+            
+            # إغلاق جلسة البوت المؤقتة لتحرير الموارد
+            await bot.close()
+            
             return True
         except Exception as e:
             logger.error(f"❌ فشل في إنشاء نسخة احتياطية للقناة: {e}")
             print(f"❌ [BACKUP LOG - ERROR]: حدث خطأ أثناء الرفع: {e}")
             return False
+
 
     async def restore_from_telegram(self, manual_file_id=None):
         """البحث عن آخر ملف نسخة احتياطية وتحميله لاستبدال القاعدة المحلية مع فحص السلامة"""
