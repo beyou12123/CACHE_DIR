@@ -1188,7 +1188,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await asyncio.sleep(5)
 
                 from cache_manager import fetch_full_factory_data
-                await fetch_full_factory_data()
+                fetch_full_factory_data()
                     
             except Exception as e:
                 print(f"❌ خطأ في التهيئة: {e}")
