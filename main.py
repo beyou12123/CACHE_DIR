@@ -850,39 +850,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             await query.edit_message_text(f"❌ فشل الإرسال: {str(e)}")
 
-    # --- [ الإجراء الجديد: استعادة يدوية من القناة ] ---
-    elif data == "restore_from_channel":
-        if user_id != DEVELOPER_ID: 
-            return
-        
-        # تم تحديث النص ليعكس عملية فحص السلامة الهيكلية التي أضفناها في الدالة الأساسية
-        await query.edit_message_text("⏳ جاري البحث عن آخر نسخة في القناة، فحص سلامة الهيكل وفك التشفير...")
-        try:
-            # تنفيذ عملية الاستعادة التي تغلق الاتصال وتستبدل الملف وتفتحه مجدداً
-            success = await db_manager.restore_from_telegram()
-            
-            if success:
-                print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تحديث الكاش...")
-                
-                # --- تحديث الكاش فوراً لضمان عدم الحاجة لإعادة تشغيل السيرفر ---
-                try:
-                    from cache_manager import fetch_full_factory_data
-                    fetch_full_factory_data() 
-                    final_msg = "✅ **تمت الاستعادة بنجاح!**\nتم تحديث قاعدة البيانات وتنشيط الكاش فوراً. البوت يعمل الآن بالبيانات الجديدة."
-                except Exception as cache_err:
-                    print(f"⚠️ [RESTORE LOG]: فشل تحديث الكاش تلقائياً: {cache_err}")
-                    final_msg = "✅ **تمت الاستعادة بنجاح!**\nتم استبدال الملف، ولكن يفضل إعادة تشغيل السيرفر يدوياً لضمان تحديث الكاش."
-                
-                await query.edit_message_text(final_msg, parse_mode="Markdown")
-            else:
-                await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nلم يتم العثور على ملف صالح في القناة أو أن النسخة لم تتجاوز فحص السلامة.")
-                
-        except Exception as e:
-            # الحفاظ على هيكل عرض الخطأ الأصلي
-            await query.edit_message_text(f"❌ فشل الاستعادة: {str(e)}")
-
-
-
+  
 
     elif data == "confirm_hard_reset":
         # --- [ إضافة جديدة: حماية المطور ] ---
@@ -907,7 +875,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("❌ فشلت العملية. راجع السجلات.")
 
-    elif data == "restart_factory":
+
+
+    elif data in ["restart_factory", "run_pull_sync_manual"]:
         if user_id != DEVELOPER_ID:
             await deny_access(query, "🚫 إعادة تشغيل المصنع صلاحية حصرية للمطور.")
             return
@@ -1027,8 +997,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ فشل التمديد.")
 # ==========================================================================
 
-    # --- [ معالج زر بدء المزامنة اليدوية ] ---
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
     elif data == "start_sync_shet":
+        if user_id != DEVELOPER_ID: 
+            return
+        
+        text = (
+            "🔄 <b>مركز المزامنة اليدوية والتحكم بالسحابة:</b>\n\n"
+            "إختر نوع العملية المطلوبة للتحكم في تدفق البيانات:\n\n"
+            "📥 <b>شيت ⬅️ الرام:</b> سحب البيانات من جوجل وتحديث البوت فوراً.\n"
+            "📤 <b>الرام ⬅️ الشيت:</b> تأمين بيانات البوت الحالية ورفعها للسحابة."
+        )
+        
+        keyboard = [
+            # الزر الأول: يستدعي دالة fetch_full_factory_data (Pull)
+            [InlineKeyboardButton("📥 شيت ⬅️ الرام (تحديث البوت)", callback_data="run_pull_sync_manual")],
+            
+            # الزر الثاني: يستدعي دالة sync_factory_to_sheets_smart (Push)
+            [InlineKeyboardButton("📤 الرام ⬅️ الشيت (تأمين البيانات)", callback_data="run_push_sync_manual")],
+            
+            # زر العودة المطلوبة
+            [InlineKeyboardButton("🔙 عودة", callback_data="open_admin_dashboard")]
+        ]
+        
+        await query.edit_message_text(
+            text=text, 
+            reply_markup=InlineKeyboardMarkup(keyboard), 
+            parse_mode="HTML"
+        )
+
+
+
+
+
+    # --- [ معالج زر بدء المزامنة اليدوية ] ---
+    elif data == "run_push_sync_manual":
         # --- [ إضافة جديدة: حماية الإدارة ] ---
         if user_id not in ALL_ADMINS:
             await deny_access(query)
@@ -1040,7 +1048,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             # استدعاء دالة المزامنة الذكية التي صممناها في cache_manager
             from cache_manager import sync_factory_to_sheets_smart
-            
+
             # تشغيل المزامنة
             await sync_factory_to_sheets_smart()
             
@@ -1962,16 +1970,30 @@ async def process_admin_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # --------------------------------------------------------------------------
 
-#دالة المزامنة مع جوجل شيت
-# دالة المزامنة مع جوجل شيت
+# دالة مساعدة جديدة لضمان المزامنة الصارمة بدون حظر API
+async def pull_sync_task_wrapper():
+    """تغليف عملية المزامنة لضمان التتابع الزمني وحماية الكوتا"""
+    from sheets import get_all_active_tokens, smart_sync_check
+    try:
+        tokens = get_all_active_tokens()
+        for token in tokens:
+            # تنفيذ المزامنة لكل بوت على حدة
+            await smart_sync_check(token)
+            # فاصل زمني بسيط (2 ثانية) بين كل بوت لضمان عدم تجاوز حصة جوجل (Avoid 429)
+            await asyncio.sleep(2.5) 
+    except Exception as e:
+        print(f"⚠️ فشل في مهمة pull_sync المجدولة: {e}")
+
+# دالة المزامنة مع جوجل شيت (المصححة)
 def start_scheduler():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from sheets import sync_ad_campaign_results, push_to_google_sheets
+    
     scheduler = AsyncIOScheduler(timezone="Asia/Riyadh")
 
-    # 1. المزامنة الصامتة (Pull): تحديث الكاش المحلي من جوجل كل 15 دقيقة  
-    # لجلب أي تعديلات يدوية قمت بها في الشيت (مثل تغيير خطة بوت أو رصيد مستخدم)  
+    # 1. المزامنة الصامتة (Pull): تم استبدال الـ lambda بالدالة الجديدة pull_sync_task_wrapper
     scheduler.add_job(  
-        lambda: [smart_sync_check(token) for token in get_all_active_tokens()],   
+        pull_sync_task_wrapper,   
         'interval',   
         minutes=15,  
         id='pull_sync'  
@@ -1985,8 +2007,7 @@ def start_scheduler():
         id='ads_sync'  
     )  
 
-    # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة (Pending) لجوجل شيت فجراً  
-    # التوقيت المعتمد: 03:30 صباحاً (وقت هادئ لضمان استقرار الـ API)  
+    # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة لجوجل شيت فجراً  
     scheduler.add_job(  
         push_to_google_sheets,   
         'cron',   
@@ -1996,7 +2017,9 @@ def start_scheduler():
     )  
 
     scheduler.start()  
-    print("⏰ تم تشغيل المجدل الزمني: المزامنة الصامتة كل 15 دقيقة، والرفع الشامل 03:30 فجراً.")
+    print("⏰ تم تشغيل المجدل الزمني بنجاح: حماية الكوتا مفعلة (فاصل 2.5 ثانية بين البوتات).")
+
+    
 # --- [ القسم 1: الدوال التشغيلية (يجب أن تظل في الأعلى) ] ---
 def start_scheduler():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -2302,7 +2325,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("جاري تهيئة الهيكل...")
         print("⚙️ [MANUAL LOG]: تم طلب تهيئة الجداول المحلية فقط.")
         await query.edit_message_text("⚙️ جاري بناء الهياكل المحلية (SQLite) فقط...")
-        db_manager.sync_schema(structure, spreadsheet=None) 
+        db_manager.sync_schema(spreadsheet=ss)
         await query.message.reply_text("✅ تم إنشاء الجداول محلياً بنجاح.")
 
     elif data == "restore_last_backup":
@@ -2321,37 +2344,38 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="Markdown"
         )
 
-    elif data == "confirm_restore_yes":
+
+
+    elif data ==  ["confirm_restore_yes", "restore_from_channel"]:
         await query.answer("بدء الاستعادة...")
         print("📥 [MANUAL LOG]: تم تأكيد الاستعادة. جاري جلب الملف...")
-        # 1. إظهار رسالة بدء الاستعادة
-        await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة واستبدال البيانات المحلية.")
+        await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة.")
         
-        # 2. تنفيذ عملية الاستعادة الفعلية (التي تتضمن فحص الهيكل وإغلاق/فتح الاتصال)
+        # 1. تنفيذ الاستعادة (تحديث ملف database.db المحلي)
         success = await db_manager.restore_from_telegram()
         
-        # 3. تغيير الرسالة عند الانتهاء وتحديث الكاش فوراً
         if success:
-            print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تحديث الكاش...")
+            print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تنشيط البيانات...")
             
-            # --- التحديث الحي للكاش لضمان المزامنة بدون إعادة تشغيل السيرفر ---
             try:
-                from cache_manager import fetch_full_factory_data
-                fetch_full_factory_data() 
-                final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية وتنشيط الكاش فوراً. البوت يعمل الآن بالبيانات الجديدة."
+                # 2. التصحيح المنطقي: مسح الكاش القديم فقط
+                # سيجبر البوت على قراءة البيانات الجديدة من ملف الـ DB الذي استعدناه للتو
+                FACTORY_GLOBAL_CACHE.clear() 
+                
+                # 3. تحديث قائمة البوتات في الرام من الملف المحلي الجديد
+                # ملاحظة: لا نسحب من جوجل هنا لكي لا نمسح ما استعدناه
+                from cache_manager import db_manager
+                all_bots = await db_manager.get_all_bots()
+                FACTORY_GLOBAL_CACHE["all_bots"] = all_bots
+                
+                final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم جلب النسخة من تليجرام وتنشيطها في ذاكرة البوت فوراً."
             except Exception as cache_err:
-                print(f"⚠️ [RESTORE LOG]: فشل تحديث الكاش تلقائياً: {cache_err}")
-                final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم تحديث قاعدة البيانات المحلية بآخر نسخة، ولكن يفضل تحديث الكاش يدوياً."
+                print(f"⚠️ [RESTORE LOG]: فشل تنشيط الرام: {cache_err}")
+                final_msg = "✅ **اكتملت الاستعادة بنجاح!**\nتم تحديث الملف، يرجى إعادة تشغيل المصنع لضمان تحديث كافة القوائم."
 
             await query.edit_message_text(final_msg, parse_mode="Markdown")
         else:
-            print("❌ [MANUAL LOG]: فشلت عملية الاستعادة.")
-            await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nيرجى التحقق من وجود ملفات في القناة أو راجع سجلات السيرفر.")
-
-    elif data == "confirm_restore_no":
-        await query.answer("تم الإلغاء")
-        print("🚫 [MANUAL LOG]: تم إلغاء عملية الاستعادة من قبل المستخدم.")
-        await query.edit_message_text("❌ تم إلغاء عملية الاستعادة. يمكنك اختيار إجراء آخر من اللوحة الرئيسية.")
+            await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nتحقق من وجود نسخة مثبتة في القناة.")
 
 
 # --- [ تعديل كتلة التشغيل الخاصة بك ] ---

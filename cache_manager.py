@@ -674,11 +674,21 @@ class DataManager:
 
 
     async def restore_from_telegram(self, manual_file_id=None):
-        """البحث عن آخر ملف نسخة احتياطية وتحميله لاستبدال القاعدة المحلية مع فحص السلامة"""
+        """البحث عن آخر ملف نسخة احتياطية وتحميله لاستبدال القاعدة المحلية مع فحص السلامة وحقن الكاش"""
         try:
             from datetime import datetime
             import sqlite3
+            import json
             print(f"⏳ [RESTORE LOG]: [{datetime.now().strftime('%H:%M:%S')}] بدء عملية الاستعادة...")
+
+            # --- [ ميزة مضافة: التأكد من وجود مجلد الكاش فيزيائياً قبل البدء ] ---
+            from cache_manager import CACHE_DIR
+            if not os.path.exists(CACHE_DIR):
+                try:
+                    os.makedirs(CACHE_DIR, exist_ok=True)
+                    print(f"📁 تم إنشاء مجلد الكاش بنجاح في: {CACHE_DIR}")
+                except Exception as e:
+                    print(f"❌ خطأ في إنشاء مجلد الكاش: {e}")
 
             # محاولة جلب الملف من الرسالة المثبتة في القناة إذا لم يوجد File ID
             file_id = manual_file_id or FACTORY_GLOBAL_CACHE.get('last_backup_file_id')
@@ -721,9 +731,11 @@ class DataManager:
                     return False
 
                 # تنفيذ الاستبدال (إغلاق -> حذف القديم -> تسمية الجديد)
-                # نغلق الاتصال ونقوم بتصفير كائن الـ cursor لضمان عدم حدوث Database Locked
                 if hasattr(self, 'conn') and self.conn:
-                    try: self.conn.close()
+                    try: 
+                        self.conn.close()
+                        self.conn = None
+                        self.cursor = None
                     except: pass
                 
                 if os.path.exists(DB_PATH): os.remove(DB_PATH)
@@ -734,7 +746,24 @@ class DataManager:
                 self.conn.row_factory = sqlite3.Row
                 self.cursor = self.conn.cursor()
                 
-                print(f"✅ [RESTORE LOG]: اكتملت الاستعادة بنجاح. تم تحديث القاعدة المحلية.")
+                # --- [ ميزة مضافة: بروتوكول حقن الكاش الفوري لضمان عدم بقائه فارغاً ] ---
+                try:
+                    print("🧠 [RESTORE LOG]: جاري حقن البيانات المستعادة في الكاش العالمي...")
+                    self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                    tables = self.cursor.fetchall()
+                    
+                    for table in tables:
+                        table_name = table[0]
+                        self.cursor.execute(f"SELECT * FROM '{table_name}'")
+                        rows = self.cursor.fetchall()
+                        # تحويل الصفوف لقواميس وحقنها في هيكل FACTORY_GLOBAL_CACHE الأصلي
+                        FACTORY_GLOBAL_CACHE["data"][table_name] = [dict(r) for r in rows]
+                    
+                    print(f"✅ [RESTORE LOG]: تم حقن {len(tables)} جدول في الرام بنجاح.")
+                except Exception as inject_err:
+                    print(f"⚠️ [RESTORE LOG]: فشل حقن الكاش تلقائياً: {inject_err}")
+
+                print(f"✅ [RESTORE LOG]: اكتملت الاستعادة بنجاح. تم تحديث القاعدة المحلية والكاش.")
                 return True
 
             # في حال عدم وجود File ID، نحاول البحث في القناة بطريقة بديلة
@@ -746,6 +775,7 @@ class DataManager:
             logger.error(f"❌ فشل استعادة القاعدة من تليجرام: {e}")
             print(f"❌ [RESTORE LOG - ERROR]: حدث خطأ أثناء الاستعادة: {e}")
         return False
+
 
 
     def setup_sync_scheduler(self):
