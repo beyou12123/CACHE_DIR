@@ -425,7 +425,6 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------------------------------
 # --- المحرك الديناميكي الأوتوماتيكي المطور ---
 # --------------------------------------------------------------------------
-
 async def run_dynamic_bot(bot_token, bot_type, user_id):
     """الحل الجذري: ربط الاسم الوصفي بالملف البرمجي وتشغيل المحرك مع التحقق الفيزيائي"""
     try:
@@ -433,6 +432,8 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         import importlib
         import importlib.util
         import os
+        import sys  # تصحيح: إضافة مكتبة النظام لضمان تسجيل الموديولات
+        from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ChatMemberHandler, filters
 
         # 1. تحديد اسم الملف البرمجي الحقيقي (Mapping)
         module_file_name = None
@@ -480,6 +481,10 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         
         spec = importlib.util.spec_from_file_location(module_file_name, file_path)
         module = importlib.util.module_from_spec(spec)
+        
+        # --- [التصحيح الحرج]: تسجيل الموديول في ذاكرة النظام لمنع خطأ module not in sys.modules ---
+        sys.modules[module_file_name] = module 
+        
         spec.loader.exec_module(module)
         
         # إعادة التحميل لضمان تطبيق التعديلات البرمجية الأخيرة
@@ -530,13 +535,13 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         print(f"⚠️ [خطأ حرج]: في محرك التشغيل الديناميكي للنوع {bot_type}: {e}")
 
 
+
 # --------------------------------------------------------------------------
+#    """حفظ البيانات، تشغيل المحرك، وإرسال إشعارات النجاح بكافة اللغات والمسميات"""
 async def finalize_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """حفظ البيانات، تشغيل المحرك، وإرسال إشعارات النجاح بكافة اللغات والمسميات"""
     
-
     # 1. جلب البيانات من الذاكرة المؤقتة
-    # friendly_type_name: هو الاسم العربي الذي تم التقاطه من الزر (مثل: 🛡 حماية)
     friendly_name = context.user_data.get("bot_friendly_name", "بوت مخصص")
 
     user = update.effective_user
@@ -544,98 +549,115 @@ async def finalize_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_type = context.user_data.get("type") 
     bot_token = context.user_data.get("bot_token")
 
+    # تصحيح: التحقق من وجود التوكن قبل البدء لمنع انهيار الدالة
+    if not bot_token:
+        await update.message.reply_text("❌ حدث خطأ في البيانات، يرجى البدء من جديد.")
+        return ConversationHandler.END
+
     msg = await update.message.reply_text("⏳ جاري تهيئة المحرك ...")
 
     try:
         from telegram import Bot
-        temp_bot = Bot(bot_token)
-        
-        await temp_bot.delete_webhook(drop_pending_updates=True)
-        
-        bot_info = await temp_bot.get_me()
-        bot_username = f"@{bot_info.username}"
+        # --- [تصحيح حرج: إدارة جلسة البوت بشكل سليم لمنع أخطاء Sessions في Railway] ---
+        async with Bot(bot_token) as temp_bot:
+            
+            await temp_bot.delete_webhook(drop_pending_updates=True)
+            
+            bot_info = await temp_bot.get_me()
+            bot_username = f"@{bot_info.username}"
 
-       # from sheets import save_bot, get_total_bots_count
-        success = save_bot(user_id, bot_type, friendly_name, bot_token)
+            # تصحيح: تفعيل الاستيراد لضمان وصول الدالة للبيانات
+            from sheets import save_bot, get_total_bots_count
+            success = save_bot(user_id, bot_type, friendly_name, bot_token)
 
-        if success: 
-            asyncio.create_task(run_dynamic_bot(bot_token, bot_type, user_id))
+            if success: 
+                # تشغيل المحرك الديناميكي الذي أصلحناه سابقاً
+                asyncio.create_task(run_dynamic_bot(bot_token, bot_type, user_id))
 
-            # --- [ الرسالة الأولى: في بوت المصنع ] ---
-            user_success_text = (
-                f"<b>🎊 تمت العملية بنجاح!</b>\n\n"
-                f"لقد انتهينا من برمجة بوتك الجديد وإطلاقه.\n\n"
-                f"📛 <b>الاسم المخصص:</b> {friendly_name}\n"
-                f"🤖 <b>يوزر البوت:</b> {bot_username}\n\n"
-                f"🚀 البوت الآن جاهز للعمل!"
-            )
-            await msg.edit_text(text=user_success_text, reply_markup=get_main_menu_inline(user_id), parse_mode="HTML")
-
-            # --- [ الرسالة الثانية: داخل البوت الجديد ] ---
-            factory_info = await context.bot.get_me()
-            congrats_text = (
-                f"<b>🎈 أهلاً بك في عالمك الخاص!</b>\n\n"
-                f"لقد تم ربط هذا البوت بنجاح بمصنع البوتات وقاعدة البيانات.\n\n"
-                f"📛 <b>الاسم:</b> {friendly_name}\n"
-                f"⚙️ <b>الحالة:</b> مرتبط وجاهز للعمل\n"
-                f"-----------------------\n"
-                f"تم الإنشاء بواسطة: @{factory_info.username}"
-            )
-            try:
-                await temp_bot.send_message(chat_id=user_id, text=congrats_text, parse_mode="HTML")
+                # --- [ الرسالة الأولى: في بوت المصنع ] ---
+                user_success_text = (
+                    f"<b>🎊 تمت العملية بنجاح!</b>\n\n"
+                    f"لقد انتهينا من برمجة بوتك الجديد وإطلاقه.\n\n"
+                    f"📛 <b>الاسم المخصص:</b> {friendly_name}\n"
+                    f"🤖 <b>يوزر البوت:</b> {bot_username}\n\n"
+                    f"🚀 البوت الآن جاهز للعمل!"
+                )
                 
-                # إرسال الدليل فقط إذا كان النوع منصة تعليمية
-                if bot_type == "education_bot":
-                    # تصحيح: استخدام النص المعرف مباشرة أو استيراده بشكل صحيح
-                    setup_guide_text = (
-                        "🚀 <b>الدليل الشامل لتهيئة منصتك التعليمية</b>\n"
-                        "━━━━━━━━━━━━━━━━━━\n"
-                        "مرحباً بك يا دكتور! لضمان عمل المنصة بكفاءة واستقرار، يرجى اتباع الخطوات التالية بالترتيب الموصى به:\n\n"
-                        "1️⃣ <b>تنشيط نبض النظام (المزامنة):</b>\n"
-                        "بدايةً، قم بالضغط على زر <b>(🛠 الإعدادات العامة وتجهيز النظام)</b>، ثم <b>(🔄 المزامنة)</b>.\n\n"
-                        "2️⃣ <b>ضبط الهوية الذكية (AI):</b>\n"
-                        "انتقل إلى <b>(🤖 ضبط الـ AI)</b> لتعريف اسم منشأتك ووضع التعليمات.\n\n"
-                        "3️⃣ <b>تأسيس الفروع الإدارية:</b>\n"
-                        "توجه إلى <b>(إدارة الفروع)</b> وأنشئ فرعك الأول.\n\n"
-                        "4️⃣ <b>بناء الكادر التعليمي والإداري:</b>\n"
-                        "من قسم <b>(تكويد الكادر)</b>، قم بتوليد روابط انضمام.\n\n"
-                        "5️⃣ <b>هيكلة المحتوى التعليمي:</b>\n"
-                        "• أضف <b>(📁 الأقسام)</b> أولاً ثم <b>(📚 الدورات)</b>.\n\n"
-                        "6️⃣ <b>تفعيل القنوات الرسمية:</b>\n"
-                        "من <b>(تجهيز قاعدة البيانات)</b>، قم بربط آيدي القنوات.\n\n"
-                        "7️⃣ <b>الضبط المالي ونقاط الإحالة:</b>\n"
-                        "قم بضبط <b>(معلومات الدفع)</b>.\n\n"
-                        "━━━━━━━━━━━━━━━━━━\n"
-                        "💡 <i>استخدم لوحة التحكم للبدء في التهيئة الآن.</i>"
-                    )
-                    await temp_bot.send_message(chat_id=user_id, text=setup_guide_text, parse_mode="HTML")
-            except Exception as e:
-                print(f"⚠️ فشل إرسال رسائل الترحيب: {e}")
+                # تصحيح: التأكد من وجود دالة الكيبورد في النطاق الحالي
+                from main import get_main_menu_inline
+                await msg.edit_text(text=user_success_text, reply_markup=get_main_menu_inline(user_id), parse_mode="HTML")
 
-            # --- [ الرسالة الثالثة: إشعار المطور ] ---
-            total_bots = get_total_bots_count()
-            admin_notification = (
-                f"<b>🔔 إشعار تصنيع جديد</b>\n"
-                f"-----------------------\n"
-                f"👤 <b>المنشئ:</b> {user.full_name}\n"
-                f"🔗 <b>يوزر المالك:</b> @{user.username if user.username else 'لا يوجد'}\n"
-                f"🆔 <b>آيدي المالك:</b> <code>{user_id}</code>\n"
-                f"-----------------------\n"
-                f"🤖 <b>نوع البوت:</b> {friendly_name}\n"
-                f"📛 <b>الاسم:</b> {friendly_name}\n"
-                f"🎈 <b>يوزر البوت:</b> {bot_username}\n"
-                f"-----------------------\n\n"
-                f"📈 <b>إجمالي إنتاج المصنع:</b> {total_bots} بوت"
-            )
+                # --- [ الرسالة الثانية: داخل البوت الجديد ] ---
+                factory_info = await context.bot.get_me()
+                congrats_text = (
+                    f"<b>🎈 أهلاً بك في عالمك الخاص!</b>\n\n"
+                    f"لقد تم ربط هذا البوت بنجاح بمصنع البوتات وقاعدة البيانات.\n\n"
+                    f"📛 <b>الاسم:</b> {friendly_name}\n"
+                    f"⚙️ <b>الحالة:</b> مرتبط وجاهز للعمل\n"
+                    f"-----------------------\n"
+                    f"تم الإنشاء بواسطة: @{factory_info.username}"
+                )
+                
+                try:
+                    await temp_bot.send_message(chat_id=user_id, text=congrats_text, parse_mode="HTML")
+                    
+                    # إرسال الدليل فقط إذا كان النوع منصة تعليمية
+                    if bot_type == "education_bot":
+                        setup_guide_text = (
+                            "🚀 <b>الدليل الشامل لتهيئة منصتك التعليمية</b>\n"
+                            "━━━━━━━━━━━━━━━━━━\n"
+                            "مرحباً بك يا دكتور! لضمان عمل المنصة بكفاءة واستقرار، يرجى اتباع الخطوات التالية بالترتيب الموصى به:\n\n"
+                            "1️⃣ <b>تنشيط نبض النظام (المزامنة):</b>\n"
+                            "بدايةً، قم بالضغط على زر <b>(🛠 الإعدادات العامة وتجهيز النظام)</b>، ثم <b>(🔄 المزامنة)</b>.\n\n"
+                            "2️⃣ <b>ضبط الهوية الذكية (AI):</b>\n"
+                            "انتقل إلى <b>(🤖 ضبط الـ AI)</b> لتعريف اسم منشأتك ووضع التعليمات.\n\n"
+                            "3️⃣ <b>تأسيس الفروع الإدارية:</b>\n"
+                            "توجه إلى <b>(إدارة الفروع)</b> وأنشئ فرعك الأول.\n\n"
+                            "4️⃣ <b>بناء الكادر التعليمي والإداري:</b>\n"
+                            "من قسم <b>(تكويد الكادر)</b>، قم بتوليد روابط انضمام.\n\n"
+                            "5️⃣ <b>هيكلة المحتوى التعليمي:</b>\n"
+                            "• أضف <b>(📁 الأقسام)</b> أولاً ثم <b>(📚 الدورات)</b>.\n\n"
+                            "6️⃣ <b>تفعيل القنوات الرسمية:</b>\n"
+                            "من <b>(تجهيز قاعدة البيانات)</b>، قم بربط آيدي القنوات.\n\n"
+                            "7️⃣ <b>الضبط المالي ونقاط الإحالة:</b>\n"
+                            "قم بضبط <b>(معلومات الدفع)</b>.\n\n"
+                            "━━━━━━━━━━━━━━━━━━\n"
+                            "💡 <i>استخدم لوحة التحكم للبدء في التهيئة الآن.</i>"
+                        )
+                        await temp_bot.send_message(chat_id=user_id, text=setup_guide_text, parse_mode="HTML")
+                except Exception as e:
+                    print(f"⚠️ فشل إرسال رسائل الترحيب: {e}")
 
-            await context.bot.send_message(chat_id=DEVELOPER_ID, text=admin_notification, parse_mode="HTML")
+                # --- [ الرسالة الثالثة: إشعار المطور ] ---
+                total_bots = get_total_bots_count()
+                # تصحيح: استيراد DEVELOPER_ID في حال عدم وجوده عالمياً
+                from cache_manager import DEVELOPER_ID
+                admin_notification = (
+                    f"<b>🔔 إشعار تصنيع جديد</b>\n"
+                    f"-----------------------\n"
+                    f"👤 <b>المنشئ:</b> {user.full_name}\n"
+                    f"🔗 <b>يوزر المالك:</b> @{user.username if user.username else 'لا يوجد'}\n"
+                    f"🆔 <b>آيدي المالك:</b> <code>{user_id}</code>\n"
+                    f"-----------------------\n"
+                    f"🤖 <b>نوع البوت:</b> {friendly_name}\n"
+                    f"📛 <b>الاسم:</b> {friendly_name}\n"
+                    f"🎈 <b>يوزر البوت:</b> {bot_username}\n"
+                    f"-----------------------\n\n"
+                    f"📈 <b>إجمالي إنتاج المصنع:</b> {total_bots} بوت"
+                )
 
-        else:
-            await msg.edit_text("❌ حدث خطأ أثناء الحفظ.")
+                await context.bot.send_message(chat_id=DEVELOPER_ID, text=admin_notification, parse_mode="HTML")
+
+            else:
+                await msg.edit_text("❌ حدث خطأ أثناء الحفظ.")
 
     except Exception as e:
         print(f"❌ Error in finalize: {e}")
-        await msg.edit_text("⚠️ حدث تداخل بسيط أثناء التهيئة.")
+        # تصحيح: التعامل مع فشل التعديل في حال مسح الرسالة
+        try:
+            await msg.edit_text(f"⚠️ حدث تداخل بسيط أثناء التهيئة: {e}")
+        except:
+            pass
 
     context.user_data.clear()
     return ConversationHandler.END
@@ -2380,27 +2402,6 @@ if __name__ == "__main__":
                 
                 if restore_success:
                     print("✅ [RESTORE]: تمت استعادة قاعدة البيانات بنجاح قبل الإقلاع.")
-                    
-                    # إرسال رسالة السيادة والجاهزية للقناة
-                    try:
-                        ready_bot = Bot(token=token)
-                        powerful_msg = (
-                            "🔔 **إشعار السيادة والجاهزية**\n\n"
-                            "🛡️ **تم بحمد الله استعادة الحصن الحصين؛** النسخة الاحتياطية الأخيرة المودعة في قناة المصنع أصبحت الآن نبضاً للمحرك المحلي.\n\n"
-                            "⚡ **البيانات آمنة، والنظام في ذروة استقراره.**\n"
-                            "🚀 **المصنع الآن في حالة انطلاق قصوى.. لا شيء يقف أمامنا!**\n\n"
-                            "✨ _تمت العملية تلقائياً بنجاح باهر._"
-                        )
-                        await ready_bot.send_message(
-                            chat_id=BACKUP_CHANNEL_ID,
-                            text=powerful_msg,
-                            parse_mode="Markdown"
-                        )
-                        await ready_bot.close()
-                        print("📢 [NOTIFICATION]: تم إرسال بيان الجاهزية للقناة.")
-                    except Exception as e: 
-                        print(f"⚠️ [NOTIFICATION ERROR]: فشل إرسال البيان: {e}")
-                    
                     print("⏳ [WAIT]: انتظار 10 ثوانٍ لتهدئة الاتصال بطلب من تليجرام...")
                     await asyncio.sleep(10) 
                 else:

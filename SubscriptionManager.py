@@ -92,15 +92,25 @@ def _safe_limit(value):
 # ==========================================================================
 # 3. Data Access Layer (DB Layer)
 # ==========================================================================
-
 def _fetch_all_bots(limit=50, offset=0):
-    query = '''
-        SELECT "اسم البوت", "التوكن", "plan"
-        FROM "البوتات_المصنوعة"
-        LIMIT ? OFFSET ?
-    '''
-    db_manager.cursor.execute(query, (limit, offset))
-    return db_manager.cursor.fetchall()
+    """جلب سجلات البوتات من قاعدة البيانات وتحويلها لقواميس لضمان عمل الواجهة"""
+    try:
+        # التأكد من استخدام الترتيب الصارم للأعمدة كما هي في قاعدة البيانات
+        query = '''
+            SELECT * FROM "البوتات_المصنوعة"
+            LIMIT ? OFFSET ?
+        '''
+        db_manager.cursor.execute(query, (limit, offset))
+        rows = db_manager.cursor.fetchall()
+        
+        # تحويل الصفوف إلى قائمة قواميس لضمان الوصول للمفاتيح بأسماء الأعمدة (مثل 'التوكن')
+        # هذا يضمن توافق الدالة مع نظام الـ Pagination ونظام عرض الأزرار
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"❌ خطأ في تنفيذ الاستعلام _fetch_all_bots: {e}")
+        return []
+
+
 
 
 def _fetch_bot_by_token(bot_token):
@@ -137,22 +147,25 @@ def _update_bot_subscription(bot_token, params):
 # ==========================================================================
 # 4. Viewer (عرض البوتات)
 # ==========================================================================
-
 def get_all_bots_keyboard(page=0, limit=50):
     """عرض قائمة البوتات مع Pagination"""
     try:
         offset = page * limit
 
         cache_key = f"bots_page_{page}"
+        # استخدام .get لجلب البيانات من القاموس (صحيح)
         bots = FACTORY_GLOBAL_CACHE.get(cache_key)
 
         if not bots:
+            # استدعاء الدالة المساعدة لجلب البيانات من القاعدة
             bots = _fetch_all_bots(limit, offset)
-            FACTORY_GLOBAL_CACHE.set(cache_key, bots)
+            # التصحيح الحرج: استخدام الإسناد المباشر للقاموس بدلاً من .set
+            FACTORY_GLOBAL_CACHE[cache_key] = bots
 
         keyboard = []
 
         for bot in bots:
+            # الحفاظ على المفاتيح الأصلية كما هي في قاعدة البيانات
             btn_text = f"🤖 {bot['اسم البوت']} ({bot['plan']})"
             keyboard.append([
                 InlineKeyboardButton(
@@ -161,13 +174,16 @@ def get_all_bots_keyboard(page=0, limit=50):
                 )
             ])
 
-        # Navigation
+        # Navigation (نظام التنقل)
         nav = []
         if page > 0:
             nav.append(InlineKeyboardButton("⬅️ السابق", callback_data=f"bots_page_{page-1}"))
+        
+        # زر التالي يظهر دائماً حسب منطق الكود الأصلي المرسل منك
         nav.append(InlineKeyboardButton("➡️ التالي", callback_data=f"bots_page_{page+1}"))
 
-        keyboard.append(nav)
+        if nav:
+            keyboard.append(nav)
 
         keyboard.append([
             InlineKeyboardButton("🔙 عودة للوحة التحكم", callback_data="open_admin_dashboard")
@@ -176,8 +192,29 @@ def get_all_bots_keyboard(page=0, limit=50):
         return InlineKeyboardMarkup(keyboard)
 
     except Exception as e:
+        # الحفاظ على نص السجل الأصلي
         logger.error(f"❌ خطأ في جلب قائمة البوتات: {e}")
         return None
+
+# دالة مساعدة لضمان عمل الـ Pagination بشكل صحيح مع قاعدة البيانات
+def _fetch_all_bots(limit, offset):
+    """جلب سجلات البوتات من قاعدة البيانات المحلية"""
+    import sqlite3
+    from cache_manager import DB_PATH
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        # جلب البيانات مع الالتزام بالـ limit والـ offset
+        cursor.execute(f"SELECT * FROM 'البوتات_المصنوعة' LIMIT ? OFFSET ?", (limit, offset))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"❌ Error fetching bots for pagination: {e}")
+        return []
+
+
 
 
 # ==========================================================================
@@ -308,12 +345,19 @@ def get_bot_subscription_interface(bot_token):
 
     return text, InlineKeyboardMarkup(keyboard)
    
-  
- 
+  #======= دالة النسخ الاحتياطي السحابي ==========
 def export_subscriptions_backup():
     """تصدير كافة بيانات الاشتراكات بصيغة جيسون"""
     try:
+        # 1. جلب البيانات من الكاش
         all_bots = FACTORY_GLOBAL_CACHE.get("all_bots", [])
+        
+        # 2. إيقاف تصدير ملف فارغ: إذا كان الكاش فارغاً، نجلب البيانات من القاعدة فوراً
+        if not all_bots:
+            # استخدام الدالة المساعدة التي تم توحيدها لجلب كافة السجلات
+            all_bots = _fetch_all_bots(limit=1000, offset=0)
+            FACTORY_GLOBAL_CACHE["all_bots"] = all_bots
+
         backup_data = {
             "backup_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_bots": len(all_bots),
@@ -321,11 +365,13 @@ def export_subscriptions_backup():
         }
         
         for bot in all_bots:
+            # التصحيح: ربط المفاتيح بأسماء الأعمدة الحقيقية الموجودة في جدول "البوتات_المصنوعة"
+            # (التوكن، plan، expiration_date، ID المالك) لضمان استخراج البيانات فعلياً
             backup_data["subscriptions"].append({
-                "token": bot.get("توكن_البوت"),
-                "plan": bot.get("باقة_الاشتراك"),
-                "expiry": bot.get("تاريخ_انتهاء_الاشتراك"),
-                "owner_id": bot.get("ايدي_المالك")
+                "token": bot.get("التوكن"),
+                "plan": bot.get("plan"),
+                "expiry": bot.get("expiration_date"),
+                "owner_id": bot.get("ID المالك")
             })
             
         return json.dumps(backup_data, indent=4, ensure_ascii=False)
@@ -333,8 +379,9 @@ def export_subscriptions_backup():
         logger.error(f"Error creating sub backup: {e}")
         return None
 
+ 
 
-
+#=============== دالة استيراد الإشتراك للبوتات ==============
 async def import_subscriptions_from_backup(json_content):
     """استعادة الاشتراكات من نص جيسون"""
     try:
@@ -348,23 +395,28 @@ async def import_subscriptions_from_backup(json_content):
             
             if token and plan:
                 # تحديث الكاش العالمي (FACTORY_GLOBAL_CACHE)
+                # التصحيح: استخدام مفتاح "التوكن" بدلاً من "توكن_البوت" ليتطابق مع أعمدة قاعدة البيانات
                 all_bots = FACTORY_GLOBAL_CACHE.get("all_bots", [])
                 for bot in all_bots:
-                    if bot.get("توكن_البوت") == token:
-                        bot["باقة_الاشتراك"] = plan
-                        bot["تاريخ_انتهاء_الاشتراك"] = expiry
+                    if bot.get("التوكن") == token:
+                        # التصحيح: استخدام المفاتيح الأصلية (plan) و (expiration_date) كما هي في ملف SQLite
+                        bot["plan"] = plan
+                        bot["expiration_date"] = expiry
                         break
                 
-                # تحديث قاعدة البيانات الفعلية (Sheets)
-                # ملاحظة: نستخدم الدالة الأصلية لضمان المزامنة
-                await upgrade_bot_plan(token, plan, duration_days=0, override_expiry=expiry)
+                # تحديث قاعدة البيانات الفعلية (Sheets + Local DB)
+                # التصحيح: إزالة المعامل "override_expiry" من الاستدعاء لأنه غير موجود في تعريف الدالة الأصلي
+                # وذلك لمنع انهيار البرنامج بخطأ (TypeError) عند الاستيراد
+                await upgrade_bot_plan(token, plan, duration_days=0)
+                
+                # التصحيح: تمرير التوكن للدالة لضمان تحديث نسخة المزامنة لكل بوت يتم استيراده
+                update_global_version(token)
         
-        # تحديث النسخة العالمية لضمان مزامنة كافة السيرفرات
-        update_global_version()
         return True
     except Exception as e:
         logger.error(f"Error during import: {e}")
         return False
+
 
 
 

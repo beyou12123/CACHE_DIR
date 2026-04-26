@@ -431,7 +431,12 @@ def connect_to_google():
     global client, ss, users_sheet, bots_sheet, content_sheet, logs_sheet
     global stats_sheet, payments_sheet, students_db_sheet, registrations_logs_sheet
     global departments_sheet, discount_codes_sheet, coupons_sheet, courses_sheet 
-    global faq_sheet, meta_sheet, lectures_sheet
+    global faq_sheet, meta_sheet, lectures_sheet, sync_sheet, settings_sheet
+    global org_structure_sheet, ad_campaigns_sheet, staff_management_sheet, branches_sheet
+    global question_bank_sheet, auto_exams_sheet, answers_log_sheet, finance_management_sheet
+    global admin_tasks_sheet, admin_ops_log_sheet, orders_sheet, library_sheet
+    global medals_sheet, assignments_sheet, student_assignments_sheet, groups_management_sheet
+    global work_hours_log_sheet, payroll_sheet, withdrawals_log_sheet, ai_sheet
 
     config = get_config()
     if not config: return False
@@ -447,6 +452,7 @@ def connect_to_google():
             try: return ss.worksheet(name)
             except: return None
 
+        # الربط الكامل لكافة الأوراق لضمان عدم وجود خلل في المزامنة (37 ورقة)
         users_sheet = safe_get_sheet("المستخدمين")
         bots_sheet = safe_get_sheet("البوتات_المصنوعة")
         content_sheet = safe_get_sheet("إعدادات_المحتوى")
@@ -462,15 +468,36 @@ def connect_to_google():
         faq_sheet = safe_get_sheet("الأسئلة_الشائعة")
         meta_sheet = safe_get_sheet("_meta")
         lectures_sheet = safe_get_sheet("جدول_المحاضرات")
+        
+        # إضافة الأوراق المفقودة التي سببت الأخطاء في السجلات
+        sync_sheet = safe_get_sheet("نظام_المزامنة")
+        settings_sheet = safe_get_sheet("الإعدادات")
+        org_structure_sheet = safe_get_sheet("الهيكل_التنظيمي_والصلاحيات")
+        ad_campaigns_sheet = safe_get_sheet("إدارة_الحملات_الإعلانية")
+        ai_sheet = safe_get_sheet("الذكاء_الإصطناعي")
+        staff_management_sheet = safe_get_sheet("إدارة_الموظفين")
+        branches_sheet = safe_get_sheet("إدارة_الفروع")
+        question_bank_sheet = safe_get_sheet("بنك_الأسئلة")
+        auto_exams_sheet = safe_get_sheet("الاختبارات_الآلية")
+        answers_log_sheet = safe_get_sheet("سجل_الإجابات")
+        finance_management_sheet = safe_get_sheet("الإدارة_المالية")
+        admin_tasks_sheet = safe_get_sheet("المهام_الإدارية")
+        admin_ops_log_sheet = safe_get_sheet("سجل_العمليات_الإدارية")
+        orders_sheet = safe_get_sheet("الطلبات")
+        library_sheet = safe_get_sheet("المكتبة")
+        medals_sheet = safe_get_sheet("الأوسمة_والإنجازات")
+        assignments_sheet = safe_get_sheet("الواجبات")
+        student_assignments_sheet = safe_get_sheet("تنفيذ_الواجبات_من_الطلاب")
+        groups_management_sheet = safe_get_sheet("إدارة_المجموعات")
+        work_hours_log_sheet = safe_get_sheet("سجل_ساعات_العمل")
+        payroll_sheet = safe_get_sheet("كشوف_المرتبات")
+        withdrawals_log_sheet = safe_get_sheet("سجل_السحوبات")
 
         print("✅ تم الاتصال بجوجل بنجاح. الجداول بانتظار التهيئة اليدوية ⚙️")
         return ss  # تعديل: إعادة كائن الملف الحقيقي وليس القيمة True
     except Exception as e:
         print(f"❌ فشل الاتصال الأولي: {str(e)}")
         return False
-
-# تنفيذ محاولة الاتصال الفورية
-connect_to_google() 
 
 # --------------------------------------------------------------------------
 # --- [ 3. الدوال الوظيفية لبوت المصنع والطلاب ] ---
