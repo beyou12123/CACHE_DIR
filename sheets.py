@@ -533,8 +533,7 @@ def local_save_wrapper(table_name, data_list):
         print(f"❌ خطأ حرج في الحفظ المحلي (الجدول: {table_name}): {e}")
         return False
 # دالة حفط  المستخدمين النسخة المحدثة
-# أرسل التوكن الخاص بالبوت الحالي لضمان الحفظ في قاعدة البيانات
-save_user(user.id, user.username, inviter_id, bot_token=context.bot.token):
+def save_user(user.id, user.username, inviter_id, bot_token=context.bot.token):
     """
     تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 11 عموداً:
     - التعديل: إرجاع True للعضو الجديد فقط، و False للعضو الموجود مسبقاً.
