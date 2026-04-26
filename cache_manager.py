@@ -629,7 +629,14 @@ class DataManager:
                 return False
 
             bot = Bot(token=self.bot_token)
-            
+             # 1. الخطوة الذكية: إلغاء تثبيت جميع الرسائل القديمة في القناة
+            try:
+                # هذا الأمر يزيل التثبيت عن كل الرسائل السابقة لتبقى القناة نظيفة
+                await bot.unpin_all_chat_messages(chat_id=BACKUP_CHANNEL_ID)
+                print("🧹 [BACKUP LOG]: تم تنظيف القناة من أي تثبيتات سابقة.")
+            except Exception as unpin_err:
+                print(f"⚠️ [BACKUP LOG]: تنبيه أثناء تنظيف التثبيتات: {unpin_err}")
+           
             # إرسال الملف مباشرة كوثيقة لضمان عدم التقيد بعدد الحروف
             with open(DB_PATH, "rb") as db_file:
                 sent_msg = await bot.send_document(
