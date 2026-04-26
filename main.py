@@ -2340,7 +2340,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("❌ تم إلغاء عملية الاستعادة. يمكنك اختيار إجراء آخر من اللوحة الرئيسية.")
 
 
-
+#دالة الايقاف
 if __name__ == "__main__":
     import asyncio
     import logging
