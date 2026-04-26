@@ -2339,13 +2339,82 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         print("🚫 [MANUAL LOG]: تم إلغاء عملية الاستعادة من قبل المستخدم.")
         await query.edit_message_text("❌ تم إلغاء عملية الاستعادة. يمكنك اختيار إجراء آخر من اللوحة الرئيسية.")
 
-#دالة الايقاف 
+# دالة التطهير (يتم تعريفها قبل الجزء الذي أرسلته أنت)
+async def force_kill_old_sessions(token: str):
+    """دالة القتل الإجباري والصارم لأي جلسات تليجرام عالقة"""
+    from telegram import Bot
+    print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
+    temp_bot = Bot(token=token)
+    try:
+        # حذف الويب هوك ومسح الرسائل العالقة (drop_pending_updates)
+        await temp_bot.delete_webhook(drop_pending_updates=True)
+        # إغلاق الجلسة في سيرفرات تليجرام
+        await temp_bot.close()
+        await asyncio.sleep(2) 
+        print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
+    except Exception as e:
+        print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير: {e}")
+
+
+async def force_kill_old_sessions(token: str):
+    """
+    دالة القتل الإجباري والصارم: 
+    تنهي أي اتصال قديم، تحذف الـ Webhook، وتطهر الجلسة في سيرفرات تليجرام.
+    """
+    print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
+    temp_bot = Bot(token=token)
+    try:
+        # 1. حذف الـ Webhook مع مسح كافة التحديثات المعلقة إجبارياً
+        print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح الرسائل العالقة...")
+        await temp_bot.delete_webhook(drop_pending_updates=True)
+        
+        # 2. إجبار السيرفر على إغلاق الجلسة الحالية
+        # ملاحظة: دالة close() تجعل التوكن متاحاً فوراً لطلب getUpdates جديد
+        print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
+        await temp_bot.close()
+        
+        # فاصل زمني صغير لضمان معالجة السيرفر للأوامر
+        await asyncio.sleep(2)
+        print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح. الطريق آمن الآن.")
+    except Exception as e:
+        print(f"⚠️ [SLAUGHTER]: فشل جزء من التطهير (قد لا يكون هناك جلسة أصلاً): {e}")
+    finally:
+        # تأكيد الإغلاق النهائي لكائن البوت المؤقت
+        await temp_bot.shutdown()
+
+# --- [ تعديل كتلة التشغيل الخاصة بك ] ---
 if __name__ == "__main__":
     import asyncio
     import logging
-    # تشغيل المحرك الرئيسي من خلال asyncio.run لضمان استقرار الـ Loop
+    import os
+    # استيراد الدوال المطلوبة
+    from cache_manager import create_backup_to_telegram
+
+    async def final_launcher():
+        """المشغل النهائي: ينفذ بروتوكولات الحماية ثم يطلق المصنع"""
+        try:
+            # 1. جلب التوكن من البيئة
+            token = os.getenv("BOT_TOKEN")
+            
+            # 2. القتل الإجباري أولاً (لتفريغ التوكن من أي تعليق)
+            # ملاحظة: تأكد من تعريف دالة force_kill_old_sessions في الأعلى
+            await force_kill_old_sessions(token)
+            
+            # 3. أخذ نسخة احتياطية فورية قبل الإقلاع (ضمان سلامة البيانات)
+            print("💾 [STARTUP]: جاري تأمين نسخة احتياطية إلى تليجرام...")
+            await create_backup_to_telegram()
+            print("✅ [STARTUP]: تم النسخ الاحتياطي بنجاح.")
+
+            # 4. تشغيل محرك المصنع الرئيسي
+            print("🚀 [STARTUP]: انطلاق المحرك الرئيسي الآن...")
+            await main_factory_launcher()
+
+        except Exception as e:
+            print(f"🔴 خطأ حرج أثناء تسلسل الإقلاع: {e}")
+
+    # تشغيل الحلقة (Event Loop) الوحيدة للنظام بالكامل
     try:
-        asyncio.run(main_factory_launcher())
+        asyncio.run(final_launcher())
     except (KeyboardInterrupt, SystemExit):
         print("🛑 تم إيقاف المصنع يدوياً.")
     except Exception as e:
