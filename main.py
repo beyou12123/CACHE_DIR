@@ -2387,35 +2387,58 @@ if __name__ == "__main__":
     import asyncio
     import logging
     import os
-    # استيراد الدوال المطلوبة
-    from cache_manager import create_backup_to_telegram
 
-    async def final_launcher():
-        """المشغل النهائي: ينفذ بروتوكولات الحماية ثم يطلق المصنع"""
+    # 1. دالة القتل الإجباري (Force Kill)
+    async def force_kill_old_sessions(token: str):
+        """تنهي أي اتصال قديم وتغلق الجلسات العالقة في سيرفرات تليجرام"""
+        from telegram import Bot
         try:
-            # 1. جلب التوكن من البيئة
-            token = os.getenv("BOT_TOKEN")
-            
-            # 2. القتل الإجباري أولاً (لتفريغ التوكن من أي تعليق)
-            # ملاحظة: تأكد من تعريف دالة force_kill_old_sessions في الأعلى
-            await force_kill_old_sessions(token)
-            
-            # 3. أخذ نسخة احتياطية فورية قبل الإقلاع (ضمان سلامة البيانات)
-            print("💾 [STARTUP]: جاري تأمين نسخة احتياطية إلى تليجرام...")
-            await create_backup_to_telegram()
-            print("✅ [STARTUP]: تم النسخ الاحتياطي بنجاح.")
+            print("⚔️ [PURGE]: بدء عملية التطهير العرقي للنسخ القديمة...")
+            temp_bot = Bot(token=token)
+            # مسح الـ Webhook والرسائل المعلقة
+            await temp_bot.delete_webhook(drop_pending_updates=True)
+            # إغلاق الجلسة برمجياً لتحرير التوكن
+            await temp_bot.close()
+            await asyncio.sleep(2) 
+            print("✅ [PURGE]: تمت إبادة الجلسات القديمة بنجاح.")
+        except Exception as e:
+            print(f"⚠️ [PURGE]: تنبيه أثناء التطهير: {e}")
 
-            # 4. تشغيل محرك المصنع الرئيسي
-            print("🚀 [STARTUP]: انطلاق المحرك الرئيسي الآن...")
+    # 2. المشغل الاستراتيجي المطور
+    async def final_launcher():
+        """المشغل النهائي: تأمين البيانات -> تطهير البيئة -> إطلاق المحرك"""
+        try:
+            # جلب التوكن من النظام
+            token = os.getenv("BOT_TOKEN")
+            if not token:
+                print("🔴 خطأ حرج: BOT_TOKEN غير موجود!")
+                return
+
+            # --- [ الخطوة الأولى: النسخ الاحتياطي (الأولوية القصوى) ] ---
+            from cache_manager import db_manager
+            if db_manager:
+                print("💾 [PRE-STARTUP]: تأمين نسخة احتياطية كاملة إلى تليجرام أولاً...")
+                # استدعاء دالة النسخ (الملف) لضمان سلامة البيانات قبل أي إجراء
+                await db_manager.create_backup_to_telegram()
+                print("✅ [PRE-STARTUP]: تم تأمين البيانات بنجاح.")
+
+            # --- [ الخطوة الثانية: القتل الإجباري ] ---
+            # الآن بعد أن أمنا البيانات، نقوم بقتل أي نسخة قديمة عالقة
+            await force_kill_old_sessions(token)
+
+            # --- [ الخطوة الثالثة: الإقلاع الفعلي ] ---
+            print("🚀 [LAUNCH]: انطلاق المحرك الرئيسي للمصنع...")
+            from main import main_factory_launcher
             await main_factory_launcher()
 
         except Exception as e:
-            print(f"🔴 خطأ حرج أثناء تسلسل الإقلاع: {e}")
+            print(f"🔴 فشل تسلسل الإقلاع الحرج: {e}")
 
-    # تشغيل الحلقة (Event Loop) الوحيدة للنظام بالكامل
+    # 3. نقطة انطلاق البرنامج
     try:
+        # تشغيل التسلسل الموحد
         asyncio.run(final_launcher())
     except (KeyboardInterrupt, SystemExit):
         print("🛑 تم إيقاف المصنع يدوياً.")
     except Exception as e:
-        print(f"🔴 فشل المحرك الرئيسي الحرج: {e}")
+        print(f"🔴 انهيار المحرك الرئيسي: {e}")
