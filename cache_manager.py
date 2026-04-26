@@ -734,75 +734,76 @@ class DataManager:
         scheduler.start()
         logger.info("⏰ تم تفعيل مجدول المزامنة التلقائية (03:30).")
 
-    def sync_schema(self, sheets_structure, spreadsheet=None):
+    def sync_schema(self, spreadsheet=None):
         """
         المحرك الموحد (Unified Schema Engine):
-        1. يتأكد من وجود الأوراق في جوجل شيت (وإنشائها إذا نقصت).
-        2. يتأكد من مطابقة الأعمدة في جوجل شيت (ترميم الأعمدة).
-        3. ينشئ جداول SQLite مطابقة تماماً لما هو موجود في جوجل.
-        
-        التصحيح المعتمد: جعل spreadsheet اختيارياً وتوفير اتصال تلقائي إذا لم يُمرر،
-        وذلك لحل تضارب الاستدعاء من ملف main.py.
+        يقوم بمطابقة SQLite مع Google Sheets بناءً على get_sheets_structure.
+        - ينشئ الجداول الناقصة.
+        - يعدل ترتيب الأعمدة، يحذف الزائد، ويضيف الناقص في SQLite.
         """
-        from sheets import ensure_sheet_schema, connect_to_google # استيراد محلي لمنع التكرار
-        import time # التأكد من وجود المكتبة للـ sleep
+        from sheets import get_sheets_structure, ensure_sheet_schema, connect_to_google
+        import time 
         
         try:
-            # تصحيح الإزاحة للسجل لضمان عدم حدوث IndentationError
-            print(f"⏳ [SYNC LOG]: بدء مزامنة {len(sheets_structure)} جدولاً...")
+            sheets_structure = get_sheets_structure()
+            print(f"⏳ [SYNC LOG]: بدء المزامنة الهيكلية لـ {len(sheets_structure)} جدولاً...")
             
-            # إصلاح التضارب: إذا لم يتم تمرير spreadsheet، نحاول الاتصال تلقائياً
             if spreadsheet is None:
                 spreadsheet = connect_to_google()
             
-            # إذا فشل الاتصال تماماً، نكتفي بالمزامنة المحلية لضمان عدم توقف النظام
-            existing_ws = {}
-            if spreadsheet:
-                # جلب أسماء الأوراق الحالية في جوجل لتوفير طلبات الـ API
-                existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()}
+            existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()} if spreadsheet else {}
             
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
-                print(f"📝 [SYNC LOG]: جاري فحص الجدول: {name}...")
                 cols = sheet_def.get("cols", [])
-                
-                # --- [ إضافة تأخير بسيط هنا ] ---
                 time.sleep(2.2)             
                 
-                # العمليات على جوجل شيت (تتم فقط في حال وجود اتصال)
+                # أولاً: مزامنة Google Sheets
                 if spreadsheet:
-                    # --- أ: ضمان وجود الورقة في جوجل شيت ---
                     if name not in existing_ws:
                         worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
-                        logger.info(f"🆕 تم إنشاء ورقة جديدة في جوجل: {name}")
                     else:
                         worksheet = existing_ws[name]
-                    
-                    # --- ب: ضمان مطابقة الأعمدة في جوجل شيت (الترميم) ---
+                    # استدعاء الدالة المصححة بالأسفل لمزامنة الأعمدة (حذف/إضافة/ترتيب)
                     ensure_sheet_schema(worksheet, cols)
                 
-                # --- ج: ضمان مطابقة الجدول في SQLite المحلي ---
-                # نستخدم الكولومز الفعلية الآن لإنشاء الجدول محلياً (تعمل دائماً لضمان ثبات القاعدة)
-                columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
-                create_table_query = f"""
-                CREATE TABLE IF NOT EXISTS '{name}' (
-                    local_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    {columns_query},
-                    sync_status TEXT DEFAULT 'synced',
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-                self.cursor.execute(create_table_query)
+                # ثانياً: مزامنة SQLite (الحل الجذري للترتيب والعدد)
+                # فحص هل الجدول موجود؟
+                self.cursor.execute(f"PRAGMA table_info('{name}')")
+                existing_cols_info = self.cursor.fetchall()
+                
+                if not existing_cols_info:
+                    # إنشاء جدول جديد إذا لم يكن موجوداً
+                    columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
+                    create_table_query = f"CREATE TABLE IF NOT EXISTS '{name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'synced', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                    self.cursor.execute(create_table_query)
+                else:
+                    # فحص مطابقة الأعمدة (بدون الأعمدة التقنية الـ 3)
+                    existing_names = [info[1] for info in existing_cols_info if info[1] not in ['local_id', 'sync_status', 'last_updated']]
+                    
+                    if existing_names != cols:
+                        print(f"⚙️ [MIGRATION]: إعادة هيكلة الجدول '{name}' للمطابقة...")
+                        # 1. إنشاء جدول مؤقت بالهيكل الصحيح
+                        temp_name = f"{name}_temp"
+                        columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
+                        self.cursor.execute(f"CREATE TABLE '{temp_name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'synced', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                        
+                        # 2. نقل البيانات للأعمدة المشتركة فقط
+                        common_cols = [c for c in cols if c in existing_names]
+                        if common_cols:
+                            cols_str = ", ".join([f"'{c}'" for c in common_cols])
+                            self.cursor.execute(f"INSERT INTO '{temp_name}' ({cols_str}) SELECT {cols_str} FROM '{name}'")
+                        
+                        # 3. حذف القديم وتسمية الجديد
+                        self.cursor.execute(f"DROP TABLE '{name}'")
+                        self.cursor.execute(f"ALTER TABLE '{temp_name}' RENAME TO '{name}'")
             
             self.conn.commit()
-            logger.info(f"✅ اكتملت المزامنة الموحدة لـ {len(sheets_structure)} جدولاً (جوجل + محلي).")
-            print(f"✅ [SYNC LOG]: اكتملت المزامنة المحلية والسحابية بنجاح.")
+            print(f"✅ [SYNC LOG]: اكتملت المزامنة الصارمة (إضافة/حذف/ترتيب) بنجاح.")
             
         except Exception as e:
             logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
-            print(f"❌ [SYNC LOG - ERROR]: فشل المحرك الموحد: {e}")
 
-            
 
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""

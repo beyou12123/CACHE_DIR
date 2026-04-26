@@ -204,6 +204,80 @@ def ensure_sheet_structure(sheet_name, required_headers):
         print(f"❌ خطأ في التحقق من الورقة {sheet_name}: {e}")
         return False
 
+# دالة تحديث الأعمدة 
+def ensure_sheet_schema(worksheet, required_headers):
+    """
+    تحديث أعمدة الشيت مع فرض الترتيب، حذف الزائد، وإضافة الناقص.
+    تم تطويرها لضمان تنظيف الأعمدة الزائدة في الصف الأول تماماً.
+    """
+    try:
+        # 1. جلب العناوين الحالية (الصف الأول بالكامل)
+        # نستخدم [0] إذا كانت النتيجة قائمة من القوائم أو row_values مباشرة
+        existing_headers = worksheet.row_values(1)
+        
+        # 2. فحص هل الترتيب والعدد متطابق تماماً؟
+        if existing_headers != required_headers:
+            print(f"⚙️ تحديث هيكل {worksheet.title}: إعادة ترتيب وفرض الأعمدة...")
+            
+            # أ- ضمان توفر عدد أعمدة كافٍ في الشيت قبل التحديث لتجنب خطأ النطاق
+            if worksheet.col_count < len(required_headers):
+                worksheet.add_cols(len(required_headers) - worksheet.col_count)
+            
+            # ب- التحديث الصارم: نرسل المصفوفة المطلوبة كما هي
+            from sheets import safe_api_call
+            safe_api_call(worksheet.update, '1:1', [required_headers])
+            
+            # ج- معالجة الأعمدة الزائدة (الحل الجذري):
+            # إذا كان عدد الأعمدة القديمة أكبر، يجب مسح العناوين الزائدة لضمان نظافة الهيكل
+            if len(existing_headers) > len(required_headers):
+                import gspread
+                # تحديد نطاق الأعمدة الزائدة (مثلاً من العمود بعد الأخير المطلوبه إلى نهاية الأعمدة القديمة)
+                start_col = len(required_headers) + 1
+                end_col = len(existing_headers)
+                
+                # تحويل أرقام الأعمدة إلى أحرف (A, B, C...) لتحديد النطاق بدقة
+                from gspread.utils import rowcol_to_a1
+                range_start = rowcol_to_a1(1, start_col)
+                range_end = rowcol_to_a1(1, end_col)
+                cleanup_range = f"{range_start}:{range_end}"
+                
+                # مسح محتوى الخانات الزائدة في الصف الأول فقط
+                safe_api_call(worksheet.batch_clear, [cleanup_range])
+                print(f"🧹 تم تنظيف {end_col - start_col + 1} عمود زائد من {worksheet.title}")
+                
+            print(f"✅ تم فرض الهيكل الصارم في {worksheet.title}")
+            return True
+        else:
+            print(f"✔️ الورقة {worksheet.title} متطابقة هيكلياً.")
+            return True
+            
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء فرض المخطط في {worksheet.title}: {e}")
+        return False
+
+def ensure_sheet_structure(sheet_name, required_headers):
+    """
+    التحقق من وجود الورقة + فرض الهيكل الصارم (الترتيب والعدد)
+    """
+    try:
+        time.sleep(1.2) 
+        try:
+            sheet = ss.worksheet(sheet_name)
+        except:
+            sheet = ss.add_worksheet(title=sheet_name, rows="1000", cols=str(len(required_headers) + 5))
+            time.sleep(1) 
+            sheet.append_row(required_headers, value_input_option='USER_ENTERED')
+            print(f"✅ تم إنشاء الورقة: {sheet_name}")
+            return True
+
+        # استدعاء دالة الفحص الصارم للترتيب والزيادة والنقصان
+        return ensure_sheet_schema(sheet, required_headers)
+
+    except Exception as e:
+        print(f"❌ خطأ في التحقق من الورقة {sheet_name}: {e}")
+        return False
+
+
 #~~~~~~~~~~~~~~~~
 def setup_sheet_format(sheet, wrap_columns=None):
     """
@@ -282,40 +356,6 @@ def setup_sheet_format(sheet, wrap_columns=None):
 
 
 # --------------------------------------------------------------------------
-# دالة تحديث الأعمدة 
-def ensure_sheet_schema(worksheet, required_headers):
-    """
-    تحديث أعمدة الشيت مع منع التكرار الصارم.
-    """
-    try:
-        # 1. جلب العناوين الحالية
-        existing_headers = worksheet.row_values(1)
-        
-        # 2. تحديد الأعمدة الناقصة (فقط التي ليست موجودة بالفعل)
-        # نستخدم set لتحسين سرعة البحث ومنع التكرار
-        missing_headers = [h for h in required_headers if h not in existing_headers]
-        
-        if missing_headers:
-            # دمج العناوين الحالية مع الناقصة
-            new_headers = existing_headers + missing_headers
-            
-            # 3. [إجراء إضافي] التأكد من فرادة كل عنصر في القائمة النهائية
-            # هذا السطر يضمن عدم وجود أي تكرار حتى لو حدث خطأ سابق في الشيت
-            final_headers = []
-            for h in new_headers:
-                if h not in final_headers and h.strip() != "":
-                    final_headers.append(h)
-            
-            # 4. توسيع الشيت إذا لزم الأمر وتحديث الصف الأول
-            if worksheet.col_count < len(final_headers):
-                worksheet.add_cols(len(final_headers) - worksheet.col_count)
-            
-            from sheets import safe_api_call
-            safe_api_call(worksheet.update, '1:1', [final_headers])
-            print(f"✅ تم تحديث أعمدة {worksheet.title} بنجاح بدون تكرار.")
-            
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء فحص أعمدة {worksheet.title}: {e}")
 
 # --------------------------------------------------------------------------
 # دالة النظام الشامل 
@@ -540,30 +580,56 @@ ALLOWED_TABLES = {
 }
 def local_bulk_save(table_name, data_list, sync_status='pending'):
     """
-    حفظ الصفوف كاملة في المحرك المحلي مع دعم المسميات العربية.
-    تم إضافة الاقتباسات المزدوجة لاسم الجدول لضمان التوافق مع SQLite.
+    محرك الحفظ المطور: يقوم بفحص هيكل الجدول ديناميكياً وتطبيع البيانات المرسلة 
+    لتجنب خطأ (Table has X columns but Y values were supplied).
     """
     try:
-        # التحقق من صلاحية الجدول
+        # 1. التحقق من صلاحية الجدول ضمن القائمة البيضاء
         if table_name not in ALLOWED_TABLES:
-            # إذا لم يكن في القائمة، نحاول التحقق هل هو موجود في قاعدة البيانات فعلاً
             print(f"⚠️ تنبيه: الجدول {table_name} غير موجود في القائمة البيضاء.")
             return False
 
-        # تجهيز علامات الاستفهام بناءً على طول البيانات المرسلة
-        placeholders = ", ".join(["?" for _ in data_list])
-       
-        # التصحيح: وضع اسم الجدول بين "{table_name}" ليدعم الأسماء العربية والمسافات
+        # 2. فحص هيكل الجدول الفعلي في قاعدة البيانات لمعرفة عدد الأعمدة المطلوبة
+        # نستخدم PRAGMA table_info لجلب معلومات الأعمدة
+        db_manager.cursor.execute(f'PRAGMA table_info("{table_name}")')
+        table_info = db_manager.cursor.fetchall()
+        
+        if not table_info:
+            print(f"❌ خطأ: لم يتم العثور على هيكل للجدول [{table_name}] في قاعدة البيانات.")
+            return False
+
+        # 3. حساب عدد الأعمدة التي يجب ملؤها بالبيانات (باستثناء الأعمدة التلقائية)
+        # الأعمدة التلقائية في نظامك هي: local_id (الأول)، sync_status (قبل الأخير)، last_updated (الأخير)
+        # لذا عدد الأعمدة المطلوبة للبيانات الخام هو (إجمالي الأعمدة - 3)
+        expected_columns_count = len(table_info) - 3
+
+        # 4. عملية تطبيع البيانات (Normalization): 
+        # تحويل data_list إلى قائمة، ثم قصها إذا كانت أطول، أو إكمالها بقيم فارغة إذا كانت أقصر
+        final_data = list(data_list)
+        if len(final_data) > expected_columns_count:
+            final_data = final_data[:expected_columns_count]
+        elif len(final_data) < expected_columns_count:
+            final_data.extend([""] * (expected_columns_count - len(final_data)))
+
+        # 5. تجهيز الاستعلام بناءً على العدد النهائي للبيانات المطبعة
+        placeholders = ", ".join(["?" for _ in final_data])
+        
+        # الاستعلام يضع NULL للـ local_id و CURRENT_TIMESTAMP للوقت تلقائياً
         query = f'INSERT INTO "{table_name}" VALUES (NULL, {placeholders}, ?, CURRENT_TIMESTAMP)'
         
-        # التنفيذ الفوري
-        db_manager.cursor.execute(query, (*data_list, sync_status))
+        # 6. التنفيذ مع دمج حالة المزامنة (sync_status)
+        db_manager.cursor.execute(query, (*final_data, sync_status))
         db_manager.conn.commit()
+        
         return True
         
     except Exception as e:
-        print(f"❌ خطأ حفظ محلي في [{table_name}]: {e}")
+        print(f"❌ خطأ حرج في الحفظ المحلي المطور للجدول [{table_name}]: {e}")
+        # في حال حدوث خطأ "Database Locked" أو غيره، نحاول التراجع عن العمليات المعلقة
+        try: db_manager.conn.rollback()
+        except: pass
         return False
+
 #  الدالة الرئيسية لحفظ البوت نسخة محسنة
 def save_bot(owner_id, bot_type, bot_name, bot_token):
     """
@@ -971,33 +1037,32 @@ def safe_api_call(func, *args, **kwargs):
 # دالة إنشاء وتجهيز الورق - النسخة المعززة بالفواصل الزمنية
 def setup_bot_factory_database(bot_token=None):
     """
-    المحرك الشامل المطور:
-    1. ينشئ الجداول في Google Sheets و SQLite معاً بالأسماء العربية الجديدة.
-    2. يضمن تطابق الهيدرز (100%) في الطرفين.
-    3. يحافظ على كافة التنسيقات والفواصل الزمنية ونظام الـ Migration.
+    المحرك الشامل المطور (نسخة الفرض الصارم):
+    1. ينشئ ويحدث الجداول في Google Sheets و SQLite معاً.
+    2. يفرض الترتيب، يضيف الناقص، ويحذف الزائد من العناوين لضمان تطابق 100%.
+    3. يعبئ الرام (Cache) ويهيئ التنسيقات والبيانات الوصفية.
     """
     global ss, _ws_cache
     if 'ss' not in globals() or ss is None: connect_to_google()
     all_requests = []
 
-    # [إضافة حيوية]: مزامنة هيكلية قاعدة البيانات المحلية أولاً
+    # [1] مزامنة هيكلية SQLite والرام أولاً (الحل الجذري للمحرك المحلي)
     try:
-        # التأكد من استيراد المحرك المحلي
         from cache_manager import db_manager as local_db
-        print("🔗 جاري ربط الهيكل المحلي بـ SQLite لضمان المسميات العربية...")
-        # استدعاء محرك المزامنة الهيكلية (الذي ينشئ الجداول الـ 37 محلياً)
+        print("🔗 جاري ربط الهيكل المحلي بـ SQLite وفرض الترتيب الصارم...")
+        # هذا الاستدعاء سيقوم داخلياً بعمل Migration للجداول لتطابق get_sheets_structure
         local_db.sync_schema(ss)
     except Exception as e:
-        print(f"⚠️ تنبيه: فشل مزامنة الهيكل المحلي، سيتم الاعتماد على جوجل فقط مؤقتاً: {e}")
+        print(f"⚠️ تنبيه: فشل مزامنة الهيكل المحلي: {e}")
 
-    # جلب الهيكل (الذي يحتوي الآن على الأسماء العربية) وحساب عدد الأوراق الكلي
+    # جلب الهيكل المعتمد
     structures = get_sheets_structure()  
     total_sheets = len(structures)   
     
-    print(f"⚙️ بدء محرك تهيئة الجداول ({total_sheets} ورقة)...")
+    print(f"⚙️ بدء محرك تهيئة وتصحيح الجداول ({total_sheets} ورقة)...")
     time.sleep(1)  
     
-    # تحديث الكاش الخاص بأوراق العمل
+    # تحديث الكاش الخاص بأوراق العمل من جوجل
     _ws_cache = {ws.title: ws for ws in ss.worksheets()}  
 
     for config in structures:  
@@ -1005,72 +1070,39 @@ def setup_bot_factory_database(bot_token=None):
             sheet_name = config["name"]  
             headers = config["cols"]  
            
-            # 1. التحقق من وجود الورقة أو إنشاؤها (الالتزام الصارم بالمنطق الأصلي)
+            # [2] التحقق من وجود الورقة أو إنشاؤها باستخدام المحرك الصارم
+            # تم دمج ensure_sheet_structure لضمان (الوجود + الترتيب + حذف الزائد)
+            from sheets import ensure_sheet_structure, ensure_sheet_schema
+            
             if sheet_name not in _ws_cache:  
                 print(f"🆕 إنشاء ورقة جديدة: {sheet_name}")
-                # استخدام صمام الأمان safe_api_call للتعامل مع الكوتا
-                worksheet = safe_api_call(ss.add_worksheet, title=sheet_name, rows="500", cols=str(len(headers) + 2))  
+                worksheet = safe_api_call(ss.add_worksheet, title=sheet_name, rows="1000", cols=str(len(headers) + 5))  
                 _ws_cache[sheet_name] = worksheet  
                 time.sleep(1) 
                 safe_api_call(worksheet.append_row, headers)
                 time.sleep(1)
             else:  
-                print(f"🛠️ تهيئة: {sheet_name} | الحالة: موجودة")
-                worksheet = _ws_cache[sheet_name]  
+                worksheet = _ws_cache[sheet_name]
+                print(f"🛠️ فحص وتصحيح هيكل: {sheet_name}")
+                # استدعاء دالة الفحص الصارم (إضافة/حذف/ترتيب) التي صححناها سابقاً
+                ensure_sheet_schema(worksheet, headers)
 
-            # 2. نظام التنسيق التلقائي (بدون أي تبسيط)
+            # [3] نظام التنسيق التلقائي (الحفاظ على الوظيفة الأصلية كاملة)
             try:  
                 wrap_cols = [] 
                 try: 
+                    from sheets import get_wrap_columns, setup_sheet_format
                     wrap_cols = get_wrap_columns(sheet_name)
                 except: pass
                 
                 if wrap_cols:
-                    print(f"✨ جاري تطبيق نظام التفاف النص لـ: {sheet_name}")
+                    print(f"✨ تطبيق نظام التفاف النص لـ: {sheet_name}")
                     setup_sheet_format(worksheet, wrap_columns=wrap_cols)
-                    time.sleep(1.5)
+                    time.sleep(1.2)
             except Exception as e:
                 print(f"⚠️ فشل تنسيق الورقة {sheet_name}: {e}")
 
-            # 3. قراءة العناوين الحالية (الالتزام الصارم بالتوافق)
-            current_headers = worksheet.row_values(1)  
-
-            # --- [ MIGRATION SYSTEM: إضافة الأعمدة الجديدة بدون حذف القديمة ] ---
-            try:
-                # التحقق من وجود أعمدة في الهيكل الجديد غير موجودة في الشيت الحالي
-                new_columns = [col for col in headers if col not in current_headers]
-                if new_columns:
-                    print(f"🆕 اكتشاف أعمدة جديدة في {sheet_name}: {new_columns}")
-                    try:
-                        current_col_count = len(current_headers)
-                    except: current_col_count = 0
-
-                    # إضافة الأعمدة المطلوبة في جوجل شيت
-                    safe_api_call(worksheet.add_cols, len(new_columns))
-                    time.sleep(1)
-                    
-                    # تحديث صف العناوين
-                    refreshed_headers = worksheet.row_values(1) if worksheet.row_values(1) else current_headers
-                    updated_headers = refreshed_headers + new_columns
-                    
-                    safe_api_call(worksheet.update, '1:1', [updated_headers])
-                    print(f"✅ تمت إضافة الأعمدة الجديدة في {sheet_name}")
-                    time.sleep(1)
-                    current_headers = updated_headers
-            except Exception as e:
-                print(f"❌ خطأ في نظام Migration داخل {sheet_name}: {e}")
-
-            time.sleep(1.1) 
-
-            # 4. تطبيق نظام STRICT_SCHEMA (حماية الهيكل من التغيير العشوائي)
-            if set(current_headers) != set(headers):  
-                # إذا كان المفتاح العالمي STRICT_SCHEMA مفعلاً، يتم فرض الهيكل الجديد
-                if globals().get('STRICT_SCHEMA', True):  
-                    print(f"🛡️ نظام STRICT_SCHEMA: تحديث عناوين {sheet_name} للمطابقة الكاملة")
-                    safe_api_call(worksheet.update, '1:1', [headers])  
-                    time.sleep(1.5)
-
-            # 5. بناء طلبات التنسيق الجماعي (Batch Update) - تلوين الهيدرز وتجميد الصف الأول
+            # [4] بناء طلبات التنسيق الجماعي (Batch Update) - تلوين وتجميد
             sheet_id = worksheet.id  
             all_requests.extend([  
                 {
@@ -1094,40 +1126,44 @@ def setup_bot_factory_database(bot_token=None):
                 }  
             ])  
 
-            time.sleep(1.5) # تقليل الفاصل قليلاً لتسريع العملية مع الحفاظ على الأمان
+            time.sleep(0.8) # فاصل زمني آمن
 
         except Exception as e:   
             print(f"❌ خطأ تهيئة {sheet_name}: {e}")  
-            time.sleep(2) 
+            time.sleep(1.5) 
 
-    # 6. دفع التحديثات الجماعية (Batch Update) لتقليل عدد الطلبات
+    # [5] دفع التحديثات الجماعية للتنسيق
     if all_requests:  
-        print(f"🚀 جاري دفع التحديثات الجماعية للتنسيق (Batch Update)...")
-        # استخدام حجم الدفعة المحدد BATCH_SIZE (افتراضياً 10)
+        print(f"🚀 دفع التحديثات الجماعية للتنسيق...")
         batch_size = globals().get('BATCH_SIZE', 10)
         for i in range(0, len(all_requests), batch_size):  
             try:
                 safe_api_call(ss.batch_update, {"requests": all_requests[i:i+batch_size]})  
-                time.sleep(2.5)
+                time.sleep(2)
             except: pass
 
-    # 7. زرع الإعدادات وتحديث الميتا (الالتزام الصارم بالبيانات الوصفية)
+    # [6] زرع الإعدادات وتحديث الميتا (حسب المنطق الأصلي)
     if bot_token:  
-        print(f"🌱 زرع الإعدادات الافتراضية للبوت الرئيسي...")
-        seed_default_settings(bot_token)  
-        time.sleep(1.2)  
+        try:
+            from sheets import seed_default_settings
+            print(f"🌱 زرع الإعدادات الافتراضية للبوت...")
+            seed_default_settings(bot_token)  
+            time.sleep(1)
+        except: pass
 
-    print(f"📊 تحديث ورقة البيانات الوصفية (Meta Info)...")
-    update_meta_info()  
-    time.sleep(2)  
+    try:
+        from sheets import update_meta_info, verify_setup
+        print(f"📊 تحديث الميتا والتحقق النهائي...")
+        update_meta_info()  
+        time.sleep(1.5)  
 
-    # التحقق النهائي من صحة الهيكل
-    if verify_setup(structures):  
-        print(f"🎊 اكتملت تهيئة كافة الجداول ({total_sheets} ورقة) بنجاح باهر!")
-        return total_sheets  
+        if verify_setup(structures):  
+            print(f"🎊 اكتملت المزامنة والتهيئة لـ {total_sheets} ورقة (سحابي/محلي/رام)!")
+            return total_sheets  
+    except: pass
     
-    print(f"⚠️ فشل التحقق النهائي من التهيئة!")
     return 0
+
 
 def verify_setup(bot_token):
     """
