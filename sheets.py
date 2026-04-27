@@ -793,6 +793,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         print(f"❌ خطأ حرج في دالة التأسيس المطورة: {e}")
         return False
 
+    
 
 
 # --------------------------------------------------------------------------
@@ -996,7 +997,6 @@ def get_total_factory_users():
         print(f"❌ خطأ حساب إجمالي المستخدمين محلياً: {e}")
         return 0
 
-# --- الدوال التي طلبت بقاء قيمها كما هي (بدون تغيير مفاتيح أو تبسيط) ---
 
 def get_bot_users_count(bot_token):
     """

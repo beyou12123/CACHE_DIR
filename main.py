@@ -61,7 +61,7 @@ from startbot import (
     is_bot_running,
     mark_bot_running,
     mark_bot_stopped,
-    ensure_all_sheets_schema,
+    
     
     # --- دوال التشغيل والمحركات الفرعية ---
     start_all_sub_bots,
