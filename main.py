@@ -2313,7 +2313,7 @@ async def main_factory_launcher():
         
         # معالجات المستندات الإضافية
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
-        app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
+        app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=-1)
         
         # معالج النصوص العامة
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
