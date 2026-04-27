@@ -215,13 +215,13 @@ async def config_input_receiver(update, context):
     """
     user_data = context.user_data
     text = update.message.text
-    # جلب توكن البوت المستهدف أو استخدام التوكن الحالي
-    target_bot_id = user_data.get('target_bot_id') or context.bot.token
+    # جلب توكن البوت المستهدف أو استخدام التوكن الحالي (ضمان تحويله لنص)
+    target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
 
     # [PATCH]: معالجة حالة استقبال اسم المؤسسة (عند الإقلاع الأول)
     if user_data.get('action') == 'awaiting_institution_name':
         # 1. ضمان وجود صف للبوت في قاعدة البيانات قبل التحديث (INSERT if not exists)
-        from sheets import ensure_bot_sync_row
+        from sheets import ensure_bot_sync_row, update_content_setting
         ensure_bot_sync_row(target_bot_id)
         
         # 2. استدعاء دالة التحديث للعمود رقم 20 (اسم_المؤسسة)
@@ -242,10 +242,10 @@ async def config_input_receiver(update, context):
         col_name = user_data['waiting_for_config']
         label = user_data['config_label']
         new_value = text
-        target_bot_id = user_data.get('target_bot_id') or context.bot.token
+        target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
 
         # ضمان وجود الصف قبل التحديث لمنع فشل الـ UPDATE
-        from sheets import ensure_bot_sync_row
+        from sheets import ensure_bot_sync_row, update_content_setting
         ensure_bot_sync_row(target_bot_id)
 
         # استدعاء دالة التحديث المعتمدة
