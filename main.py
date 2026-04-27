@@ -1083,56 +1083,87 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await download_bot_cache(update, context)
         
     elif data == "start_restore_request":
-        # --- [ إضافة جديدة: حماية المطور ] ---
+        # 1. حماية المطور (صحيحة)
         if user_id != DEVELOPER_ID:
             await deny_access(query, "📥 نظام الاستعادة متاح للمطور فقط.")
             return
 
+        # 2. السطر الجوهري (المفقود عندك): تفعيل حالة الانتظار
+        # بدون هذا السطر، لن تعمل دالة handle_document التي صممناها
+        context.user_data['action'] = 'awaiting_json_backup'
+
         await query.answer()
-        await query.edit_message_text("📥 <b>نظام الاستعادة:</b>\nيرجى إرسال ملف النسخة الاحتياطية (.json) الآن.", parse_mode="HTML")
+        await query.edit_message_text(
+            "📥 <b>نظام الاستعادة (المحرك المطور):</b>\n"
+            "━━━━━━━━━━━━━━\n"
+            "يرجى إرسال ملف النسخة الاحتياطية المشفر <code>.json</code> الآن.\n\n"
+            "⚠️ <b>ملاحظة:</b> سيتم فك التشفير وتحديث الـ 37 ورقة فوراً.", 
+            parse_mode="HTML"
+        )
+
         
     # استعادة النسخة - القرار النهائي
     elif data == "confirm_restore":
-        # --- [ إضافة جديدة: حماية المطور ] ---
-        if user_id != DEVELOPER_ID:
+        # --- [ حماية المطور ] ---
+        if str(user_id) != str(DEVELOPER_ID):
+            await query.answer("🚫 غير مصرح لك.", show_alert=True)
             return
 
+        # جلب محتوى الملف الذي تم تخزينه مؤقتاً عند استلامه في handle_document
         content = context.user_data.get('pending_restore_content')
         if not content:
             await query.edit_message_text("❌ انتهت صلاحية الجلسة أو الملف غير موجود، يرجى المحاولة مجدداً.")
             return
 
-        # إظهار رسالة بدء العمليات
-        await query.edit_message_text("⏳ <b>المرحلة 1:</b> جاري تحديث بيانات السيرفر المحلي وفك التشفير...", parse_mode="HTML")
+        await query.answer("جاري بدء الاستعادة الشاملة...")
+        
+        # إظهار رسالة بدء العمليات (المرحلة 1)
+        await query.edit_message_text("⏳ <b>المرحلة 1:</b> جاري فك التشفير Base64 وتحديث الذاكرة المحلية...", parse_mode="HTML")
         
         from cache_manager import process_restore_logic
         
-        # بدء التنفيذ المتسلسل للمحرك المرن (يعمل مع المصنع الشامل أو البوت الفرعي)
-        if await process_restore_logic(content, user_id):
-            # المرحلة 2: تحديث السحابة (تتم داخل الدالة ولكن نظهرها هنا للتوضيح كما في كودك)
-            await query.edit_message_text("📡 <b>المرحلة 2:</b> نجح تحديث السيرفر، جاري الآن مزامنة التحديث مع Google Sheets...", parse_mode="HTML")
-            
-            await asyncio.sleep(2) # محاكاة المزامنة لضمان استقرار الرسائل للمستخدم
-            
-            # الرسالة النهائية للنجاح
-            await query.edit_message_text("🎊 <b>تمت الاستعادة والمزامنة بنجاح!</b>\nتم تحديث قاعدة البيانات بالكامل حسب صلاحياتك.", parse_mode="HTML")
-        else:
-            # في حال فشل المحرك في فك التشفير أو الوصول للأوراق
-            await query.edit_message_text("❌ فشلت عملية الاستعادة. الملف قد يكون تالفاً أو لا يخص هذا المصنع.")
+        # تنفيذ المحرك المطور (يتعامل مع الـ 37 ورقة والـ 41 عموداً)
+        success = await process_restore_logic(content, user_id)
         
-        # تنظيف الذاكرة المؤقتة بعد الانتهاء
+        if success:
+            # المرحلة 2: محاكاة بصرية للمستخدم (المزامنة الفعلية تمت داخل الدالة)
+            await query.edit_message_text("📡 <b>المرحلة 2:</b> نجح تحديث السيرفر، جاري تأكيد مزامنة الـ 37 ورقة مع Google Sheets...", parse_mode="HTML")
+            
+            import asyncio
+            await asyncio.sleep(2) 
+            
+            # الرسالة النهائية للنجاح (كما في كودك الأصلي)
+            await query.edit_message_text(
+                "🎊 <b>تمت الاستعادة والمزامنة بنجاح!</b>\n"
+                "━━━━━━━━━━━━━━\n"
+                "✅ تم تحديث Google Sheets.\n"
+                "✅ تم شحن كاش الرام.\n"
+                "✅ تم تحديث مرآة القرص.", 
+                parse_mode="HTML"
+            )
+        else:
+            # في حال فشل المحرك (خطأ في التشفير أو الأوراق)
+            await query.edit_message_text("❌ فشلت عملية الاستعادة. الملف قد يكون تالفاً أو هناك خلل في الاتصال بجوجل شيت.")
+        
+        # تنظيف الذاكرة المؤقتة لضمان أمن البيانات
         context.user_data.pop('pending_restore_content', None)
+        context.user_data['action'] = None
 
     elif data == "cancel_restore":
         context.user_data.pop('pending_restore_content', None)
-        await query.edit_message_text("❌ تم إلغاء عملية الاستعادة بنجاح.")
+        context.user_data['action'] = None
+        await query.answer("تم الإلغاء")
+        await query.edit_message_text("❌ تم إلغاء عملية الاستعادة ومسح الملف المؤقت بنجاح.")
 
     elif data == "back_to_main":
+        context.user_data['action'] = None # تصفير أي أكشن معلق عند العودة
         await query.answer()
         await query.edit_message_text(
-            "✨ أهلاً بك في مصنع البوتات المتطور 🤖\n\nاختر ما تريد القيام به:",parse_mode="HTML", 
+            "✨ أهلاً بك في مصنع البوتات المتطور 🤖\n\nاختر ما تريد القيام به:",
+            parse_mode="HTML", 
             reply_markup=get_main_menu_inline(user_id)
         )
+
         
     elif data == "open_admin_panel":
         await query.answer()
@@ -1743,34 +1774,63 @@ async def process_file_decision(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    مستلم المستندات: يقوم بالتقاط ملف النسخة الاحتياطية وتجهيزه للتأكيد اليدوي
+    """
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from sheets import DEVELOPER_ID
+
     user_id = update.effective_user.id
     action = context.user_data.get('action')
     doc = update.message.document
 
-    # ركز هنا: يجب أن يتطابق المفتاح مع ما يرسله زر الاستعادة
+    # 1. طباعة فحص فوري في السجلات للتأكد من التقاط البوت للملف
+    print(f"📂 [DOCUMENT]: استلمت ملف '{doc.file_name}' من المستخدم {user_id} (الأكشن: {action})")
+
+    # 2. التحقق من تطابق الأكشن وصيغة الملف (JSON)
     if action == 'awaiting_json_backup' and doc.file_name.endswith('.json'):
-        from cache_manager import process_restore_logic
         
-        status_msg = await update.message.reply_text("⏳ جاري فك التشفير ومزامنة الـ 37 ورقة مع السحابة...")
-        
-        # تحميل الملف
-        file = await context.bot.get_file(doc.file_id)
-        content = await file.download_as_bytearray()
-        
-        # استدعاء المحرك المطور الذي يطبع كل حركة
-        success = await process_restore_logic(content, user_id)
-        
-        if success:
+        # حماية إضافية: التأكد من أن المرسل هو المطور فقط
+        if str(user_id) != str(DEVELOPER_ID):
+            print(f"⚠️ [WARN]: محاولة استعادة من مستخدم غير مصرح له: {user_id}")
+            return
+
+        try:
+            # إشعار المطور باستلام الملف
+            status_msg = await update.message.reply_text("📥 جاري قراءة الملف وتجهيزه للاستعادة...")
+
+            # تحميل الملف وتحويله إلى Bytearray لتخزينه مؤقتاً في الرام
+            file_obj = await context.bot.get_file(doc.file_id)
+            file_content = await file_obj.download_as_bytearray()
+
+            # --- [ الخطوة الجوهرية ] ---
+            # تخزين محتوى الملف في user_data لاستخدامه عند ضغط زر "تأكيد"
+            context.user_data['pending_restore_content'] = file_content
+            
+            # بناء لوحة أزرار التأكيد
+            keyboard = [
+                [InlineKeyboardButton("✅ تأكيد الاستعادة الآن", callback_data="confirm_restore")],
+                [InlineKeyboardButton("❌ إلغاء العملية", callback_data="cancel_restore")]
+            ]
+            
             await status_msg.edit_text(
-                "✅ <b>تمت الاستعادة الشاملة بنجاح!</b>\n\n"
-                "📊 تم تحديث الرام وجوجل شيت.\n"
-                "🔄 النظام الآن يعمل بكامل بياناته القديمة.",
-                parse_mode="HTML"
+                f"📦 <b>تم استلام النسخة الاحتياطية بنجاح!</b>\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"📄 اسم الملف: <code>{doc.file_name}</code>\n"
+                f"📊 الحجم: {round(doc.file_size / 1024, 2)} KB\n\n"
+                f"⚠️ <b>تنبيه:</b> عند الضغط على تأكيد، سيتم استبدال بيانات الـ 37 ورقة في السحاب والرام فوراً.\n\n"
+                f"هل تود المتابعة؟",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-        else:
-            await status_msg.edit_text("❌ فشلت العملية. راجع سجلات السيرفر لمعرفة الورقة التي سببت الخطأ.")
-        
-        context.user_data['action'] = None
+            
+            # لا نصفر الأكشن هنا لأننا ننتظر ضغطة الزر
+            print(f"✅ [SUCCESS]: الملف جاهز بانتظار التأكيد اليدوي من المطور.")
+
+        except Exception as e:
+            print(f"❌ [ERROR]: خطأ أثناء تحميل الملف: {e}")
+            await update.message.reply_text(f"❌ حدث خطأ فني أثناء قراءة الملف: {e}")
+            context.user_data['action'] = None
 
 
 
