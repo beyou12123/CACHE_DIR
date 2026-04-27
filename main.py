@@ -961,22 +961,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
     # 3. تنفيذ عملية الترقية (يدعم المدة الزمنية التراكمية)
-    # 3. تنفيذ عملية الترقية (يدعم المدة الزمنية التراكمية)
     elif data.startswith("exec_sub_"):
         # تنسيق الداتا الجديد: exec_sub_TOKEN_PLAN_DAYS
         parts = data.split("_")
-        if len(parts) < 4: return
+        if len(parts) < 5: return # تم تعديل التحقق ليتناسب مع عدد الأجزاء (exec, sub, token, plan, days)
         
         target_token = parts[2]
         target_plan = parts[3]
         target_days = int(parts[4]) if len(parts) > 4 else 30
 
-        from SubscriptionManager import upgrade_bot_plan
+        from SubscriptionManager import upgrade_bot_plan, _fetch_bot_by_token
         
         await query.edit_message_text(f"⏳ جاري تنفيذ الترقية لباقة {target_plan} لمدة {target_days} يوم...")
         
         # تنفيذ الترقية الفعلية والتحقق من النتيجة
         if await upgrade_bot_plan(target_token, target_plan, duration_days=target_days):
+            # --- ميزة إخطار صاحب البوت (بدون تغيير في منطق الترقية) ---
+            bot_info = _fetch_bot_by_token(target_token)
+            if bot_info and bot_info.get("ID المالك"):
+                try:
+                    owner_id = bot_info["ID المالك"]
+                    notification_text = (
+                        f"🎉 تهانينا! تم تحديث اشتراك بوتك: **{bot_info['اسم البوت']}**\n"
+                        f"📊 الباقة الجديدة: **{target_plan.upper()}**\n"
+                        f"⏳ المدة المضافة: **{target_days} يوم**\n\n"
+                        f"✨ يمكنك الآن الاستمتاع بكافة المميزات الجديدة."
+                    )
+                    await context.bot.send_message(chat_id=owner_id, text=notification_text, parse_mode="Markdown")
+                except Exception as e:
+                    print(f"⚠️ Could not notify owner: {e}")
+            # -------------------------------------------------------
+            
             await query.edit_message_text(
                 f"✅ تم تحديث اشتراك البوت بنجاح!\n"
                 f"📦 الباقة: **{target_plan}**\n"
@@ -997,9 +1012,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"⏳ جاري تمديد باقة {current_plan} لمدة 30 يوم إضافية...")
             
             if await upgrade_bot_plan(target_token, current_plan, duration_days=30):
+                # --- إخطار صاحب البوت بالتمديد ---
+                if bot_data.get("ID المالك"):
+                    try:
+                        owner_id = bot_data["ID المالك"]
+                        ext_text = (
+                            f"✅ تم تمديد اشتراك بوتك: **{bot_data['اسم البوت']}**\n"
+                            f"🗓️ المدة المضافة: **30 يوم إضافي**\n"
+                            f"📊 الباقة الحالية: **{current_plan}**"
+                        )
+                        await context.bot.send_message(chat_id=owner_id, text=ext_text, parse_mode="Markdown")
+                    except Exception as e:
+                        print(f"⚠️ Could not notify owner about extension: {e}")
+                # ----------------------------------
+                
                 await query.edit_message_text(f"✅ تم تمديد باقة **{current_plan}** بنجاح لمدة شهر إضافي!")
             else:
                 await query.edit_message_text("❌ فشل التمديد.")
+
 # ==========================================================================
 
 
@@ -2362,7 +2392,7 @@ async def main_factory_launcher():
         
         app.add_handler(CallbackQueryHandler(
             button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|run_push_sync_manual|run_pull_sync_manual|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
         ))        
         
         # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد

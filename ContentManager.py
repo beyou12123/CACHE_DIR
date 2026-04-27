@@ -101,10 +101,36 @@ def get_setting_interface(bot_id, callback_data):
 async def content_management_handler(update, context):
     """
     المعالج المركزي لجميع عمليات إعدادات المحتوى.
+    تم إضافة دعم إدارة الأقسام التعليمية مع الحفاظ على كامل هيكل الكود الأصلي.
     """
     query = update.callback_query
     data = query.data
     target_bot_id = context.user_data.get('target_bot_id')
+
+    # --- الجزء المضاف لمعالجة إدارة الأقسام ---
+    if data == "manage_cats":
+        await query.answer()
+        keyboard = [
+            [InlineKeyboardButton("➕ إضافة قسم جديد", callback_data="add_new_cat")],
+            [InlineKeyboardButton("🔙 العودة للوحة التحكم", callback_data="back_to_config_main")]
+        ]
+        await query.message.edit_text(
+            "🗂 **إدارة الأقسام التعليمية**\n\nيمكنك من هنا إضافة أقسام جديدة لتصنيف الدورات التدريبية.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+        return
+
+    if data == "add_new_cat":
+        await query.answer()
+        context.user_data['waiting_for_config'] = "ADD_NEW_CATEGORY_ACTION"
+        await query.message.edit_text(
+            "📝 **إضافة قسم جديد**\n\nالرجاء إرسال اسم القسم الجديد الآن (مثلاً: قسم البرمجة):",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ إلغاء", callback_data="manage_cats")]]),
+            parse_mode="Markdown"
+        )
+        return
+    # ---------------------------------------
 
     if data == "back_to_config_main":
         await query.message.edit_text(
@@ -137,6 +163,7 @@ async def content_management_handler(update, context):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ إلغاء", callback_data=setting_key)]]),
                 parse_mode="Markdown"
             )
+
 
 # ==========================================================================
 async def config_input_receiver(update, context):
