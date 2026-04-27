@@ -2093,8 +2093,7 @@ async def main_factory_launcher():
         
         # الحفاظ على الجلسة حية
         from telegram.ext import Application
-        await asyncio.Event().wait()
-
+        while True:
             await asyncio.sleep(3600)
 
     except Exception as e:
