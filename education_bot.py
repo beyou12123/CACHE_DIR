@@ -95,7 +95,8 @@ from sheets import (
     update_withdrawal_status,
     create_withdrawal_request,
     get_system_time, 
-    get_courses_knowledge_base
+    get_courses_knowledge_base, 
+    delete_branch_db
 )
 # --- [ استيرادات الموديلات الأخرى ] ---
 import educational_manager
@@ -1242,7 +1243,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
     # عودة الموظف
     elif data == "get_employee_panel":
-        text = f"<b>{current_msg}</b>\n\n👨‍🏫 <b>قسم الشؤون التعليمية:</b> ابدأ الإدارة الآن."
+        text = "👨‍🏫 <b>قسم الشؤون التعليمية:</b> ابدأ الإدارة الآن." 
         await query.edit_message_text(text, reply_markup=get_employee_panel(), parse_mode="HTML")
 
     # عودة المدرب
@@ -2629,65 +2630,31 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 # --------------------------------------------------------------------------
 
     # معالج تصدير النسخة الاحتياطية بصيغة JSON
+
+#معلج النسخ الاحتياطي
     elif data == "export_data_json":
-        import json
-        import io
-        from cache_manager import FACTORY_GLOBAL_CACHE
-        
-        current_token = str(context.bot.token)
-        await query.message.reply_text("⏳ جاري فحص  البيانات وتجميع النسخة الاحتياطية...")
-        
-        backup_data = {}
-        all_cache = FACTORY_GLOBAL_CACHE.get("data", {})
-        
-        for sheet_name, records in all_cache.items():
-            if not records: continue
-            
-            # منطق الفلترة الذكي:
-            # إذا كان الجدول يحتوي على عمود bot_id نفلتر بحسبه
-            if "bot_id" in records[0]:
-                bot_records = [r for r in records if str(r.get("bot_id")) == current_token]
-            else:
-                # إذا لم يوجد bot_id (مثل جدول المستخدمين العام في المصنع) 
-                # سنأخذ كافة البيانات حالياً أو يمكنك تخصيصها
-                bot_records = records 
-            
-            if bot_records:
-                backup_data[sheet_name] = bot_records
-        
-        if not backup_data:
-            await query.message.reply_text("⚠️ لم يتم العثور على أي سجلات مطابقة لتوكن هذا البوت.")
-            return
-
+        from cache_manager import download_mirror_files
         try:
-            # تحويل البيانات لملف
-            json_file = io.BytesIO(json.dumps(backup_data, indent=4, ensure_ascii=False).encode('utf-8'))
-            json_file.name = f"Backup_Full_{get_system_time('date')}.json"
-            
-            await context.bot.send_document(
-                chat_id=query.message.chat_id,
-                document=json_file,
-                caption=(
-                    f"✅ **اكتمل تجميع النسخة الاحتياطية**\n\n"
-                    f"📦 عدد الجداول المضمنة: {len(backup_data)}\n"
-                    f"📅 التوقيت: {get_system_time('full')}\n"
-                    f"🔑 معرف البوت: `{current_token[:10]}...`"
-                ),
-                parse_mode="Markdown"
-            )
+            await download_mirror_files(context.bot, update.effective_user.id)
         except Exception as e:
-            await query.message.reply_text(f"❌ خطأ فني أثناء إنشاء الملف: {e}")
-
+            print(f"❌ خطأ أثناء تنفيذ عملية التصدير المركزية: {e}")
+            await query.message.reply_text("⚠️ حدث خطأ فني أثناء تجميع النسخة الاحتياطية.")
 
     # معالج استيراد البيانات (تفعيل حالة الانتظار)
     elif data == "import_data_json":
+        # تفعيل حالة الانتظار لاستقبال المستند
         context.user_data['action'] = 'awaiting_json_backup'
-        await query.edit_message_text("📥 **نظام الاستيراد الذكي:**\nمن فضلك أرسل ملف النسخة الاحتياطية بصيغة `.json` الآن.")
-
-
-
-
-
+        
+        text = (
+            "📥 <b>نظام الاستيراد الذكي (النسخة الآمنة):</b>\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚠️ <b>تنبيهات هامة:</b>\n"
+            "1️⃣ يرجى رفع ملف الـ JSON المشفر الذي استخرجته سابقاً.\n"
+            "2️⃣ سيتم دمج البيانات مع الجداول الحالية ورفعها للسحاب آلياً.\n"
+            "3️⃣ قد تستغرق العملية ثوانٍ بناءً على حجم البيانات.\n\n"
+            "👇 <b>من فضلك أرسل الملف الآن:</b>"
+        )
+        await query.edit_message_text(text, parse_mode="HTML")
 
 
 # --------------------------------------------------------------------------
@@ -2947,30 +2914,36 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
 
 #>>>>>>>>>>>>>>>>
     # معالجة المستندات (التي تحتوي على ملف النسخة الاحتياطية)
+    # معالجة المستندات (التي تحتوي على ملف النسخة الاحتياطية المشفرة)
     if update.message.document:
         doc = update.message.document
-        # معالجة رفع الملف (للكاش فقط)
+        action = context.user_data.get('action')
+
+        # الاستبدال الاحترافي: ربط مستلم الملفات بمحرك الاستعادة الشامل
         if action == 'awaiting_json_backup' and doc.file_name.endswith('.json'):
-            import json
-            from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk
+            from cache_manager import process_restore_logic
             
+            # إشعار بدء العملية
+            status_msg = await update.message.reply_text("⏳ جاري فك التشفير ومزامنة البيانات مع السحابة...")
+            
+            # 1. تحميل محتوى الملف
             file = await context.bot.get_file(doc.file_id)
             content = await file.download_as_bytearray()
-            new_data = json.loads(content.decode('utf-8'))
             
-            # 1. تحديث الرام (FACTORY_GLOBAL_CACHE)
-            for sheet_name, rows in new_data.items():
-                # دمج البيانات الجديدة مع الكاش الموجود أو استبداله
-                FACTORY_GLOBAL_CACHE["data"][sheet_name] = rows
-                
-            # 2. حفظ نسخة في الهاردسك (للحماية من الريستارت)
-            save_cache_to_disk() 
+
+            success = await process_restore_logic(content, update.effective_user.id)
             
-            await update.message.reply_text(
-                "✅ **تم شحن الرام بالبيانات بنجاح!**\n\n"
-                "⚠️ البيانات الآن تعمل في البوت (كاش).\n"
-                "⏰ سيتم المزامنة الآلية مع الرام تلقائياً الساعة 12:00 ليلاً كل يوم."
-            )
+            if success:
+                # إشعار النجاح مع الحفاظ على النص الأصلي وتطويره ليعكس حالة السحابة
+                await status_msg.edit_text(
+                    "✅ **تم استعادة البيانات وشحن الرام بنجاح!**\n\n"
+                    "🌐 **حالة السحابة:** تم تحديث الجداول في Google Sheets.\n"
+                    "⚠️ **حالة الكاش:** البيانات تعمل الآن في البوت (RAM).\n"
+                    "⏰ **المزامنة:** سيتم تحديث النسخة الاحتياطية آلياً الساعة 12:00 ليلاً."
+                )
+            else:
+                await status_msg.edit_text("❌ **فشل الاستيراد:** الملف غير متوافق مع نظام التشفير الجديد أو التوكن غير صحيح.")
+            
             context.user_data['action'] = None
             return
 
@@ -3769,9 +3742,10 @@ async def run_bot(token, owner_id):
 
     # تصحيح: إضافة فلتر Chat(owner_id) لضمان أن هذا المعالج يستقبل رسائل المطور فقط (الإعدادات)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
-# ثم سجل مستلم الرسائل العام للبوت
-    # تصحيح: إضافة فلتر Chat لضمان أن هذا المعالج يستقبل رسائل الطلاب فقط (التواصل)
+
+        # تسجيل مستلم الرسائل للطلاب فقط (استثناء المالك)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
+
 
     
     # 2. إعداد مراقب التفعيل (يُوضع هنا بعد تعريف الـ application)

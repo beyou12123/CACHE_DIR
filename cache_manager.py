@@ -87,45 +87,6 @@ def save_cache_to_disk():
         logger.error(f"❌ خطأ حرج أثناء الكتابة على القرص: {e}")
 
 # ==========================================================================
-# انشاء نسخة مشفرة
-
-
-
-def generate_secure_backup(bot_id=None):
-    """إنشاء نسخة احتياطية مشفرة: للمطور (الكل) أو للعميل (خاص ببوت معين)"""
-    try:
-        # إذا كان bot_id موجود، نسحب بياناته فقط، وإذا لم يوجد (مطور) نسحب الكل
-        data_to_save = {}
-        if bot_id:
-            for sheet_name, records in FACTORY_GLOBAL_CACHE["data"].items():
-                filtered = [r for r in records if str(r.get("bot_id")) == str(bot_id)]
-                if filtered: data_to_save[sheet_name] = filtered
-        else:
-            data_to_save = FACTORY_GLOBAL_CACHE["data"]
-
-        # تحويل البيانات إلى نص مشفر Base64 لضمان قبول الاستضافة وسهولة الرفع
-        json_string = json.dumps(data_to_save, ensure_ascii=False, indent=2)
-        encoded_data = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
-        
-        backup_content = {
-            "backup_info": {
-                "type": "FULL" if not bot_id else "CLIENT",
-                "bot_id": bot_id,
-                "timestamp": get_system_time()
-            },
-            "payload": encoded_data
-        }
-        
-        file_path = os.path.join(CACHE_DIR, f"backup_{bot_id if bot_id else 'MASTER'}.json")
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(backup_content, f, ensure_ascii=False, indent=4)
-        return file_path
-    except Exception as e:
-        logger.error(f"❌ خطأ في تشفير النسخة: {e}")
-        return None
- 
-
-
 
 # ==========================================================================
 # 3. إدارة نظام المزامنة (Core Logic)
@@ -301,107 +262,9 @@ def smart_sync_check(bot_id):
 
 
 
-# ==========================================================================
-# 6. دالة التحميل الذكي (تُستدعى من main.py)
-# ==========================================================================
-async def download_mirror_files(bot, user_id):
-    """إرسال نسخة احتياطية مشفرة وموحدة بناءً على صلاحية المستخدم"""
-    # التحقق هل المستخدم مطور أم عميل
-    is_developer = (str(user_id) == str(DEVELOPER_ID))
-    bot_id_filter = None if is_developer else user_id
-
-    await bot.send_message(chat_id=user_id, text="🔐 جاري تجهيز النسخة الاحتياطية...")
-
-    # توليد الملف الموحد المشفر فوراً
-    file_path = generate_secure_backup(bot_id_filter)
-
-    if file_path and os.path.exists(file_path):
-        try:
-            caption = "👑 <b>نسخة المطور الشاملة</b>" if is_developer else "📦 <b>نسخة البوت الخاصة بك</b>"
-            caption += f"\n📅 التاريخ: {get_system_time()}\n🛡️ الحالة: مشفرة وقابلة للاستعادة."
-            
-            with open(file_path, 'rb') as doc:
-                await bot.send_document(
-                    chat_id=user_id,
-                    document=doc,
-                    filename=f"BACKUP_{'MASTER' if is_developer else user_id}.json",
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-            # حذف الملف المؤقت بعد الإرسال
-            os.remove(file_path)
-        except Exception as e:
-            logger.error(f"❌ فشل إرسال النسخة: {e}")
-    else:
-        await bot.send_message(chat_id=user_id, text="⚠️ فشل إنشاء النسخة، تأكد من وجود بيانات في الكاش أولاً.")
-
 
 
 # --------------------------------------------------------------------------
-# دالة الاستعادة 
-async def process_restore_logic(file_content, requester_id):
-    """
-    المحرك المرن: استعادة شاملة للمطور (المصنع) أو جزئية للبوت الفرعي
-    """
-    from sheets import ss
-    import json
-    import base64
-    try:
-        # 1. فك التشفير
-        backup_data = json.loads(file_content)
-        encoded_payload = backup_data.get("payload")
-        # فك تشفير Base64 للحصول على البيانات الحقيقية
-        decoded_data = json.loads(base64.b64decode(encoded_payload).decode('utf-8'))
-        
-        # معرفة هل المستعيد هو المطور الرئيسي
-        is_developer = (str(requester_id) == str(DEVELOPER_ID))
-        
-        # 2. حلقة المزامنة لجميع الأوراق الموجودة في الملف
-        for sheet_name, new_records in decoded_data.items():
-            try:
-                sheet = ss.worksheet(sheet_name)
-                
-                if is_developer:
-                    # --- [ وضع المطور: استعادة المصنع الشاملة ] ---
-                    sheet.clear()
-                    if new_records:
-                        headers = list(new_records[0].keys())
-                        rows = [list(r.values()) for r in new_records]
-                        sheet.append_row(headers, value_input_option='USER_ENTERED')
-                        sheet.append_rows(rows, value_input_option='USER_ENTERED')
-                    FACTORY_GLOBAL_CACHE["data"][sheet_name] = new_records
-                else:
-                    # --- [ وضع البوت الفرعي: استبدال أسطر العميل فقط ] ---
-                    current_records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
-                    # الفلترة الذكية: البحث في الأعمدة المحتملة لـ ID العميل
-                    updated_list = [
-                        r for r in current_records 
-                        if str(r.get("ID المالك")) != str(requester_id) and 
-                           str(r.get("bot_id")) != str(requester_id)
-                    ]
-                    updated_list.extend(new_records)
-                    
-                    sheet.clear()
-                    if updated_list:
-                        headers = list(updated_list[0].keys())
-                        rows = [list(r.values()) for r in updated_list]
-                        sheet.append_row(headers, value_input_option='USER_ENTERED')
-                        sheet.append_rows(rows, value_input_option='USER_ENTERED')
-                    FACTORY_GLOBAL_CACHE["data"][sheet_name] = updated_list
-
-                # تحديث المرآة (الملف الفيزيائي على القرص)
-                file_path = os.path.join(CACHE_DIR, f"{sheet_name}.json")
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(FACTORY_GLOBAL_CACHE["data"][sheet_name], f, ensure_ascii=False, indent=4)
-
-            except Exception as e:
-                print(f"⚠️ تخطي الورقة {sheet_name}: {e}")
-        
-        save_cache_to_disk() 
-        return True
-    except Exception as e:
-        print(f"❌ خطأ حرج في محرك الاستعادة الشامل: {e}")
-        return False
 
 # --------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
@@ -948,7 +811,204 @@ if db_manager:
 # ==========================================================================
 # نهاية الملف - تم دمج database_core و cache_manager بنجاح كامل
 # ==========================================================================
+# انشاء نسخة مشفرة
 
+def generate_secure_backup(bot_id=None):
+    """إنشاء نسخة احتياطية مشفرة ومفلترة: تدعم الهياكل الجديدة (12 و 41 عموداً)"""
+    try:
+        import base64
+        import json
+        import os
+        from sheets import get_system_time
+
+        current_bot_id = str(bot_id) if bot_id else None
+        data_to_save = {}
+
+        # 1. محرك الفلترة الذكي لجميع الأوراق (الـ 37 ورقة أو أكثر)
+        for sheet_name, records in FACTORY_GLOBAL_CACHE["data"].items():
+            if not records: continue
+            
+            if current_bot_id:
+                # البحث عن أي مفتاح يمثل التوكن (bot_id أو ID_البوت)
+                # هذا الجزء سيشمل الآن جدول "المستخدمين" تلقائياً لوجود مفتاح bot_id
+                sample = records[0]
+                bot_key = next((k for k in ["bot_id", "ID_البوت", "معرف_البوت"] if k in sample), None)
+                
+                if bot_key:
+                    # سحب السجلات الخاصة بهذا البوت فقط من وسط آلاف السجلات
+                    filtered = [r for r in records if str(r.get(bot_key)) == current_bot_id]
+                    if filtered: data_to_save[sheet_name] = filtered
+                else:
+                    # إذا كان الجدول عاماً (مثل الإعدادات العالمية) يتم تضمينه لضمان استقرار البوت
+                    if len(records) < 50: 
+                        data_to_save[sheet_name] = records
+            else:
+                # نسخة المطور (الماستر): سحب كل شيء بلا استثناء
+                data_to_save = FACTORY_GLOBAL_CACHE["data"]
+
+        # 2. تحويل البيانات إلى Base64 لضمان سلامة الرموز العربية والرموز الخاصة
+        json_string = json.dumps(data_to_save, ensure_ascii=False, indent=2)
+        encoded_data = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+        
+        # 3. بناء هيكل ملف النسخة الاحتياطية المعتمد
+        backup_content = {
+            "backup_info": {
+                "type": "FULL_FACTORY" if not bot_id else "CLIENT_INSTANCE",
+                "bot_id": current_bot_id,
+                "timestamp": get_system_time("full"),
+                "engine_version": "3.0_SECURE"
+            },
+            "payload": encoded_data
+        }
+        
+        # تحديد المسار في مجلد الكاش
+        file_name = f"backup_{current_bot_id if bot_id else 'MASTER'}.json"
+        file_path = os.path.join(CACHE_DIR, file_name)
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(backup_content, f, ensure_ascii=False, indent=4)
+        
+        print(f"✅ [CACHE]: تم إنشاء نسخة مشفرة بنجاح للمعرف: {current_bot_id}")
+        return file_path
+
+    except Exception as e:
+        if 'logger' in globals():
+            logger.error(f"❌ خطأ في تشفير النسخة: {e}")
+        else:
+            print(f"❌ خطأ في تشفير النسخة: {e}")
+        return None
+
+ 
+# دالة الاستعادة 
+async def process_restore_logic(file_content, requester_id):
+    """
+    المحرك المرن: استعادة شاملة للمطور (المصنع) أو جزئية للبوت الفرعي مع تدقيق الهياكل
+    """
+    from sheets import ss, update_global_version, get_system_time
+    from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk, CACHE_DIR
+    import json
+    import base64
+    import os
+
+    try:
+        # 1. فك التشفير واستخراج الحمولة (Payload)
+        backup_data = json.loads(file_content)
+        encoded_payload = backup_data.get("payload")
+        # فك تشفير Base64 للحصول على البيانات الحقيقية من المصنع أو العميل
+        decoded_data = json.loads(base64.b64decode(encoded_payload).decode('utf-8'))
+        
+        # جلب معرف المطور من الإعدادات (يفترض وجوده كمتغير عالمي أو جلبه من config)
+        from sheets import get_bot_config
+        # استنتاج هوية المطور (يمكنك استبدال DEVELOPER_ID بالثابت الخاص بك)
+        is_developer = (str(requester_id) == str(globals().get('DEVELOPER_ID', '0')))
+        
+        # 2. حلقة المزامنة لجميع الأوراق الموجودة في الملف (الـ 37 ورقة أو أكثر)
+        for sheet_name, new_records in decoded_data.items():
+            try:
+                sheet = ss.worksheet(sheet_name)
+                
+                if is_developer:
+                    # --- [ وضع المطور: استعادة المصنع الشاملة - مسح وإعادة بناء ] ---
+                    sheet.clear()
+                    if new_records:
+                        headers = list(new_records[0].keys())
+                        # تحويل القواميس إلى صفوف (Lists) للرفع لجوجل
+                        rows = [list(r.values()) for r in new_records]
+                        sheet.append_row(headers, value_input_option='USER_ENTERED')
+                        sheet.append_rows(rows, value_input_option='USER_ENTERED')
+                    # تحديث الرام فوراً
+                    FACTORY_GLOBAL_CACHE["data"][sheet_name] = new_records
+                else:
+                    # --- [ وضع البوت الفرعي: استبدال أسطر العميل فقط مع الحماية ] ---
+                    current_records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
+                    
+                    # الفلترة الذكية: عزل بيانات البوتات الأخرى قبل دمج البيانات الجديدة
+                    # تعتمد على العمود 12 للمستخدمين وأعمدة الربط للطلاب
+                    updated_list = [
+                        r for r in current_records 
+                        if str(r.get("ID المالك")) != str(requester_id) and 
+                           str(r.get("bot_id")) != str(requester_id) and
+                           str(r.get("ID_البوت")) != str(requester_id)
+                    ]
+                    
+                    # دمج السجلات المستعادة مع بقية سجلات المصنع
+                    updated_list.extend(new_records)
+                    
+                    # تحديث جوجل شيت (مسح الورقة وإعادة كتابة الكل لضمان الترتيب)
+                    sheet.clear()
+                    if updated_list:
+                        headers = list(updated_list[0].keys())
+                        rows = [list(r.values()) for r in updated_list]
+                        sheet.append_row(headers, value_input_option='USER_ENTERED')
+                        sheet.append_rows(rows, value_input_option='USER_ENTERED')
+                    
+                    # تحديث الكاش في الرام لضمان استجابة البوت اللحظية
+                    FACTORY_GLOBAL_CACHE["data"][sheet_name] = updated_list
+
+                # 3. تحديث المرآة الفيزيائية (الملف على القرص) لكل ورقة متأثرة
+                file_path = os.path.join(CACHE_DIR, f"{sheet_name}.json")
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(FACTORY_GLOBAL_CACHE["data"][sheet_name], f, ensure_ascii=False, indent=4)
+
+            except Exception as e:
+                print(f"⚠️ تخطي الورقة {sheet_name} أو فشل الوصول إليها: {e}")
+        
+        # 4. المزامنة النهائية وحفظ الحالة
+        save_cache_to_disk()
+        # تحديث نبضة النظام لإعلام المصنع بالتغييرات الكبرى
+        if not is_developer:
+             update_global_version(str(requester_id))
+        
+        print(f"✅ [RESTORE]: اكتملت عملية الاستعادة بنجاح للمعرف: {requester_id}")
+        return True
+
+    except Exception as e:
+        print(f"❌ خطأ حرج في محرك الاستعادة الشامل: {e}")
+        return False
+
+# ==========================================================================
+# 6. دالة التحميل الذكي (تُستدعى من main.py)
+# ==========================================================================
+async def download_mirror_files(bot, user_id):
+    """الواجهة التنفيذية: إرسال النسخة الاحتياطية المشفرة بناءً على الرتبة (مطور أو مالك)"""
+    from sheets import DEVELOPER_ID, get_system_time
+    import os
+
+    # 1. تحديد مستوى الصلاحية: هل الطالب مطور (يرى كل المصنع) أم مالك بوت (يرى بياناته فقط)؟
+    is_developer = (str(user_id) == str(DEVELOPER_ID))
+    bot_id_filter = None if is_developer else str(bot.token) # نستخدم التوكن كمعرف فريد للفلترة
+
+    await bot.send_message(chat_id=user_id, text="🔐 جاري تجهيز النسخة المشفرة، يرجى الانتظار...")
+
+    # 2. استدعاء المحرك المركزي في cache_manager لتوليد الملف المشفر
+    from cache_manager import generate_secure_backup
+    file_path = generate_secure_backup(bot_id_filter)
+
+    if file_path and os.path.exists(file_path):
+        try:
+            # تخصيص النص المصاحب بناءً على نوع البيانات المستخرجة
+            caption = "👑 <b>نسخة المطور الشاملة (المصنع بالكامل)</b>" if is_developer else "📦 <b>نسخة بيانات بوتك الخاصة</b>"
+            caption += f"\n\n📅 التاريخ: {get_system_time('full')}\n🛡️ الحالة: مشفرة Base64\n✅ جاهزة للاستعادة الفورية."
+            
+            # 3. إرسال الملف وحذفه فوراً من السيرفر لضمان أمن البيانات
+            with open(file_path, 'rb') as doc:
+                await bot.send_document(
+                    chat_id=user_id,
+                    document=doc,
+                    filename=f"SECURE_BACKUP_{'MASTER' if is_developer else 'BOT'}.json",
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+            
+            # تنظيف السيرفر من الملفات المؤقتة
+            os.remove(file_path)
+            print(f"✅ [SEND]: تم إرسال النسخة وتأمين السيرفر للمستخدم: {user_id}")
+            
+        except Exception as e:
+            print(f"❌ فشل إرسال النسخة للمستخدم {user_id}: {e}")
+    else:
+        # رسالة تنبيه في حال كان الكاش فارغاً تماماً
+        await bot.send_message(chat_id=user_id, text="⚠️ فشل إنشاء النسخة. قد يكون الكاش فارغاً أو لا توجد سجلات تابعة لهذا البوت.")
 
 
 # --------------------------------------------------------------------------

@@ -122,6 +122,7 @@ async def show_review_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(review, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 # --------------------------------------------------------------------------
 # --- [ 5. الضخ النهائي في قواعد البيانات (41 و 37 عمود) ] ---
+      # --- [ 1. تجهيز وحقن قاعدة_بيانات_الطلاب (41 عموداً) ] ---
 async def finalize_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     bot_token = context.bot.token
@@ -130,94 +131,98 @@ async def finalize_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = get_system_time("full")
 
     try:
-        # أ: تجهيز بيانات قاعدة_بيانات_الطلاب (41 عموداً)
-        # الترتيب: bot_id(1), معرف_الفرع(2), معرف_الطالب(3), ID_المستخدم(4), الاسم_بالإنجليزي(5), الاسم_بالعربي(6)...
+        from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk
+        from sheets import update_global_version, ss, get_bot_setting
+
+        # --- [ 1. تجهيز وحقن قاعدة_بيانات_الطلاب (41 عموداً) ] ---
         student_id = f"STU{str(uuid.uuid4().int)[:5]}"
         row_db = [""] * 41
-        row_db[0], row_db[1], row_db[2], row_db[3] = bot_token, "1001001", student_id, user.id
-        row_db[4], row_db[5], row_db[7], row_db[9], row_db[10] = state['name_en'], state['name_ar'], state['country'], state['phone'], state['email']
-        row_db[13], row_db[16], row_db[17], row_db[37] = "نشط", state['course_id'], state['course_name'], user.username
+        # التعبئة الأساسية
+        row_db[0], row_db[1], row_db[2], row_db[3] = bot_token, "1001001", student_id, str(user.id)
+        row_db[4], row_db[5], row_db[7], row_db[9], row_db[10] = state.get('name_en', ''), state.get('name_ar', ''), state.get('country', ''), state.get('phone', ''), state.get('email', '')
+        row_db[13], row_db[16], row_db[17], row_db[37] = "نشط", state.get('course_id', ''), state.get('course_name', ''), f"@{user.username}" if user.username else "بدون"
         
-        ss.worksheet("قاعدة_بيانات_الطلاب").append_row(row_db, value_input_option='USER_ENTERED')
+        # الربط بالحملة التسويقية (العمود 39 - فهرس 38)
+        if context.user_data.get('source_campaign_id'):
+            row_db[38] = context.user_data.get('source_campaign_id')
 
-        # ب: تجهيز سجل_التسجيلات (مطابقة لـ 37 عموداً التي أرسلتها)
+        # الرفع المباشر لجوجل
+        ss.worksheet("قاعدة_بيانات_الطلاب").append_row(row_db, value_input_option='USER_ENTERED')
+        
+        # ✅ دعم الكاش: حقن السجل فوراً في الرام لضمان استجابة البوت
+        student_dict = {
+            "bot_id": bot_token, "معرف_الفرع": "1001001", "معرف_الطالب": student_id, 
+            "ID_المستخدم_تيليجرام": str(user.id), "الاسم_بالعربي": state.get('name_ar', ''),
+            "حالة_الحظر": "نشط", "اسم_المستخدم_تيلجرام": row_db[37]
+        }
+        if "قاعدة_بيانات_الطلاب" not in FACTORY_GLOBAL_CACHE["data"]:
+            FACTORY_GLOBAL_CACHE["data"]["قاعدة_بيانات_الطلاب"] = []
+        FACTORY_GLOBAL_CACHE["data"]["قاعدة_بيانات_الطلاب"].append(student_dict)
+
+        # --- [ 2. تجهيز وحقن سجل_التسجيلات (37 عموداً) ] ---
         reg_id = f"REG{str(uuid.uuid4().int)[:5]}"
         row_reg = [""] * 37
+        row_reg[0], row_reg[1], row_reg[2], row_reg[3] = bot_token, "1001001", reg_id, now
+        row_reg[4], row_reg[5], row_reg[6] = student_id, state.get('name_ar', ''), str(user.id)
+        row_reg[7], row_reg[8] = state.get('course_id', ''), state.get('course_name', '')
+        row_reg[13], row_reg[20] = state.get('pay_method', 'manual'), "قيد الانتظار"
         
-        # ملء الأعمدة بناءً على الهيكل الجديد
-        row_reg[0] = bot_token                # bot_id
-        row_reg[1] = "1001001"                # معرف_الفرع
-        row_reg[2] = reg_id                   # معرف_التسجيل
-        row_reg[3] = now                      # طابع_زمني
-        row_reg[4] = student_id               # معرف_الطالب
-        row_reg[5] = state['name_ar']         # اسم_الطالب
-        row_reg[6] = user.id                  # ID_المستخدم_تيليجرام
-        row_reg[7] = state['course_id']       # معرف_الدورة
-        row_reg[8] = state['course_name']     # اسم_الدورة
-        
-        # --- الربط الجوهري بالحملة الإعلانية ---
-        # إذا كان الطالب قادماً من رابط حملة، نضع المعرف في العمود 26 (الفهرس 25)
         if context.user_data.get('source_campaign_id'):
             row_reg[25] = context.user_data.get('source_campaign_id') 
         
-        row_reg[13] = state['pay_method']     # طريقة_التسجيل
-        row_reg[20] = "قيد الانتظار"            # حالة_الدفع
-        
         ss.worksheet("سجل_التسجيلات").append_row(row_reg, value_input_option='USER_ENTERED')
+        
+        # ✅ دعم الكاش: حقن في سجل التسجيلات
+        reg_dict = {"bot_id": bot_token, "معرف_التسجيل": reg_id, "ID_المستخدم_تيليجرام": str(user.id), "معرف_الدورة": state.get('course_id', '')}
+        if "سجل_التسجيلات" not in FACTORY_GLOBAL_CACHE["data"]:
+            FACTORY_GLOBAL_CACHE["data"]["سجل_التسجيلات"] = []
+        FACTORY_GLOBAL_CACHE["data"]["سجل_التسجيلات"].append(reg_dict)
 
+        # --- [ 3. إدارة نبضة المزامنة والحفظ الفيزيائي ] ---
+        save_cache_to_disk()
+        update_global_version(bot_token) # تحديث التوكن لضمان مزامنة كافة النسخ
 
-        # تفرقة المسار المالي
-        if state['pay_method'] == "manual":
+        # --- [ 4. تفرقة المسارات المالية (نفس منطقك الأصلي) ] ---
+        if state.get('pay_method') == "manual":
             pay_info = get_bot_setting(bot_token, "payment_information", default="تواصل مع الإدارة")
-            text = f"✅ <b>تم تسجيل بياناتك!</b>\n\n💰 <b>بيانات الدفع:</b>\n<code>{pay_info}</code>\n\n⚠️ يرجى إرسال صورة إيصال الدفع الآن:"
+            text = f"✅ <b>تم تسجيل بياناتك بنجاح!</b>\n\n💰 <b>بيانات الدفع:</b>\n<code>{pay_info}</code>\n\n⚠️ يرجى إرسال صورة إيصال الدفع الآن:"
             context.user_data['action'] = 'awaiting_payment_receipt'
             await query.edit_message_text(text, parse_mode="HTML")
         
-        elif state['pay_method'] == "Gift":
-            # جلب بيانات المسوق (المهدِي) لتنفيذ الخصم والإشعار
+        elif state.get('pay_method') == "Gift":
             gift_code = state.get('gift_code')
-            from sheets import ss
             sheet_coupons = ss.worksheet("الكوبونات")
             coupon_cell = sheet_coupons.find(gift_code, in_column=3)
             
             if coupon_cell:
-                inviter_id = sheet_coupons.cell(coupon_cell.row, 4).value # آيدي المسوق
+                inviter_id = sheet_coupons.cell(coupon_cell.row, 4).value
                 redeem_cost = get_bot_setting(bot_token, "min_points_redeem", default=100)
                 
-                # تنفيذ الخصم من رصيد المسوق
                 from sheets import redeem_points_for_course
                 success_deduct, new_balance = redeem_points_for_course(bot_token, inviter_id, redeem_cost)
                 
                 if success_deduct:
-                    # تحديث حالة الكوبون وتوثيق الاستخدام بشكل احترافي
-                    current_notes = sheet_coupons.cell(coupon_cell.row, 11).value or "" # جلب الملاحظة الحالية (اسم الدورة)
-                    usage_log = f"{current_notes} | استخدمه: {state['name_ar']} ({user.id}) بتاريخ: {now}" # بناء السجل التوثيقي
-
-                    sheet_coupons.update_cell(coupon_cell.row, 11, usage_log) # تحديث عمود الملاحظات
-                    sheet_coupons.update_cell(coupon_cell.row, 8, "مستعمل") # تحديث الحالة لمنع إعادة الاستخدام
+                    current_notes = sheet_coupons.cell(coupon_cell.row, 11).value or ""
+                    usage_log = f"{current_notes} | استخدمه: {state.get('name_ar', '')} ({user.id}) بتاريخ: {now}"
+                    sheet_coupons.update_cell(coupon_cell.row, 11, usage_log)
+                    sheet_coupons.update_cell(coupon_cell.row, 8, "مستعمل")
                     
-                    # إرسال إشعار للمسوق باستخدام البيانات المجمعة
                     notification_text = (
-                        f"📶 <b>عزيزي العميل</b>\n"
-                        f"تم استخدام الهدية الممنوحة من قبلكم من قبل الشخص:\n\n"
-                        f"👤 <b>معلومات العضو:</b>\n"
-                        f"• الاسم: {state['name_ar']}\n"
-                        f"• المعرّف: @{user.username or 'بدون'}\n"
-                        f"• الآيدي: <code>{user.id}</code>\n\n"
-                        f"💰 <b>رصيدك الحالي هو:</b> {new_balance} نقطة"
+                        f"📶 <b>عزيزي العميل</b>\nتم استخدام الهدية الممنوحة من قبلكم.\n\n"
+                        f"👤 <b>المستخدم:</b> {state.get('name_ar', '')}\n"
+                        f"💰 <b>رصيدك الحالي:</b> {new_balance} نقطة"
                     )
                     await context.bot.send_message(chat_id=inviter_id, text=notification_text, parse_mode="HTML")
                     await query.edit_message_text("🎉 مبروك! تم تفعيل الهدية وفتح الدورة لك بنجاح.")
                 else:
-                    await query.edit_message_text("⚠️ عذراً، تعذر إتمام عملية الهدية نظراً لنقص رصيد المانح أو خطأ في الكوبون.")
-        
+                    await query.edit_message_text("⚠️ عذراً، تعذر إتمام الهدية لنقص الرصيد.")
         else:
             await query.edit_message_text("🎉 مبروك! تم تفعيل الدورة بنجاح باستخدام نقاطك.")
             
         context.user_data.pop('reg_flow', None)
 
     except Exception as e:
-        logger.error(f"Save error: {e}")
+        print(f"❌ Critical Save Error: {e}")
         await query.answer("❌ حدث خطأ في الحفظ.")
 
 # --------------------------------------------------------------------------
