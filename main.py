@@ -2537,14 +2537,15 @@ if __name__ == "__main__":
         print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
         temp_bot = Bot(token=token)
         try:
+        	async with Bot(token=token) as temp_bot:
             print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح كافة التحديثات المعلقة...")
-            await temp_bot.delete_webhook(drop_pending_updates=True)
+             await temp_bot.delete_webhook(drop_pending_updates=True)
             print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
             await temp_bot.close()
-            await asyncio.sleep(2)
+            await asyncio.sleep(5)
             print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
         except Exception as e:
-            print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير: {e}")
+            print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير (قد يكون الجلسة مغلقة بالفعل): {e}")
         finally:
             try: await temp_bot.shutdown()
             except: pass
