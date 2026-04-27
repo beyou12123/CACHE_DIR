@@ -1857,7 +1857,8 @@ def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instru
         from cache_manager import db_manager, get_system_time
         from sheets import ss, connect_to_google, safe_api_call, update_global_version
         
-        now = get_system_time("full")
+          # التصحيح: استدعاء الدالة بدون معاملات لتجنب TypeError
+        now = get_system_time() 
         bot_token_clean = str(bot_token).strip()
 
         # 1. المعالجة المحلية (SQLite) - جدول "إعدادات_المحتوى"

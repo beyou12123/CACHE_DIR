@@ -3772,8 +3772,7 @@ async def run_bot(token, owner_id):
     
     # 1. إضافة المعالجات (Handlers)
     application.add_handler(CommandHandler("start", start_handler))
-# --- قسم الـ Callback (الأزرار) ---
-# سجل معالج ContentManager أولاً
+
     # تصحيح: إضافة النمط الخاص بـ ContentManager لمنعه من امتصاص كافة أزرار البوت
     application.add_handler(CallbackQueryHandler(content_management_handler, pattern="^(view_|manage_|add_|edit_|del_|back_to_edu_).*$"))
     # تصحيح: حصر النمط في الوظائف الإحصائية فقط لمنع التداخل مع الأقسام
@@ -3799,7 +3798,11 @@ async def run_bot(token, owner_id):
     # 3. بدء تشغيل المحرك
     await application.initialize()
     await application.start()
-    await application.updater.start_polling()
+    
+    # --- [ التعديل الجذري لحل مشكلة Conflict وفشل الحفظ ] ---
+    # يجب حذف الـ Webhook وإسقاط التحديثات القديمة لضمان استجابة المحرك فوراً
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.updater.start_polling(drop_pending_updates=True)
 
 
 
