@@ -1848,76 +1848,89 @@ def get_ai_setup(bot_token):
 def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instructions=None):
     """
     حفظ أو تحديث بيانات المؤسسة وتعليمات الذكاء الاصطناعي:
-    - الحفاظ الكامل على هيكل الـ 14 عنصراً في الصف الجديد.
-    - الحفاظ على تحديث الأعمدة المحددة (13 للمؤسسة، 14 للتعليمات، 8 للوقت).
-    - تنفيذ الحفظ محلياً في SQLite أولاً لضمان (Zero Lag) في إعدادات الهوية.
+    - الحفاظ الكامل على هيكل الـ 39 عموداً في جدول 'إعدادات_المحتوى'.
+    - التحديث: يحدث فقط 'اسم_المؤسسة' (عمود 20) و 'تعليمات_AI' (عمود 21).
+    - الإضافة: ينشئ صفاً جديداً بـ 39 عموداً، يضع المعلومات في مكانها والباقي 0.
+    - تنفيذ الحفظ محلياً في SQLite أولاً لضمان (Zero Lag).
     """
     try:
+        from cache_manager import db_manager, get_system_time
+        from sheets import ss, connect_to_google, safe_api_call, update_global_version
+        
         now = get_system_time("full")
         bot_token_clean = str(bot_token).strip()
 
-        # 1. المعالجة المحلية (SQLite) - لضمان السرعة الفائقة
+        # 1. المعالجة المحلية (SQLite) - جدول "إعدادات_المحتوى"
         try:
-            # التعديل: استخدام المسمى العربي "bot_id" بدلاً من column_1
-            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
-            db_manager.cursor.execute('SELECT local_id FROM "الذكاء_الإصطناعي" WHERE "bot_id" = ?', (bot_token_clean,))
+            # التحقق من وجود البوت في جدول إعدادات_المحتوى
+            db_manager.cursor.execute('SELECT "bot_id" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token_clean,))
             existing_local = db_manager.cursor.fetchone()
 
             if existing_local:
-                # تحديث الأعمدة محلياً (الأسماء العربية بدلاً من أرقام الأعمدة)
-                # column_8 يقابله "تاريخ_التحديث" | 13 يقابله "اسم_المؤسسة" | 14 يقابله "تعليمات_الذكاء"
-                update_query = 'UPDATE "الذكاء_الإصطناعي" SET "تاريخ_التحديث" = ?, sync_status = "pending"'
+                # تحديث فقط اسم المؤسسة وتعليمات AI ووقت التعديل
+                update_query = 'UPDATE "إعدادات_المحتوى" SET "وقت_التعديل" = ?, "حالة_المزامنة" = "pending"'
                 params = [now]
                 
                 if institution_name:
                     update_query += ', "اسم_المؤسسة" = ?'
                     params.append(institution_name)
                 if ai_instructions:
-                    update_query += ', "تعليمات_الذكاء" = ?'
+                    update_query += ', "تعليمات_AI" = ?'
                     params.append(ai_instructions)
                 
                 update_query += ' WHERE "bot_id" = ?'
                 params.append(bot_token_clean)
                 db_manager.cursor.execute(update_query, params)
             else:
-                # إضافة صف جديد محلياً (14 عنصراً بالترتيب الصارم)
-                local_row = [
-                    bot_token_clean, str(user_id), username, now, 
-                    "نشط", "إداري", 0, now, "ar", "Direct", 
-                    "", 0, institution_name or "", ai_instructions or ""
-                ]
-                # استخدام دالة local_bulk_save التي تدعم الأسماء العربية للجداول
-                local_bulk_save("الذكاء_الإصطناعي", local_row)
+                # إنشاء صف جديد تماماً (39 عموداً) - المعلومات المطلوبة في أماكنها والباقي "0"
+                # ترتيب الأعمدة حسب الهيكل المرفق:
+                # 1: bot_id, 20: اسم_المؤسسة, 21: تعليمات_AI, 38: إصدار_التحديث, 39: وقت_التعديل
+                local_row = ["0"] * 39
+                local_row[0] = bot_token_clean         # bot_id
+                local_row[19] = institution_name or "0" # اسم_المؤسسة (العمود 20)
+                local_row[20] = ai_instructions or "0"  # تعليمات_AI (العمود 21)
+                local_row[37] = "1"                     # إصدار_التحديث
+                local_row[38] = now                     # وقت_التعديل
+                
+                # بناء استعلام الإدخال لـ 39 عموداً
+                placeholders = ', '.join(['?'] * 39)
+                db_manager.cursor.execute(f'INSERT INTO "إعدادات_المحتوى" VALUES ({placeholders})', local_row)
             
             db_manager.conn.commit()
-            print(f"✅ [محلي] تم تحديث إعدادات الذكاء الاصطناعي للبوت محلياً.")
+            print(f"✅ [محلي] تم تحديث إعدادات المحتوى (39 عموداً) بنجاح.")
         except Exception as local_e:
-            print(f"⚠️ تنبيه: فشل الحفظ المحلي، جاري المحاولة عبر جوجل: {local_e}")
+            print(f"⚠️ تنبيه: فشل الحفظ المحلي في إعدادات_المحتوى: {local_e}")
 
-        # 2. المعالجة السحابية (Google Sheets) - الالتزام الصارم بمنطقك الأصلي
-        if 'ss' not in globals() or ss is None: connect_to_google()
-        sheet = ss.worksheet("الذكاء_الإصطناعي")
+        # 2. المعالجة السحابية (Google Sheets) - الالتزام الصارم بورقة 'إعدادات_المحتوى'
+        if 'ss' not in globals() or ss is None: 
+            ss = connect_to_google()
+            
+        sheet = ss.worksheet("إعدادات_المحتوى")
         cell = None
         try: 
-            # البحث عن التوكن في العمود الأول فقط (A) كما في كودك الصارم
+            # البحث عن التوكن في العمود الأول (bot_id)
             cell = sheet.find(bot_token_clean, in_column=1)
         except: pass
 
         if cell:
-            # تحديث البيانات في الأعمدة 13 و 14 و 8 (نفس منطقك تماماً)
-            from sheets import safe_api_call
-            if institution_name: safe_api_call(sheet.update_cell, cell.row, 13, institution_name)
-            if ai_instructions: safe_api_call(sheet.update_cell, cell.row, 14, ai_instructions)
-            safe_api_call(sheet.update_cell, cell.row, 8, now) # تحديث عمود تاريخ التحديث
+            # تحديث البيانات في الأعمدة المحددة (20 للمؤسسة، 21 للتعليمات، 39 للوقت)
+            if institution_name: 
+                safe_api_call(sheet.update_cell, cell.row, 20, institution_name)
+            if ai_instructions: 
+                safe_api_call(sheet.update_cell, cell.row, 21, ai_instructions)
+            safe_api_call(sheet.update_cell, cell.row, 39, now) 
         else:
-            # إضافة صف جديد (الالتزام بـ 14 عنصراً وبنفس القيم)
-            row = [
-                bot_token_clean, str(user_id), username, now, 
-                "نشط", "إداري", 0, now, "ar", "Direct", 
-                "", 0, institution_name or "", ai_instructions or ""
-            ]
-            safe_api_call(sheet.append_row, row, value_input_option='USER_ENTERED')
-            update_global_version(bot_token)
+            # إضافة صف جديد سحابياً (39 عموداً بالتمام والكمال)
+            # ننشئ قائمة تحتوي على 39 عنصراً قيمتها الافتراضية "0"
+            new_row = ["0"] * 39
+            new_row[0] = bot_token_clean          # bot_id (A)
+            new_row[19] = institution_name or "0"  # اسم_المؤسسة (T)
+            new_row[20] = ai_instructions or "0"   # تعليمات_AI (U)
+            new_row[38] = now                      # وقت_التعديل (AM)
+            
+            safe_api_call(sheet.append_row, new_row, value_input_option='USER_ENTERED')
+            # رفع إصدار البوت لتحديث الرام
+            update_global_version(bot_token_clean)
             
         return True
     except Exception as e:
