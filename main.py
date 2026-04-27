@@ -2418,7 +2418,7 @@ async def restart_all_sub_bots():
     """
     محرك الإحياء: يقوم بتشغيل كافة البوتات الفرعية المخزنة في الكاش فور إقلاع المصنع
     """
-    from sheets import FACTORY_GLOBAL_CACHE
+    from cache_manager import FACTORY_GLOBAL_CACHE
     print("🤖 [REBOOT]: جاري محاولة إحياء البوتات الفرعية من الكاش...")
     
     all_bots = FACTORY_GLOBAL_CACHE.get("data", {}).get("البوتات_المصنوعة", [])
