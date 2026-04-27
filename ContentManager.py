@@ -211,12 +211,42 @@ async def content_management_handler(update, context):
 async def config_input_receiver(update, context):
     """
     استلام النص من المستخدم وحفظه في الـ 39 عموداً.
+    تم التصحيح لضمان (التعديل إن وجد صف، أو الإضافة إن لم يوجد) لضمان عدم فشل الحفظ.
     """
-    if 'waiting_for_config' in context.user_data:
-        col_name = context.user_data['waiting_for_config']
-        label = context.user_data['config_label']
-        new_value = update.message.text
-        target_bot_id = context.user_data.get('target_bot_id')
+    user_data = context.user_data
+    text = update.message.text
+    # جلب توكن البوت المستهدف أو استخدام التوكن الحالي
+    target_bot_id = user_data.get('target_bot_id') or context.bot.token
+
+    # [PATCH]: معالجة حالة استقبال اسم المؤسسة (عند الإقلاع الأول)
+    if user_data.get('action') == 'awaiting_institution_name':
+        # 1. ضمان وجود صف للبوت في قاعدة البيانات قبل التحديث (INSERT if not exists)
+        from sheets import ensure_bot_sync_row
+        ensure_bot_sync_row(target_bot_id)
+        
+        # 2. استدعاء دالة التحديث للعمود رقم 20 (اسم_المؤسسة)
+        success = update_content_setting(target_bot_id, "اسم_المؤسسة", text)
+        
+        if success:
+            user_data.pop('action', None)
+            await update.message.reply_text(
+                f"✅ تم بنجاح ضبط اسم المنصة التعليمية: **{text}**\n"
+                f"تم إنشاء سجل البوت وتحديث البيانات بنجاح."
+            )
+        else:
+            await update.message.reply_text("❌ عذراً دكتور، فشل الحفظ في القاعدة. تأكد من وجود جدول 'إعدادات_المحتوى'.")
+        return
+
+    # [ORIGINAL CODE]: معالجة الإعدادات الأخرى من القائمة (مع إضافة منطق التحقق من الصف)
+    if 'waiting_for_config' in user_data:
+        col_name = user_data['waiting_for_config']
+        label = user_data['config_label']
+        new_value = text
+        target_bot_id = user_data.get('target_bot_id') or context.bot.token
+
+        # ضمان وجود الصف قبل التحديث لمنع فشل الـ UPDATE
+        from sheets import ensure_bot_sync_row
+        ensure_bot_sync_row(target_bot_id)
 
         # استدعاء دالة التحديث المعتمدة
         success = update_content_setting(target_bot_id, col_name, new_value)
@@ -229,8 +259,8 @@ async def config_input_receiver(update, context):
         else:
             await update.message.reply_text("❌ حدث خطأ أثناء محاولة الحفظ، يرجى المحاولة لاحقاً.")
         
-        context.user_data.pop('waiting_for_config', None)
-        context.user_data.pop('config_label', None)
+        user_data.pop('waiting_for_config', None)
+        user_data.pop('config_label', None)
 
 # ==========================================================================
 async def auto_reply_engine(update, context):
