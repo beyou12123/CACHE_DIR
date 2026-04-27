@@ -2416,30 +2416,123 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 #دالة ايقاض البوتات الفرعية
 async def restart_all_sub_bots():
     """
-    محرك الإحياء: يقوم بتشغيل كافة البوتات الفرعية المخزنة في الكاش فور إقلاع المصنع
+    محرك الإحياء المتقدم:
+    - تشغيل البوتات الفرعية
+    - إرسال إشعار تحديث مع نظام Retry + Queue + Logging
     """
-    from cache_manager import FACTORY_GLOBAL_CACHE
-    print("🤖 [REBOOT]: جاري محاولة إحياء البوتات الفرعية من الكاش...")
-    
-    all_bots = FACTORY_GLOBAL_CACHE.get("data", {}).get("البوتات_المصنوعة", [])
-    
-    count = 0
-    for bot_data in all_bots:
-        token = bot_data.get("التوكن")
-        status = bot_data.get("الحالة", "نشط")
-        
-        if token and status == "نشط":
-            try:
-                # هنا نستدعي دالة التشغيل التي تستخدمها في صناعة البوت
-                # لنفترض أن اسمها start_sub_bot_logic
-                asyncio.create_task(run_bot_instance(token)) 
-                count += 1
-                print(f"✅ تم إحياء البوت: {token[:10]}...")
-            except Exception as e:
-                print(f"❌ فشل إحياء بوت {token[:10]}: {e}")
-    
-    print(f"🎊 اكتملت العملية: تم تشغيل {count} بوت فرعي بنجاح.")
 
+    import asyncio
+    import aiohttp
+    from cache_manager import db_manager
+
+    MESSAGE = "تحديث جديد\n/start"
+
+    print("🤖 [REBOOT]: بدء الإحياء المتقدم للبوتات...")
+
+    # --------- جلب البيانات ----------
+    try:
+        all_bots = FACTORY_GLOBAL_CACHE.get("data", {}).get("البوتات_المصنوعة")
+
+        if not all_bots:
+            all_bots = db_manager.get_factory_data("البوتات_المصنوعة") or []
+
+    except Exception as e:
+        print(f"⚠️ فشل جلب البيانات: {e}")
+        all_bots = []
+
+    # --------- سجل النتائج ----------
+    results = {
+        "started": 0,
+        "notified_success": 0,
+        "notified_failed": 0
+    }
+
+    # --------- Queue للإرسال ----------
+    queue = asyncio.Queue()
+
+    async def enqueue_notifications():
+        """تجهيز الرسائل في طابور"""
+        for bot_data in all_bots:
+            token = bot_data.get("التوكن")
+            status = bot_data.get("الحالة", "نشط")
+
+            if token and status == "نشط":
+                await queue.put(token)
+
+    # --------- إرسال مع Retry ----------
+    async def send_with_retry(token: str, retries: int = 3):
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+        payload = {
+            "chat_id": "me",
+            "text": MESSAGE
+        }
+
+        for attempt in range(1, retries + 1):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, data=payload, timeout=10) as resp:
+                        if resp.status == 200:
+                            return True
+            except Exception as e:
+                print(f"⚠️ محاولة {attempt} فشلت للبوت {token[:10]}: {e}")
+
+            await asyncio.sleep(1.5 * attempt)  # backoff
+
+        return False
+
+    # --------- Worker ----------
+    async def worker():
+        while not queue.empty():
+            token = await queue.get()
+            try:
+                ok = await send_with_retry(token)
+
+                if ok:
+                    results["notified_success"] += 1
+                    print(f"📩 تم إرسال التحديث: {token[:10]}...")
+                else:
+                    results["notified_failed"] += 1
+                    print(f"❌ فشل نهائي للإرسال: {token[:10]}")
+
+            except Exception as e:
+                results["notified_failed"] += 1
+                print(f"❌ خطأ غير متوقع: {e}")
+
+            queue.task_done()
+
+    # --------- تشغيل البوتات ----------
+    tasks = []
+
+    for bot_data in all_bots:
+        try:
+            token = bot_data.get("التوكن")
+            status = bot_data.get("الحالة", "نشط")
+
+            if not token or status != "نشط":
+                continue
+
+            asyncio.create_task(run_bot_instance(token))
+            results["started"] += 1
+
+            print(f"✅ تم تشغيل البوت: {token[:10]}...")
+
+        except Exception as e:
+            print(f"❌ خطأ تشغيل بوت: {e}")
+
+    # --------- تجهيز الإشعارات ----------
+    await enqueue_notifications()
+
+    # تشغيل Workers (يمكن زيادتها حسب الضغط)
+    workers = [asyncio.create_task(worker()) for _ in range(5)]
+
+    await asyncio.gather(*workers, return_exceptions=True)
+
+    # --------- النتيجة النهائية ----------
+    print("🎊 تم الانتهاء من الإحياء المتقدم")
+    print(f"🚀 بوتات شغالة: {results['started']}")
+    print(f"📩 إشعارات ناجحة: {results['notified_success']}")
+    print(f"❌ إشعارات فاشلة: {results['notified_failed']}")
 
 # --- [ القسم 3: المحرك الرئيسي (نهاية الملف) ] ---
 async def main_factory_launcher():
