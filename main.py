@@ -2342,115 +2342,6 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(f"❌ فشل الحذف: {str(e)}")
 
 
-
-
-
-# --- [ القسم 3: المحرك الرئيسي (نهاية الملف) ] ---
-async def main_factory_launcher():
-    global app
-    try:
-        from datetime import datetime 
-        from cache_manager import DB_PATH, db_manager # استيراد الأدوات اللازمة
-        print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
-        
-        # 1. تم نقل تنظيف التضارب (Conflict) للكتلة الخارجية لضمان الأمان
-        # نكتفي هنا بطباعة تأكيدية لعدم تكرار الطلبات لـ Telegram
-        print("🔍 [LOG]: المحرك يعتمد الآن على التطهير الخارجي المستقر.")
-
-        # 2. فحص حالة قاعدة البيانات (بدون إعادة إرسال نسخة احتياطية مكررة)
-        if os.path.exists(DB_PATH):
-            size = os.path.getsize(DB_PATH)
-            print(f"📦 [LOG]: ملف القاعدة جاهز للعمل. المسار: {DB_PATH} | الحجم: {size} بايت")
-            
-            # ملاحظة: تم إيقاف الرفع التلقائي هنا لأنه تم تنفيذه في مرحلة الـ Pre-Startup
-            # لضمان عدم حدوث Flood Control وتكرار البيانات في القناة.
-            print("🛡️ [LOG]: تم تجاوز التأمين التلقائي المكرر (البيانات مؤمنة بالفعل).")
-        else:
-            print("ℹ️ [LOG]: بيئة تشغيل نظيفة، بانتظار تهيئة البيانات.")
-
-        # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل بدون أي تغيير)
-        print("🔧 [LOG]: جاري بناء محرك البوت الرئيسي وتسجيل المعالجات...")
-        # 1. بناء التطبيق باسم المتغير 'app'
-        app = ApplicationBuilder().token(TOKEN).build()
-
-        # 2. تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
-        
-        # ربط معالج المستندات (المحرك الجديد) في المجموعة -1 لضمان الأولوية القصوى
-        from telegram.ext import MessageHandler, filters
-        app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
-
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
-        app.add_handler(create_bot_conv) 
-        app.add_handler(admin_module_conv) 
-        app.add_handler(broadcast_handler)
-
-        app.add_handler(CallbackQueryHandler(owner_dashboard, pattern="^open_admin_dashboard$"))
-        app.add_handler(CallbackQueryHandler(show_admins_dashboard, pattern="^admin_section$"))
-        app.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^(remove_admin_|refresh_admins)"))
-        app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
-        
-        app.add_handler(CallbackQueryHandler(
-            button_callback, 
-            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|run_push_sync_manual|run_pull_sync_manual|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
-        ))        
-        
-        # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
-        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|confirm_restore_yes|confirm_restore_no)$"))
-
-        app.add_handler(CommandHandler("admin_export", export_admins))
-        app.add_handler(CommandHandler("import_admin", import_admins_handler))
-        
-        # معالجات المستندات الإضافية
-        app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
-        app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=-1)
-        
-        # معالج النصوص العامة
-        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
-        # تشغيل محرك المصنع
-        await app.initialize()
-        await app.updater.start_polling(drop_pending_updates=True)
-        await app.start()
-        print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة وبانتظار التعليمات.")
-        
-        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي ] ---
-        keyboard = [
-            [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
-            [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
-            [InlineKeyboardButton("⚙️ تهيئة الجداول (محلي فقط)", callback_data="init_tables_only")],
-            [InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_manual_sync")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        success_msg = (
-            "🔔 **إشعار السيادة والجاهزية القصوى**\n\n"
-            "🛡️ **تم بحمد الله استعادة الحصن الحصين؛** النسخة الاحتياطية الأخيرة المودعة في قناة المصنع أصبحت الآن نبضاً للمحرك المحلي.\n\n"
-            "🎊 **تمت عملية الإقلاع بنجاح باهر!**\n"
-            "📊 حالة النظام: `مستقر وجاهز للعمل` ✅\n"
-            "🛑 المزامنة التلقائية: `بانتظار قرارك السيادي`\n\n"
-            "🚀 **المصنع الآن في حالة انطلاق.. لا شيء يقف أمامنا!**\n"
-            "✨ _البيانات آمنة، والتحكم المطلق بين يديك الآن._"
-        )
-        
-        try:
-            # 1. إرسال للمطور في الخاص
-            await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
-            
-            # 2. إرسال للقناة
-            from cache_manager import BACKUP_CHANNEL_ID
-            await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
-            print("📨 [LOG]: تم إرسال رسالة التحكم اليدوي إلى القناة والخاص بنجاح.")
-        except Exception as msg_err:
-            print(f"⚠️ [LOG]: فشل إرسال رسائل الإقلاع: {msg_err}")
-        
-        while True:
-            await asyncio.sleep(3600)
-
-    except Exception as e:
-        print(f"🔴 [LOG - CRITICAL]: خطأ حرج في إقلاع المصنع: {e}")
-
-
 # --- [ دالة معالجة الأزرار اليدوية ] ---
 # --- [ دالة معالجة الأزرار اليدوية المحدثة بنظام التأكيد ] ---
 async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2521,6 +2412,118 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.edit_message_text(final_msg, parse_mode="Markdown")
         else:
             await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nتحقق من وجود نسخة مثبتة في القناة.")
+
+
+# --- [ القسم 3: المحرك الرئيسي (نهاية الملف) ] ---
+async def main_factory_launcher():
+    global app
+    try:
+        from datetime import datetime 
+        import os # إضافة مكتبة os للفحص
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup # إضافة الاستيراد المفقود للأزرار
+        from cache_manager import DB_PATH, db_manager, DEVELOPER_ID # استيراد الأدوات اللازمة والمعرفات
+        
+        TOKEN = os.getenv("BOT_TOKEN") 
+        
+        print(f"--- [ {datetime.now().strftime('%H:%M:%S')} ] استهلال محرك المصنع ---")
+        
+        # 1. تم نقل تنظيف التضارب (Conflict) للكتلة الخارجية لضمان الأمان
+        # نكتفي هنا بطباعة تأكيدية لعدم تكرار الطلبات لـ Telegram
+        print("🔍 [LOG]: المحرك يعتمد الآن على التطهير الخارجي المستقر.")
+
+        # 2. فحص حالة قاعدة البيانات (بدون إعادة إرسال نسخة احتياطية مكررة)
+        if os.path.exists(DB_PATH):
+            size = os.path.getsize(DB_PATH)
+            print(f"📦 [LOG]: ملف القاعدة جاهز للعمل. المسار: {DB_PATH} | الحجم: {size} بايت")
+            
+            # ملاحظة: تم إيقاف الرفع التلقائي هنا لأنه تم تنفيذه في مرحلة الـ Pre-Startup
+            # لضمان عدم حدوث Flood Control وتكرار البيانات في القناة.
+            print("🛡️ [LOG]: تم تجاوز التأمين التلقائي المكرر (البيانات مؤمنة بالفعل).")
+        else:
+            print("ℹ️ [LOG]: بيئة تشغيل نظيفة، بانتظار تهيئة البيانات.")
+
+        # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل بدون أي تغيير)
+        print("🔧 [LOG]: جاري بناء محرك البوت الرئيسي وتسجيل المعالجات...")
+        # 1. بناء التطبيق باسم المتغير 'app'
+        from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler # ضمان استيراد الأدوات
+        app = ApplicationBuilder().token(TOKEN).build()
+
+        
+        # ربط معالج المستندات (المحرك الجديد) في المجموعة -1 لضمان الأولوية القصوى
+        from telegram.ext import MessageHandler, filters
+        app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
+
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
+        app.add_handler(create_bot_conv) 
+        app.add_handler(admin_module_conv) 
+        app.add_handler(broadcast_handler)
+
+        app.add_handler(CallbackQueryHandler(owner_dashboard, pattern="^open_admin_dashboard$"))
+        app.add_handler(CallbackQueryHandler(show_admins_dashboard, pattern="^admin_section$"))
+        app.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^(remove_admin_|refresh_admins)"))
+        app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
+        
+        app.add_handler(CallbackQueryHandler(
+            button_callback, 
+            pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|run_push_sync_manual|run_pull_sync_manual|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
+        ))        
+        
+        # إضافة معالجات الأزرار الجديدة للإقلاع اليدوي والاستعادة مع التأكيد
+        app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|confirm_restore_yes|confirm_restore_no)$"))
+
+        app.add_handler(CommandHandler("admin_export", export_admins))
+        app.add_handler(CommandHandler("import_admin", import_admins_handler))
+        
+        # معالجات المستندات الإضافية
+        app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
+        app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=-1)
+        
+        # معالج النصوص العامة
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+
+        # تشغيل محرك المصنع (تصحيح تسلسل التشغيل)
+        await app.initialize()
+        await app.start() # البدء قبل الـ Polling
+        await app.updater.start_polling(drop_pending_updates=True)
+        
+        print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة وبانتظار التعليمات.")
+        
+        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي ] ---
+        keyboard = [
+            [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
+            [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
+            [InlineKeyboardButton("⚙️ تهيئة الجداول (محلي فقط)", callback_data="init_tables_only")],
+            [InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_manual_sync")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        success_msg = (
+            "🔔 **إشعار السيادة والجاهزية القصوى**\n\n"
+            "🛡️ **تم بحمد الله استعادة الحصن الحصين؛** النسخة الاحتياطية الأخيرة المودعة في قناة المصنع أصبحت الآن نبضاً للمحرك المحلي.\n\n"
+            "🎊 **تمت عملية الإقلاع بنجاح باهر!**\n"
+            "📊 حالة النظام: `مستقر وجاهز للعمل` ✅\n"
+            "🛑 المزامنة التلقائية: `بانتظار قرارك السيادي`\n\n"
+            "🚀 **المصنع الآن في حالة انطلاق.. لا شيء يقف أمامنا!**\n"
+            "✨ _البيانات آمنة، والتحكم المطلق بين يديك الآن._"
+        )
+        
+        try:
+            # 1. إرسال للمطور في الخاص
+            await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
+            
+            # 2. إرسال للقناة
+            from cache_manager import BACKUP_CHANNEL_ID
+            await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
+            print("📨 [LOG]: تم إرسال رسالة التحكم اليدوي إلى القناة والخاص بنجاح.")
+        except Exception as msg_err:
+            print(f"⚠️ [LOG]: فشل إرسال رسائل الإقلاع: {msg_err}")
+        
+        while True:
+            await asyncio.sleep(3600)
+
+    except Exception as e:
+        print(f"🔴 [LOG - CRITICAL]: خطأ حرج في إقلاع المصنع: {e}")
 
 
 # --- [ تعديل كتلة التشغيل الخاصة بك ] ---
