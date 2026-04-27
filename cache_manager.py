@@ -907,8 +907,17 @@ async def process_restore_logic(file_content, requester_id):
         print(f"✅ [SUCCESS]: تم فك التشفير بنجاح. عدد الجداول المكتشفة: {len(decoded_data)}")
         
         # تحديد رتبة المستخدم بدقة (المطور الرئيسي أم مالك بوت)
+        # محاولة جلب المعرف من ملف sheets، وإذا فشل نستخدم المعرف اليدوي
+        try:
+            from sheets import DEVELOPER_ID
+        except ImportError:
+            # ✅ ضع آيدي المطور الخاص بك هنا مباشرة لضمان عدم توقف الكود
+            DEVELOPER_ID = "7607952642" 
+
+        # الآن السطرين الذين ذكرتهما سيعملان بدون أي خطأ:
         is_developer = (str(requester_id) == str(DEVELOPER_ID))
         print(f"👤 [ROLE]: رتبة المستعيد: {'المطور الرئيسي 👑' if is_developer else 'مالك بوت فرعي 📦'}")
+
 
         # 2. حلقة المزامنة لجميع الأوراق (الـ 37 ورقة أو أكثر)
         for sheet_name, new_records in decoded_data.items():

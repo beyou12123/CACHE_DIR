@@ -21,7 +21,7 @@ get_user_referral_stats
 
 )
 
-
+DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 logger = logging.getLogger(__name__)
 
 

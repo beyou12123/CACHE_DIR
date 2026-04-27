@@ -183,7 +183,7 @@ from cache_manager import (
     export_bot_data_to_excel,
     check_excel_permission_from_cache
 )
-
+DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 # --- [ ذاكرة المحادثات المؤقتة للطلاب ] ---
 user_messages = {} 
 

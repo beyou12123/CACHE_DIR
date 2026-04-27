@@ -20,7 +20,7 @@ from cache_manager import (
 # --- [ التعديل المعتمد لملف sheets.py ] ---
 import os
 from cache_manager import DataManager
-
+DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 # تعريف المتغير بشكل عالمي
 db_manager = None
 
@@ -545,7 +545,7 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
 
         now = get_system_time("full")
         user_id_str = str(user_id)
-        
+        bot_token_str = str(bot_token) if bot_token else "GLOBAL" 
         # 1. بناء مصفوفة البيانات (11 عموداً بالترتيب الدقيق للورقة المعتمدة)
         user_row = [
             user_id_str,                            # 1. ID المستخدم

@@ -1133,6 +1133,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✨ أهلاً بك في مصنع البوتات المتطور 🤖\n\nاختر ما تريد القيام به:",parse_mode="HTML", 
             reply_markup=get_main_menu_inline(user_id)
         )
+        
+    elif data == "open_admin_panel":
+        await query.answer()
+        await owner_dashboard(update, context)      
+
+        
 # --------------------------------------------------------------------------
 
     # تهيئة الورق والإعدادات - النسخة الاحترافية النهائية
