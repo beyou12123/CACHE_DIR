@@ -603,7 +603,6 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
         return False
 
 
-
 # --------------------------------------------------------------------------
 # --- [ دالة الحفظ وتهيئة البوت - النسخة الاحترافية المسرعة ] ---
 ALLOWED_TABLES = {
@@ -906,7 +905,7 @@ def check_connection():
 
 
 # --------------------------------------------------------------------------
-# جلب الإحصائيات 
+# جلب الإحصائيات  للبوتات 
 def get_all_active_bots():
     """
     جلب كافة البوتات النشطة من القاعدة المحلية باستخدام الأسماء العربية الجديدة.
@@ -973,24 +972,6 @@ def get_total_bots_count():
         print(f"❌ خطأ حساب عدد البوتات الكلي: {e}")
         return 0
 
-def get_total_factory_users():
-    """
-    حساب عدد مستخدمي المصنع الكلي من القاعدة المحلية.
-    """
-    try:
-        query = 'SELECT COUNT(*) as total FROM "المستخدمين"'
-        db_manager.cursor.execute(query)
-        result = db_manager.cursor.fetchone()
-        
-        if result:
-            try:
-                return result['total']
-            except:
-                return result[0]
-        return 0
-    except Exception as e:
-        print(f"❌ خطأ حساب عدد المستخدمين الكلي: {e}")
-        return 0
 
 def get_total_factory_users():
     """

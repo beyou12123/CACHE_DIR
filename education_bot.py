@@ -43,6 +43,22 @@ from telegram.ext import (
     JobQueue
 )
 
+from startbot import (
+    acquire_process_lock, 
+    release_process_lock, 
+    is_bot_running, 
+    mark_bot_running, 
+    mark_bot_stopped, 
+    start,
+    start_create_bot,
+    cancel,
+    select_type, # أضف هذه أيضاً لأنها المحرك الرئيسي
+    receive_token,
+    run_dynamic_bot, 
+    ensure_all_sheets_schema, 
+    start_all_sub_bots, 
+    boot_all_bots
+)
 import sheets
 from sheets import (
     get_bot_config, 

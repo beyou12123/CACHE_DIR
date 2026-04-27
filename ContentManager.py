@@ -2,7 +2,22 @@
 import json
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from sheets import get_bot_config, update_content_setting
-
+from startbot import (
+    acquire_process_lock, 
+    release_process_lock, 
+    is_bot_running, 
+    mark_bot_running, 
+    mark_bot_stopped, 
+    start,
+    start_create_bot,
+    cancel,
+    select_type, # أضف هذه أيضاً لأنها المحرك الرئيسي
+    receive_token,
+    run_dynamic_bot, 
+    ensure_all_sheets_schema, 
+    start_all_sub_bots, 
+    boot_all_bots
+)
 # 1. قاموس الربط المركزي (تطابق كامل بين الكيبورد والأعمدة الـ 39)
 # تم التأكد من عدم تغيير أي مفتاح أو مسمى عمود لضمان التكامل مع قاعدة البيانات
 MAP = {
