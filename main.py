@@ -1742,6 +1742,39 @@ async def process_file_decision(update: Update, context: ContextTypes.DEFAULT_TY
     return "PLUGIN"
 
 
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    action = context.user_data.get('action')
+    doc = update.message.document
+
+    # ركز هنا: يجب أن يتطابق المفتاح مع ما يرسله زر الاستعادة
+    if action == 'awaiting_json_backup' and doc.file_name.endswith('.json'):
+        from cache_manager import process_restore_logic
+        
+        status_msg = await update.message.reply_text("⏳ جاري فك التشفير ومزامنة الـ 37 ورقة مع السحابة...")
+        
+        # تحميل الملف
+        file = await context.bot.get_file(doc.file_id)
+        content = await file.download_as_bytearray()
+        
+        # استدعاء المحرك المطور الذي يطبع كل حركة
+        success = await process_restore_logic(content, user_id)
+        
+        if success:
+            await status_msg.edit_text(
+                "✅ <b>تمت الاستعادة الشاملة بنجاح!</b>\n\n"
+                "📊 تم تحديث الرام وجوجل شيت.\n"
+                "🔄 النظام الآن يعمل بكامل بياناته القديمة.",
+                parse_mode="HTML"
+            )
+        else:
+            await status_msg.edit_text("❌ فشلت العملية. راجع سجلات السيرفر لمعرفة الورقة التي سببت الخطأ.")
+        
+        context.user_data['action'] = None
+
+
+
+
 # ==========================================
 # 🚀 رفع الموديول (بدون تعديل المنطق)
 # ==========================================
