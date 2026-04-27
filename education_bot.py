@@ -1562,19 +1562,18 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
     # --- 5. إدارة الأقسام (عرض القائمة) ---
     # إضافة معالج زر إدارة الأقسام
     elif data == "manage_cats":
-
-        await manage_categories_main(update, context)
-
-
-        # نتحقق هل لديه صلاحية الأقسام؟
-        if not check_user_permission(bot_token, user_id, "صلاحية_الأقسام"):
+        # 1. التحقق أولاً من الصلاحية قبل تنفيذ أي أمر (الالتزام بالمنطق البرمجي)
+        if not check_user_permission(context.bot.token, update.effective_user.id, "صلاحية_الأقسام"):
             await query.answer("🚫 ليس لديك صلاحية لإدارة الأقسام.", show_alert=True)
             return
-            
-        # إذا كان لديه صلاحية، يكمل الكود الطبيعي...
-   
+
+        # 2. إذا كان لديه صلاحية، يتم جلب البيانات
+        bot_token = context.bot.token
         categories = get_all_categories(bot_token)
-        # ... بقية الكود
+
+        # 3. استدعاء الدالة الرئيسية لعرض واجهة الأقسام (تأكد من تمرير المتغيرات اللازمة)
+        await manage_categories_main(update, context)
+
 
 # --------------------------------------------------------------------------
     # --- [ 1. معالج إدارة الدورات الديناميكي بناءً على الرتبة ] ---
