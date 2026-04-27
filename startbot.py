@@ -97,7 +97,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # استيراد الدالة المطلوبة من sheets
     from sheets import save_user, get_total_factory_users
-    from main import get_main_menu_inline
+    from main import get_main_menu_inline, get_types_menu_inline
+
 
 
    # تمرير كافة البيانات المطلوبة: ID، Username، الاسم الكامل، وتوكن البوت
@@ -134,6 +135,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- نظام إنشاء البوت (Conversation Flow) ---
 async def start_create_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بدء عملية إنشاء بوت جديد وطلب اختيار النوع (عن طريق الأزرار الشفافة)"""
+    from main import get_main_menu_inline, get_types_menu_inline
     query = update.callback_query
     if query:
         await query.answer()
