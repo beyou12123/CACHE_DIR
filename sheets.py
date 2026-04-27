@@ -558,7 +558,7 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
             "ar",                                   # 8. اللغة
             "Telegram",                             # 9. مصدر التسجيل
             str(inviter_id) if inviter_id else "None", # 10. معرف إحالة
-            "0"                                     # 11. رصيد
+            "0",                                     # 11. رصيد
             bot_token_str                           # 12 (bot_id الجديد)
         ]
 
