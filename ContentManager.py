@@ -3,20 +3,47 @@ import json
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from sheets import get_bot_config, update_content_setting
 from startbot import (
-    acquire_process_lock, 
-    release_process_lock, 
-    is_bot_running, 
-    mark_bot_running, 
-    mark_bot_stopped, 
+    # --- المتغيرات والثوابت والمعرفات ---
+    TOKEN,
+    DEVELOPER_ID,
+    BACKUP_CHANNEL_ID,
+    ADMIN_IDS,
+    ALL_ADMINS,
+    ADMIN_ID,
+    CHOOSING_TYPE,
+    GETTING_TOKEN,
+    GETTING_NAME,
+    WAITING_FOR_MODULE_NAME,
+    WAITING_BROADCAST_CONTENT,
+    RUNNING_BOTS,
+    _running_bot_tokens,
+    RUNNING_LOCK,
+    ACTIVE_RUNTIME_BOTS,
+    BASE_DIR, 
+    CACHE_DIR, 
+    BOT_PROCESS_LOCK_FILE,
+    CHECK_INTERVAL, 
+    LAST_CHECK_TIME, 
+    
+    # --- الدوال الأساسية وإدارة النظام ---
+    acquire_process_lock,
+    release_process_lock,
+    is_bot_running,
+    mark_bot_running,
+    mark_bot_stopped,
+    
+    
+    # --- دوال التشغيل والمحركات الفرعية ---
+    start_all_sub_bots,
+    DB_PATH,
+    run_dynamic_bot,
+    
+    # --- معالجات الأوامر والمحادثات (Handlers) ---
     start,
     start_create_bot,
-    cancel,
-    select_type, # أضف هذه أيضاً لأنها المحرك الرئيسي
+    select_type,
     receive_token,
-    run_dynamic_bot, 
-    ensure_all_sheets_schema, 
-    start_all_sub_bots, 
-    boot_all_bots
+    cancel
 )
 # 1. قاموس الربط المركزي (تطابق كامل بين الكيبورد والأعمدة الـ 39)
 # تم التأكد من عدم تغيير أي مفتاح أو مسمى عمود لضمان التكامل مع قاعدة البيانات

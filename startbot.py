@@ -28,10 +28,12 @@ from telegram.ext import (
 
 
 # --- [ إعدادات الهوية والصلاحيات ] ---
+
 TOKEN = os.getenv("BOT_TOKEN")
 DEVELOPER_ID = 7607952642 
 raw_admins = os.getenv("ADMIN_IDS", "")
 BACKUP_CHANNEL_ID = -1003910834893  # المعرف الخاص بالقناة
+DB_PATH = "cache_data/database.db"
 # تنظيف وقراءة قائمة الإداريين
 ADMIN_IDS = [int(i.strip()) for i in raw_admins.replace('[','').replace(']','').split(",") if i.strip().isdigit()]
 ALL_ADMINS = set([DEVELOPER_ID] + ADMIN_IDS)
@@ -50,6 +52,13 @@ ACTIVE_RUNTIME_BOTS = {}
 BOT_PROCESS_LOCK_FILE = "/app/cache_data/bot_factory.lock"
 
 
+# تصحيح المسارات 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CACHE_DIR = os.path.join(BASE_DIR, "cache_data")
+
+# المتغيرات الخاصة بالهروب من الـ API (المزامنة الصامتة)
+LAST_CHECK_TIME = 0       
+CHECK_INTERVAL = 900      # 15 دقيقة
 
 
 def acquire_process_lock():

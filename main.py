@@ -53,7 +53,11 @@ from startbot import (
     _running_bot_tokens,
     RUNNING_LOCK,
     ACTIVE_RUNTIME_BOTS,
+    BASE_DIR, 
+    CACHE_DIR, 
     BOT_PROCESS_LOCK_FILE,
+    CHECK_INTERVAL, 
+    LAST_CHECK_TIME, 
     
     # --- الدوال الأساسية وإدارة النظام ---
     acquire_process_lock,
@@ -65,6 +69,7 @@ from startbot import (
     
     # --- دوال التشغيل والمحركات الفرعية ---
     start_all_sub_bots,
+    DB_PATH,
     run_dynamic_bot,
     
     # --- معالجات الأوامر والمحادثات (Handlers) ---
@@ -88,8 +93,8 @@ from sheets import (
     get_all_active_bots,
     setup_bot_factory_database, # أضف هذه أيضاً لأنها المحرك الرئيسي
     ensure_sheet_schema,
-    reset_entire_database, 
-    ensure_all_sheets_schema
+    reset_entire_database
+   
 )
 try:
     from course_engine import restart_bot_logic

@@ -21,7 +21,49 @@ get_user_referral_stats
 
 )
 
-DEVELOPER_ID = 7607952642  # معرف المطور الثابت
+from startbot import (
+    # --- المتغيرات والثوابت والمعرفات ---
+    TOKEN,
+    DEVELOPER_ID,
+    BACKUP_CHANNEL_ID,
+    ADMIN_IDS,
+    ALL_ADMINS,
+    ADMIN_ID,
+    CHOOSING_TYPE,
+    GETTING_TOKEN,
+    GETTING_NAME,
+    WAITING_FOR_MODULE_NAME,
+    WAITING_BROADCAST_CONTENT,
+    RUNNING_BOTS,
+    _running_bot_tokens,
+    RUNNING_LOCK,
+    ACTIVE_RUNTIME_BOTS,
+    BASE_DIR, 
+    CACHE_DIR, 
+    BOT_PROCESS_LOCK_FILE,
+    CHECK_INTERVAL, 
+    LAST_CHECK_TIME, 
+    
+    # --- الدوال الأساسية وإدارة النظام ---
+    acquire_process_lock,
+    release_process_lock,
+    is_bot_running,
+    mark_bot_running,
+    mark_bot_stopped,
+    
+    
+    # --- دوال التشغيل والمحركات الفرعية ---
+    start_all_sub_bots,
+    DB_PATH,
+    run_dynamic_bot,
+    
+    # --- معالجات الأوامر والمحادثات (Handlers) ---
+    start,
+    start_create_bot,
+    select_type,
+    receive_token,
+    cancel
+)
 logger = logging.getLogger(__name__)
 
 

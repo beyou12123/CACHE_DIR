@@ -14,6 +14,49 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 
 
+from startbot import (
+    # --- المتغيرات والثوابت والمعرفات ---
+    TOKEN,
+    DEVELOPER_ID,
+    BACKUP_CHANNEL_ID,
+    ADMIN_IDS,
+    ALL_ADMINS,
+    ADMIN_ID,
+    CHOOSING_TYPE,
+    GETTING_TOKEN,
+    GETTING_NAME,
+    WAITING_FOR_MODULE_NAME,
+    WAITING_BROADCAST_CONTENT,
+    RUNNING_BOTS,
+    _running_bot_tokens,
+    RUNNING_LOCK,
+    ACTIVE_RUNTIME_BOTS,
+    BASE_DIR, 
+    CACHE_DIR, 
+    BOT_PROCESS_LOCK_FILE,
+    CHECK_INTERVAL, 
+    LAST_CHECK_TIME, 
+    
+    # --- الدوال الأساسية وإدارة النظام ---
+    acquire_process_lock,
+    release_process_lock,
+    is_bot_running,
+    mark_bot_running,
+    mark_bot_stopped,
+    
+    
+    # --- دوال التشغيل والمحركات الفرعية ---
+    start_all_sub_bots,
+    DB_PATH,
+    run_dynamic_bot,
+    
+    # --- معالجات الأوامر والمحادثات (Handlers) ---
+    start,
+    start_create_bot,
+    select_type,
+    receive_token,
+    cancel
+)
 
 
 
@@ -22,17 +65,10 @@ from telegram import Bot
 # ==========================================================================
 
 # إعدادات ثابتة (تم توحيد المسار ليتوافق مع مجلد الكاش في Railway)
-DB_PATH = "cache_data/database.db"
-BACKUP_CHANNEL_ID = -1003910834893  # المعرف الخاص بالقناة
-DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 
 # تصحيح: توحيد إعدادات اللوجر لمنع التضارب في السجلات
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("FACTORY_CORE")
-
-# تصحيح المسارات: استخدام المسار المطلق لضمان الوصول للمجلد في بيئة Docker/Railway
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = os.path.join(BASE_DIR, "cache_data")
 
 # التأكد من إنشاء المجلد مرة واحدة وبشكل صحيح
 if not os.path.exists(CACHE_DIR):
@@ -42,9 +78,7 @@ if not os.path.exists(CACHE_DIR):
     except Exception as e:
         print(f"❌ خطأ في إنشاء مجلد الكاش: {e}")
 
-# المتغيرات الخاصة بالهروب من الـ API (المزامنة الصامتة)
-LAST_CHECK_TIME = 0       
-CHECK_INTERVAL = 900      # 15 دقيقة
+
 
 # مستودع الذاكرة المركزية للمصنع كامل (RAM) - تم الحفاظ على كافة المفاتيح
 FACTORY_GLOBAL_CACHE = {
