@@ -1150,10 +1150,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # إظهار رسالة بدء العمليات (المرحلة 1)
         await query.edit_message_text("⏳ <b>المرحلة 1:</b> جاري فك التشفير Base64 وتحديث الذاكرة المحلية...", parse_mode="HTML")
         
-        from cache_manager import process_restore_logic
+        from cache_manager import restore_from_telegram
         
         # تنفيذ المحرك المطور (يتعامل مع الـ 37 ورقة والـ 41 عموداً)
-        success = await process_restore_logic(content, user_id)
+        success = await restore_from_telegram(content, user_id)
         
         if success:
             # المرحلة 2: محاكاة بصرية للمستخدم (المزامنة الفعلية تمت داخل الدالة)
@@ -1995,10 +1995,10 @@ async def download_bot_cache(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     if query: await query.answer()
 
-    from cache_manager import download_mirror_files
+    from cache_manager import create_backup_to_telegram
     
     # التعديل هنا: نمرر user_id (المستخدم الحالي) بدلاً من ADMIN_ID الثابت
-    await download_mirror_files(context.bot, user_id)
+    await create_backup_to_telegram(context.bot, user_id)
 
 #رفع النسخة 
 async def start_restore_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2497,7 +2497,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة.")
         
         # 1. تنفيذ الاستعادة (تحديث ملف database.db المحلي)
-        success = await db_manager.process_restore_logic()
+        success = await db_manager.restore_from_telegram()
         
         if success:
             print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تنشيط البيانات...")
@@ -2567,7 +2567,7 @@ if __name__ == "__main__":
                 print("🚨 [CRITICAL]: تم اكتشاف مسح البيانات! جاري الاستعادة التلقائية من التليجرام...")
                 
                 # دالة الاستعادة التي تبحث عن آخر ملف مثبت (Pinned) في قناتك
-                restore_success = await db_manager.process_restore_logic()
+                restore_success = await db_manager.restore_from_telegram()
                 
                 if restore_success:
                     print("✅ [RESTORE]: تمت استعادة قاعدة البيانات بنجاح قبل الإقلاع.")

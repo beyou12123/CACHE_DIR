@@ -2632,9 +2632,9 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
 #معلج النسخ الاحتياطي
     elif data == "export_data_json":
-        from cache_manager import download_mirror_files
+        from cache_manager import create_backup_to_telegram
         try:
-            await download_mirror_files(context.bot, update.effective_user.id)
+            await create_backup_to_telegram(context.bot, update.effective_user.id)
         except Exception as e:
             print(f"❌ خطأ أثناء تنفيذ عملية التصدير المركزية: {e}")
             await query.message.reply_text("⚠️ حدث خطأ فني أثناء تجميع النسخة الاحتياطية.")
