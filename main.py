@@ -2535,18 +2535,19 @@ if __name__ == "__main__":
     async def force_kill_old_sessions(token: str):
         """تنهي أي اتصال قديم وتطهر الجلسة في سيرفرات تليجرام لفتح الطريق للنسخة الجديدة"""
         print("⚔️ [SLAUGHTER]: بدء عملية التطهير العرقي للنسخ القديمة...")
-        temp_bot = Bot(token=token)
         try:
-        	async with Bot(token=token) as temp_bot:
-            print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح كافة التحديثات المعلقة...")
-             await temp_bot.delete_webhook(drop_pending_updates=True)
-            print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
-            await temp_bot.close()
-            await asyncio.sleep(5)
-            print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
+            # تم تصحيح المسافات البادئة (Indentation) هنا لتعمل داخل بلوك try
+            async with Bot(token=token) as temp_bot:
+                print("🧨 [SLAUGHTER]: تدمير الـ Webhook ومسح كافة التحديثات المعلقة...")
+                await temp_bot.delete_webhook(drop_pending_updates=True)
+                print("🗡️ [SLAUGHTER]: إغلاق الجلسات المفتوحة في سيرفرات تليجرام...")
+                await temp_bot.close()
+                await asyncio.sleep(5)
+                print("✅ [SLAUGHTER]: تمت إبادة الجلسات القديمة بنجاح.")
         except Exception as e:
             print(f"⚠️ [SLAUGHTER]: تنبيه أثناء التطهير (قد يكون الجلسة مغلقة بالفعل): {e}")
         finally:
+            # تم الحفاظ على بنية التنظيف النهائي
             try: await temp_bot.shutdown()
             except: pass
 
