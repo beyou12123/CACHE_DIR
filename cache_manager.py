@@ -882,48 +882,56 @@ def generate_secure_backup(bot_id=None):
 # دالة الاستعادة 
 async def process_restore_logic(file_content, requester_id):
     """
-    المحرك المرن: استعادة شاملة للمطور (المصنع) أو جزئية للبوت الفرعي مع تدقيق الهياكل
+    المحرك المرن المطور: استعادة مع تتبع كامل للحركات وتدقيق الهياكل (الـ 41 والـ 12 عموداً)
     """
-    from sheets import ss, update_global_version, get_system_time
+    from sheets import ss, update_global_version, get_system_time, DEVELOPER_ID
     from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk, CACHE_DIR
     import json
     import base64
     import os
 
+    print(f"🚀 [START RESTORE]: بدأت عملية الاستعادة للمعرف {requester_id} في {get_system_time('full')}")
+
     try:
-        # 1. فك التشفير واستخراج الحمولة (Payload)
+        # 1. مرحلة فك التشفير والتحليل
+        print("📥 [STEP 1]: جاري تحليل غلاف الملف وفك تشفير Base64...")
         backup_data = json.loads(file_content)
         encoded_payload = backup_data.get("payload")
-        # فك تشفير Base64 للحصول على البيانات الحقيقية من المصنع أو العميل
-        decoded_data = json.loads(base64.b64decode(encoded_payload).decode('utf-8'))
         
-        # جلب معرف المطور من الإعدادات (يفترض وجوده كمتغير عالمي أو جلبه من config)
-        from sheets import get_bot_config
-        # استنتاج هوية المطور (يمكنك استبدال DEVELOPER_ID بالثابت الخاص بك)
-        is_developer = (str(requester_id) == str(globals().get('DEVELOPER_ID', '0')))
+        if not encoded_payload:
+            print("❌ [ERROR]: لم يتم العثور على الحمولة (payload) داخل الملف.")
+            return False
+
+        decoded_bytes = base64.b64decode(encoded_payload)
+        decoded_data = json.loads(decoded_bytes.decode('utf-8'))
+        print(f"✅ [SUCCESS]: تم فك التشفير بنجاح. عدد الجداول المكتشفة: {len(decoded_data)}")
         
-        # 2. حلقة المزامنة لجميع الأوراق الموجودة في الملف (الـ 37 ورقة أو أكثر)
+        # تحديد رتبة المستخدم بدقة (المطور الرئيسي أم مالك بوت)
+        is_developer = (str(requester_id) == str(DEVELOPER_ID))
+        print(f"👤 [ROLE]: رتبة المستعيد: {'المطور الرئيسي 👑' if is_developer else 'مالك بوت فرعي 📦'}")
+
+        # 2. حلقة المزامنة لجميع الأوراق (الـ 37 ورقة أو أكثر)
         for sheet_name, new_records in decoded_data.items():
+            print(f"📑 [PROCESSING]: جاري معالجة الجدول: '{sheet_name}' (عدد السجلات: {len(new_records)})")
             try:
                 sheet = ss.worksheet(sheet_name)
+                print(f"🛰️ [SHEETS]: تم الاتصال بنجاح مع ورقة '{sheet_name}' في جوجل شيت.")
                 
                 if is_developer:
-                    # --- [ وضع المطور: استعادة المصنع الشاملة - مسح وإعادة بناء ] ---
+                    print(f"⚠️ [DEV MODE]: جاري مسح الورقة '{sheet_name}' وإعادة البناء الشامل للمصنع...")
                     sheet.clear()
                     if new_records:
                         headers = list(new_records[0].keys())
-                        # تحويل القواميس إلى صفوف (Lists) للرفع لجوجل
                         rows = [list(r.values()) for r in new_records]
                         sheet.append_row(headers, value_input_option='USER_ENTERED')
                         sheet.append_rows(rows, value_input_option='USER_ENTERED')
-                    # تحديث الرام فوراً
                     FACTORY_GLOBAL_CACHE["data"][sheet_name] = new_records
                 else:
-                    # --- [ وضع البوت الفرعي: استبدال أسطر العميل فقط مع الحماية ] ---
+                    print(f"🛡️ [USER MODE]: جاري عزل بيانات البوت {requester_id} عن بقية المصنع...")
                     current_records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
                     
-                    # الفلترة الذكية: عزل بيانات البوتات الأخرى قبل دمج البيانات الجديدة
-                    # تعتمد على العمود 12 للمستخدمين وأعمدة الربط للطلاب
+                    # الفلترة الذكية الصارمة: عزل السجلات القديمة للبوت لتبديلها بالجديدة
+                    # يتم البحث في bot_id (العمود 12) و ID المالك
                     updated_list = [
                         r for r in current_records 
                         if str(r.get("ID المالك")) != str(requester_id) and 
@@ -931,10 +939,10 @@ async def process_restore_logic(file_content, requester_id):
                            str(r.get("ID_البوت")) != str(requester_id)
                     ]
                     
-                    # دمج السجلات المستعادة مع بقية سجلات المصنع
+                    print(f"♻️ [MERGE]: تم الحفاظ على {len(updated_list)} سجل لبوتات أخرى، ودمج {len(new_records)} سجل جديد.")
                     updated_list.extend(new_records)
                     
-                    # تحديث جوجل شيت (مسح الورقة وإعادة كتابة الكل لضمان الترتيب)
+                    # تحديث جوجل شيت (مسح الورقة وإعادة كتابة الكل لضمان الترتيب والهيكل)
                     sheet.clear()
                     if updated_list:
                         headers = list(updated_list[0].keys())
@@ -942,29 +950,36 @@ async def process_restore_logic(file_content, requester_id):
                         sheet.append_row(headers, value_input_option='USER_ENTERED')
                         sheet.append_rows(rows, value_input_option='USER_ENTERED')
                     
-                    # تحديث الكاش في الرام لضمان استجابة البوت اللحظية
+                    # تحديث الكاش في الرام
                     FACTORY_GLOBAL_CACHE["data"][sheet_name] = updated_list
 
-                # 3. تحديث المرآة الفيزيائية (الملف على القرص) لكل ورقة متأثرة
+                # 3. تحديث المرآة الفيزيائية (الملف على القرص) لضمان عدم الضياع
+                print(f"💾 [DISK]: جاري تحديث مرآة الكاش الفيزيائية لـ '{sheet_name}'...")
                 file_path = os.path.join(CACHE_DIR, f"{sheet_name}.json")
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(FACTORY_GLOBAL_CACHE["data"][sheet_name], f, ensure_ascii=False, indent=4)
+                print(f"✅ [DONE]: اكتملت مزامنة الورقة '{sheet_name}' بنجاح.")
 
             except Exception as e:
-                print(f"⚠️ تخطي الورقة {sheet_name} أو فشل الوصول إليها: {e}")
+                print(f"⚠️ [SKIP]: تخطي الورقة '{sheet_name}' بسبب خطأ: {e}")
         
-        # 4. المزامنة النهائية وحفظ الحالة
+        # 4. المزامنة النهائية وحفظ الحالة العالمية
+        print("🔄 [SYNC]: جاري حفظ حالة المصنع النهائية وتحديث ملف التزامن العالمي...")
         save_cache_to_disk()
-        # تحديث نبضة النظام لإعلام المصنع بالتغييرات الكبرى
+        
         if not is_developer:
+             # تحديث التوكن في المزامنة لإجبار البوتات على سحب البيانات الجديدة
              update_global_version(str(requester_id))
         
-        print(f"✅ [RESTORE]: اكتملت عملية الاستعادة بنجاح للمعرف: {requester_id}")
+        print(f"🎊 [SUCCESS]: اكتملت عملية الاستعادة بنجاح للمعرف: {requester_id}")
         return True
 
     except Exception as e:
-        print(f"❌ خطأ حرج في محرك الاستعادة الشامل: {e}")
+        print(f"❌ [CRITICAL ERROR]: حدث خطأ في محرك الاستعادة الشامل: {e}")
+        import traceback
+        traceback.print_exc() # طباعة تفاصيل الخطأ بدقة في الـ Console
         return False
+
 
 # ==========================================================================
 # 6. دالة التحميل الذكي (تُستدعى من main.py)
