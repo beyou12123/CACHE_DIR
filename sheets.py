@@ -445,14 +445,15 @@ def connect_to_google():
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(config, scope)
         client = gspread.authorize(creds)
-        ss = client.open_by_key(SPREADSHEET_ID)
         
-        # --- [إصلاح: تعريف الدالة المساعدة بشكل صحيح] ---
+        temp_ss = client.open_by_key(SPREADSHEET_ID)
+        ss = temp_ss # الآن تم تحديث المتغير العالمي الحقيقي لكي يراه محرك الاستعادة
+        
+        # --- [إصلاح: تعريف الدالة المساعدة لاستخدام temp_ss لضمان السرعة] ---
         def safe_get_sheet(name):
-            try: return ss.worksheet(name)
+            try: return temp_ss.worksheet(name)
             except: return None
 
-        # الربط الكامل لكافة الأوراق لضمان عدم وجود خلل في المزامنة (37 ورقة)
         users_sheet = safe_get_sheet("المستخدمين")
         bots_sheet = safe_get_sheet("البوتات_المصنوعة")
         content_sheet = safe_get_sheet("إعدادات_المحتوى")
@@ -468,8 +469,6 @@ def connect_to_google():
         faq_sheet = safe_get_sheet("الأسئلة_الشائعة")
         meta_sheet = safe_get_sheet("_meta")
         lectures_sheet = safe_get_sheet("جدول_المحاضرات")
-        
-        # إضافة الأوراق المفقودة التي سببت الأخطاء في السجلات
         sync_sheet = safe_get_sheet("نظام_المزامنة")
         settings_sheet = safe_get_sheet("الإعدادات")
         org_structure_sheet = safe_get_sheet("الهيكل_التنظيمي_والصلاحيات")
@@ -492,12 +491,17 @@ def connect_to_google():
         work_hours_log_sheet = safe_get_sheet("سجل_ساعات_العمل")
         payroll_sheet = safe_get_sheet("كشوف_المرتبات")
         withdrawals_log_sheet = safe_get_sheet("سجل_السحوبات")
-
+        
+        print(f"✅ [SYSTEM]: تم تأمين الاتصال العالمي بملف: {temp_ss.title}")
         print("✅ تم الاتصال بجوجل بنجاح. الجداول بانتظار التهيئة اليدوية ⚙️")
-        return ss  # تعديل: إعادة كائن الملف الحقيقي وليس القيمة True
+        
+        return ss  
     except Exception as e:
         print(f"❌ فشل الاتصال الأولي: {str(e)}")
+        import traceback
+        traceback.print_exc() # إضافة لضمان معرفة مكان الخطأ بدقة
         return False
+
 
 # --------------------------------------------------------------------------
 # --- [ 3. الدوال الوظيفية لبوت المصنع والطلاب ] ---
