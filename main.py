@@ -2280,9 +2280,15 @@ async def main_factory_launcher():
 
         # 3. بناء المحرك (الحفاظ على كافة الـ Handlers بالكامل بدون أي تغيير)
         print("🔧 [LOG]: جاري بناء محرك البوت الرئيسي وتسجيل المعالجات...")
+        # 1. بناء التطبيق باسم المتغير 'app'
         app = ApplicationBuilder().token(TOKEN).build()
 
-        # تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
+        # 2. تسجيل جميع المعالجات (Handlers) - تم الحفاظ عليها بالكامل بدون حذف أو تبسيط
+        
+        # ربط معالج المستندات (المحرك الجديد) في المجموعة -1 لضمان الأولوية القصوى
+        from telegram.ext import MessageHandler, filters
+        app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
+
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
         app.add_handler(create_bot_conv) 
@@ -2293,6 +2299,7 @@ async def main_factory_launcher():
         app.add_handler(CallbackQueryHandler(show_admins_dashboard, pattern="^admin_section$"))
         app.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^(remove_admin_|refresh_admins)"))
         app.add_handler(CallbackQueryHandler(show_admins_for_delete, pattern="^show_admins_for_delete$"))        
+        
         app.add_handler(CallbackQueryHandler(
             button_callback, 
             pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
@@ -2303,10 +2310,13 @@ async def main_factory_launcher():
 
         app.add_handler(CommandHandler("admin_export", export_admins))
         app.add_handler(CommandHandler("import_admin", import_admins_handler))
+        
+        # معالجات المستندات الإضافية
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
         app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
+        
+        # معالج النصوص العامة
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-        application.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
 
         # تشغيل محرك المصنع
         await app.initialize()
