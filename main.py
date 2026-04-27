@@ -2497,7 +2497,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة.")
         
         # 1. تنفيذ الاستعادة (تحديث ملف database.db المحلي)
-        success = await db_manager.restore_from_telegram()
+        success = await db_manager.process_restore_logic()
         
         if success:
             print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تنشيط البيانات...")
@@ -2567,7 +2567,7 @@ if __name__ == "__main__":
                 print("🚨 [CRITICAL]: تم اكتشاف مسح البيانات! جاري الاستعادة التلقائية من التليجرام...")
                 
                 # دالة الاستعادة التي تبحث عن آخر ملف مثبت (Pinned) في قناتك
-                restore_success = await db_manager.restore_from_telegram()
+                restore_success = await db_manager.process_restore_logic()
                 
                 if restore_success:
                     print("✅ [RESTORE]: تمت استعادة قاعدة البيانات بنجاح قبل الإقلاع.")
