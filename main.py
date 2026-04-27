@@ -2423,7 +2423,8 @@ async def restart_all_sub_bots():
 
     import asyncio
     import aiohttp
-    from cache_manager import db_manager
+    # تصحيح الاستيراد لضمان الوصول للبيانات
+    from cache_manager import db_manager, FACTORY_GLOBAL_CACHE
 
     MESSAGE = "تحديث جديد\n/start"
 
@@ -2431,10 +2432,18 @@ async def restart_all_sub_bots():
 
     # --------- جلب البيانات ----------
     try:
+        # المحاولة من الكاش أولاً
         all_bots = FACTORY_GLOBAL_CACHE.get("data", {}).get("البوتات_المصنوعة")
 
+        # إذا لم يجدها في الكاش، يسحبها من الدالة المتاحة في db_manager
         if not all_bots:
-            all_bots = db_manager.get_factory_data("البوتات_المصنوعة") or []
+            # استخدام SQL مباشر لضمان جلب البيانات حتى لو الدالة الاسمية غائبة
+            try:
+                db_manager.cursor.execute("SELECT * FROM البوتات_المصنوعة")
+                columns = [column[0] for column in db_manager.cursor.description]
+                all_bots = [dict(zip(columns, row)) for row in db_manager.cursor.fetchall()]
+            except:
+                all_bots = []
 
     except Exception as e:
         print(f"⚠️ فشل جلب البيانات: {e}")
@@ -2464,7 +2473,7 @@ async def restart_all_sub_bots():
         url = f"https://api.telegram.org/bot{token}/sendMessage"
 
         payload = {
-            "chat_id": "me",
+            "chat_id": "me", # ملاحظة: سيتم إرسالها للتوكن نفسه كفحص تشغيل
             "text": MESSAGE
         }
 
@@ -2502,8 +2511,7 @@ async def restart_all_sub_bots():
             queue.task_done()
 
     # --------- تشغيل البوتات ----------
-    tasks = []
-
+    # تأكد من أن دالة run_bot_instance معرّفة في main.py
     for bot_data in all_bots:
         try:
             token = bot_data.get("التوكن")
@@ -2512,6 +2520,8 @@ async def restart_all_sub_bots():
             if not token or status != "نشط":
                 continue
 
+            # استدعاء دالة التشغيل
+            from main import run_bot_instance
             asyncio.create_task(run_bot_instance(token))
             results["started"] += 1
 
