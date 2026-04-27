@@ -2306,6 +2306,7 @@ async def main_factory_launcher():
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
         app.add_handler(MessageHandler(filters.Document.ALL, start_restore_process))
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+        application.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
 
         # تشغيل محرك المصنع
         await app.initialize()
