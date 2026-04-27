@@ -97,6 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # استيراد الدالة المطلوبة من sheets
     from sheets import save_user, get_total_factory_users
+    from main import get_main_menu_inline
 
 
    # تمرير كافة البيانات المطلوبة: ID، Username، الاسم الكامل، وتوكن البوت
@@ -332,7 +333,7 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
 #    """حفظ البيانات، تشغيل المحرك، وإرسال إشعارات النجاح بكافة اللغات والمسميات"""
 async def finalize_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """حفظ البيانات، تشغيل المحرك، وإرسال إشعارات النجاح بكافة اللغات والمسميات"""
-    
+    from main import get_main_menu_inline
     # 1. جلب البيانات من الذاكرة المؤقتة
     friendly_name = context.user_data.get("bot_friendly_name", "بوت مخصص")
 
@@ -376,7 +377,7 @@ async def finalize_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # تصحيح: التأكد من وجود دالة الكيبورد في النطاق الحالي
-                from main import get_main_menu_inline
+
                 await msg.edit_text(text=user_success_text, reply_markup=get_main_menu_inline(user_id), parse_mode="HTML")
 
                 # --- [ الرسالة الثانية: داخل البوت الجديد ] ---
