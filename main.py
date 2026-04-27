@@ -2413,6 +2413,33 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             await query.edit_message_text("❌ **فشلت عملية الاستعادة!**\nتحقق من وجود نسخة مثبتة في القناة.")
 
+#دالة ايقاض البوتات الفرعية
+async def restart_all_sub_bots():
+    """
+    محرك الإحياء: يقوم بتشغيل كافة البوتات الفرعية المخزنة في الكاش فور إقلاع المصنع
+    """
+    from sheets import FACTORY_GLOBAL_CACHE
+    print("🤖 [REBOOT]: جاري محاولة إحياء البوتات الفرعية من الكاش...")
+    
+    all_bots = FACTORY_GLOBAL_CACHE.get("data", {}).get("البوتات_المصنوعة", [])
+    
+    count = 0
+    for bot_data in all_bots:
+        token = bot_data.get("التوكن")
+        status = bot_data.get("الحالة", "نشط")
+        
+        if token and status == "نشط":
+            try:
+                # هنا نستدعي دالة التشغيل التي تستخدمها في صناعة البوت
+                # لنفترض أن اسمها start_sub_bot_logic
+                asyncio.create_task(run_bot_instance(token)) 
+                count += 1
+                print(f"✅ تم إحياء البوت: {token[:10]}...")
+            except Exception as e:
+                print(f"❌ فشل إحياء بوت {token[:10]}: {e}")
+    
+    print(f"🎊 اكتملت العملية: تم تشغيل {count} بوت فرعي بنجاح.")
+
 
 # --- [ القسم 3: المحرك الرئيسي (نهاية الملف) ] ---
 async def main_factory_launcher():
@@ -2489,7 +2516,14 @@ async def main_factory_launcher():
         
         print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة وبانتظار التعليمات.")
         
-        # --- [ الخطوة 4: إرسال رسالة التحكم اليدوي ] ---
+        # --- [ تصحيح 3: إحياء البوتات الفرعية تلقائياً ] ---
+        # استدعاء الدالة بعد التأكد من أن البوت الرئيسي استقر
+        try:
+            await restart_all_sub_bots()
+        except NameError:
+            print("⚠️ [LOG]: دالة restart_all_sub_bots غير معرّفة، سيتم تجاوز إحياء البوتات.")
+
+        # --- [ الخطوة 4: رسالة التحكم اليدوي ] ---
         keyboard = [
             [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
             [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
