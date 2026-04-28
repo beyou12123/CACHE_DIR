@@ -1931,7 +1931,27 @@ def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instru
             
             safe_api_call(sheet.append_row, new_row, value_input_option='USER_ENTERED')
             # رفع إصدار البوت لتحديث الرام
+            # داخل دالة save_ai_setup في ملف sheets.py
+
+            # [إضافة PATCH حاسمة لتحديث الكاش فوراً]
+            # نقوم بتحديث الكاش المحلي لضمان أن دالة get_ai_setup ترى الاسم الجديد فوراً
+            from cache_manager import FACTORY_GLOBAL_CACHE
+            if bot_token_clean not in FACTORY_GLOBAL_CACHE["data"]:
+                FACTORY_GLOBAL_CACHE["data"][bot_token_clean] = {}
+            
+            # تحديث القيم في الرام
+            if institution_name:
+                FACTORY_GLOBAL_CACHE["data"][bot_token_clean]['اسم_المؤسسة'] = institution_name
+            if ai_instructions:
+                FACTORY_GLOBAL_CACHE["data"][bot_token_clean]['تعليمات_AI'] = ai_instructions
+            
+            # رفع إصدار المزامنة لإجبار النظام على القبول
             update_global_version(bot_token_clean)
+            
+            print(f"✅ [SYSTEM]: تم تحديث الكاش والرام لـ {bot_token_clean[:10]}")
+            return True # هذا السطر موجود أصلاً
+
+  
             
         return True
     except Exception as e:
@@ -2496,7 +2516,7 @@ def update_group_field(bot_token, group_id, col_name, new_value):
             query = f'UPDATE "إدارة_المجموعات" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_المجموعة" = ?'
             db_manager.cursor.execute(query, (str(new_value), bot_token_str, group_id_str))
             db_manager.conn.commit()
-            print(f"🔄 [محلي] تم تحديث الحقل {col_name} للمجموعة {group_id_str}")
+            print(f"?? [محلي] تم تحديث الحقل {col_name} للمجموعة {group_id_str}")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل التحديث المحلي، سيتم الاعتماد على تحديث جوجل فقط: {local_e}")
 

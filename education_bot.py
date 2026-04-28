@@ -80,7 +80,7 @@ from startbot import (
     run_dynamic_bot,
     
     # --- معالجات الأوامر والمحادثات (Handlers) ---
-    start,
+    
     start_create_bot,
     select_type,
     receive_token,
@@ -227,7 +227,6 @@ from cache_manager import (
     export_bot_data_to_excel,
     check_excel_permission_from_cache
 )
-DEVELOPER_ID = 7607952642  # معرف المطور الثابت
 # --- [ ذاكرة المحادثات المؤقتة للطلاب ] ---
 user_messages = {} 
 
@@ -308,6 +307,7 @@ def get_coach_panel():
     return InlineKeyboardMarkup(keyboard)
 
 # --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
+# --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة أمر /start برسائل ترحيبية ذكية ودعم نظام الإحالة والأدوار (مالك، موظف، مدرب، طالب)"""
     from datetime import datetime
@@ -321,9 +321,29 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_owner_id = int(config.get("admin_ids", 0))
     ai_config = get_ai_setup(bot_token)
     
+    # --- [ تصحيح جلب الاسم: التحقق المزدوج من الكاش والقاعدة المحلية ] ---
+    if user.id == bot_owner_id:
+        # إذا كان الكاش فارغاً، نتحقق من قاعدة البيانات المحلية مباشرة لتجنب التكرار
+        if not ai_config or not ai_config.get('اسم_المؤسسة') or str(ai_config.get('اسم_المؤسسة')) in ["0", "None", ""]:
+            from cache_manager import db_manager
+            try:
+                # البحث المباشر في جدول إعدادات_المحتوى عن العمود رقم 20 (اسم_المؤسسة)
+                db_manager.cursor.execute('SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (str(bot_token),))
+                db_row = db_manager.cursor.fetchone()
+                if db_row and db_row[0] not in [None, "0", "", "None"]:
+                    # تحديث ai_config محلياً فوراً ليتجاوز الفحص أدناه
+                    if not ai_config: ai_config = {}
+                    ai_config['اسم_المؤسسة'] = db_row[0]
+                    # تحديث الكاش العالمي لضمان عدم تكرار الفحص في المرات القادمة
+                    from cache_manager import FACTORY_GLOBAL_CACHE
+                    if bot_token not in FACTORY_GLOBAL_CACHE["data"]: FACTORY_GLOBAL_CACHE["data"][bot_token] = {}
+                    FACTORY_GLOBAL_CACHE["data"][bot_token]['اسم_المؤسسة'] = db_row[0]
+            except Exception as e:
+                logging.error(f"⚠️ خطأ في فحص اسم المؤسسة من القاعدة المحلية: {e}")
+
     # --- [ 1. فحص إعدادات المالك (التهيئة الأولى) ] ---
     if user.id == bot_owner_id:
-        if not ai_config or not ai_config.get('اسم_المؤسسة'):
+        if not ai_config or not ai_config.get('اسم_المؤسسة') or str(ai_config.get('اسم_المؤسسة')) in ["0", "None", ""]:
             context.user_data['action'] = 'awaiting_institution_name'
             text = (
                 "👋 <b>أهلاً بك يا دكتور!</b>\n\n"
@@ -336,8 +356,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(text, parse_mode="HTML")
             return
  
-
-
    # --- [ 1. معالجة روابط انضمام الكوادر (مدرب/موظف) ] ---
     if context.args and context.args[0].startswith("reg_"):
         token = context.args[0].replace("reg_", "")
@@ -359,44 +377,33 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("⚠️ معذرة، هذا الرابط غير صالح أو تم استخدامه مسبقاً.")
             return
-#>>>>>>>>>>>>>>>>#>>>>>>>>>>>>>>>>
+
     # --- [ معالجة رابط الهدية للمستلم ] ---
     if context.args and context.args[0].startswith("gift_"):
         gift_code = context.args[0].replace("gift_", "")
         
-
         sheet_coupons = ss.worksheet("الكوبونات")
         coupon = sheet_coupons.find(gift_code, in_column=3)
         
         if coupon:
             coupon_data = sheet_coupons.row_values(coupon.row)
-            # التأكد أن الكوبون "نشط"
             if coupon_data[7] == "نشط":
-                # استخراج معرف الدورة من الملاحظات (التي خزنّاها بصيغة دورة_CRSxxxx)
                 course_id = coupon_data[10].replace("دورة_", "")
-                
-                # تخزين كود الهدية في بيانات المستخدم لبدء التسجيل
                 context.user_data['reg_flow'] = {'gift_code': gift_code}
-                
-                # استدعاء محرك التسجيل الموحد
                 await course_engine.start_registration_flow(update, context, course_id, payment_method="Gift")
                 return
             else:
                 await update.message.reply_text("⚠️ معذرة، هذا الرابط تم استخدامه مسبقاً.")
                 return
 
-#>>>>>>>>>>>>>>>>#>>>>>>>>>>>>>>>>
-
     # --- [ 2. نظام الإحالة المتطور (للطلاب والزوار) ] ---
     inviter_id = None
     if context.args and context.args[0].startswith("ref_"):
         potential_inviter = context.args[0].replace("ref_", "")
-        # التأكد أن المستخدم لا يحيل نفسه
         if str(potential_inviter) != str(user.id):
             inviter_id = potential_inviter
 
-    # --- [ 3. تسجيل المستخدم في القاعدة (استدعاء واحد فقط) ] ---
-    # نمرر inviter_id (سواء كان ID أو None) ليتم الحفظ في العمود 10 مرة واحدة
+    # --- [ 3. تسجيل المستخدم في القاعدة ] ---
     save_user(user.id, user.username, inviter_id, bot_token=context.bot.token)
 
     # --- [ 3. محرك اختيار الكليشة الذكي ] ---
@@ -410,15 +417,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg = config.get("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
 
-    # --- [ 4. فرز الرتب وإرسال الواجهة المناسبة - نسخة صارمة ومعززة ضد الانهيار ] ---
-    
-    # تحويل معرف المالك إلى رقم صحيح لضمان دقة المقارنة ومنع التداخل
+    # --- [ 4. فرز الرتب وإرسال الواجهة المناسبة ] ---
     try:
         current_owner_id = int(bot_owner_id)
     except:
         current_owner_id = 0
 
-    # أ: رتبة المالك (الأولوية المطلقة - السيادة الكاملة على النظام)
     if user.id == current_owner_id:
         final_text = (
             f"<b>مرحباً بك يا دكتور {user.first_name} في مركز قيادة منصتك</b> 🎓\n\n"
@@ -427,19 +431,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply_markup = get_admin_panel()
 
-    # ب: رتبة الموظف أو المدرب (التحقق المترابط بنظام الفحص الآمن لمنع توقف البوت)
     elif (check_user_permission(bot_token, user.id, "الصلاحيات") == True) or \
          (check_user_permission(bot_token, user.id, "صلاحية_الأقسام") == True):
         
-        # --- [ الإصلاح المستهدف: الفرز بين المدرب والموظف بناءً على العمود 42 ] ---
         from cache_manager import FACTORY_GLOBAL_CACHE
-        # جلب البيانات من الكاش مباشرة (أكثر أماناً وأسرع)
         employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
-        
-        # البحث عن صف المستخدم: المعرف موجود في العمود 3 (فهرس 2)
         user_row = next((row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)), None)
         
-        # التأكد من الرتبة في العمود 42 (فهرس 41)
         if user_row and len(user_row) >= 42 and str(user_row[41]).strip() == "مدرب":
             final_text = (
                 f"<b>مرحباً بك يا كابتن {user.first_name} في غرفتك الأكاديمية</b> 👨‍🏫\n\n"
@@ -448,15 +446,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             reply_markup = get_coach_panel()
         else:
-            # القيمة الافتراضية إذا لم يكن مدرباً فهو موظف إداري كما في منطقك الأصلي
             final_text = (
                 f"<b>مرحباً بك يا {user.first_name} في لوحة الإدارة التعليمية</b> 💼\n\n"
                 f"{msg}\n\n"
                 f"لديك صلاحيات الموظفين المعتمدة، يمكنك البدء بالإدارة من الأزرار أدناه:"
             )
             reply_markup = get_employee_panel()
-
-    # ج: رتبة الطالب (الحالة الافتراضية النهائية لمن لا تنطبق عليه الشروط أعلاه)
     else:
         final_text = f"<b>{msg}</b>"
         reply_markup = get_student_menu()
@@ -470,7 +465,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(final_text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception as e:
         logger.error(f"❌ خطأ في الإرسال النهائي لـ start_handler: {e}")
-
 
 # --------------------------------------------------------------------------
 # --- [ معالج ضغطات الأزرار (Callback Query Handler) ] ---
