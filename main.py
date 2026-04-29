@@ -138,7 +138,7 @@ def get_types_menu_inline(user_id):
             descriptions = {r['key']: r['value'] for r in records if str(r['key']).startswith('desc_')}
     except: pass
 
-    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'config.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py']
+    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'startbot.py', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'ui_keyboards.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py']
     
     dynamic_buttons = []
     for file in os.listdir('.'):
@@ -2138,11 +2138,14 @@ if __name__ == "__main__":
                     print("⚠️ [RESTORE]: فشلت الاستعادة (قد لا توجد نسخة مثبتة). سيتم بدء قاعدة جديدة.")
 
             # --- [ الخطوة 2: القتل الإجباري ] ---
+            # تم إزالة دالة close() المتكررة لتقليل ضغط الطلبات (Flood Control)
             temp_bot = Bot(token=token)
             await temp_bot.delete_webhook(drop_pending_updates=True)
-            await temp_bot.close()
+            # انتظر قليلاً دون إغلاق الجلسة بعنف
+            await asyncio.sleep(1) 
             await force_kill_old_sessions(token)
             await asyncio.sleep(2)
+
 
             # --- [ الخطوة 3: الإقلاع الفعلي للمصنع ] ---
             print("🚀 [LAUNCH]: انطلاق المحرك الرئيسي للمصنع الآن...")
