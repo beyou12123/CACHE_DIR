@@ -3726,7 +3726,9 @@ async def run_bot(token, owner_id):
     # تصحيح: إضافة النمط الخاص بـ ContentManager لمنعه من امتصاص كافة أزرار البوت
     application.add_handler(CallbackQueryHandler(content_management_handler, pattern="^(view_|manage_|add_|edit_|del_|back_to_edu_).*$"))
     # تصحيح: حصر النمط في الوظائف الإحصائية فقط لمنع التداخل مع الأقسام
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache)$"))
+
+    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache|export_data_json)$"))
+
 # ثم سجل المعالج الخاص ببقية أزرار البوت
     # تصحيح: إضافة نمط أزرار التواصل لضمان وصول الإشارة إليها
     application.add_handler(CallbackQueryHandler(contact_callback_handler, pattern="^contact_.*$"))
