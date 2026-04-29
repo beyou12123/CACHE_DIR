@@ -651,7 +651,6 @@ async def start_all_sub_bots():
                                 logger.info(f"✨ [DONE]: اكتملت عملية تشغيل المحرك للبوت {t[:10]}")
                             except Exception as e:
                                 logger.error(f"❌ [CRASH] فشل ذريع في تشغيل البوت {t[:10]}: {e}")
-                                # طباعة الخطأ كامل في السجلات لتسهيل التشخيص
                                 import traceback
                                 logger.error(traceback.format_exc())
 
@@ -662,24 +661,18 @@ async def start_all_sub_bots():
                         print(f"✅ [STARTED]: {token[:15]}")
                         logger.info(f"🚀 [ASYNC]: تم دفع المهمة {token[:10]} إلى حلقة الأحداث (Event Loop).")
 
-                        # تحديث الإحصائيات
+                        # تحديث الإحصائيات وإضافة المالك لصف الإشعارات
                         results["started"] += 1
-                        
-                        # سطر إضافي ضروري لمنع ضغط الطلبات (Flood Control) لضمان استقرار جلسات تليجرام
-                        logger.info(f"⏳ [COOLDOWN]: انتظار 1.5 ثانية قبل معالجة البوت التالي...")
-                        await asyncio.sleep(1.5) 
-                    else:
-                        logger.error(f"🚨 [FAIL]: الدالة run_dynamic_bot غير معرفة في النطاق العالمي!")
-
-
-
-
                         if owner_id:
                             await queue.put((token, str(owner_id)))
                             print(f"📥 [QUEUE]: {owner_id}")
-
+                        
+                        # سطر إضافي ضروري لمنع ضغط الطلبات (Flood Control)
+                        logger.info(f"⏳ [COOLDOWN]: انتظار 1.5 ثانية قبل معالجة البوت التالي...")
+                        await asyncio.sleep(1.5) 
                     else:
                         print("❌ run_dynamic_bot غير موجود")
+                        logger.error(f"🚨 [FAIL]: الدالة run_dynamic_bot غير معرفة في النطاق العالمي!")
 
                 except Exception as e:
                     print(f"❌ [BOT ERROR]: {e}")
