@@ -515,9 +515,9 @@ class DataManager:
 
     async def create_backup_to_telegram(self, shared_bot=None, user_id=None, bot_id=None):
         """
-        محرك النسخ الاحتياطي المؤسسي V7 - نظام الهوية المزدوجة (Dual-Identity).
-        الالتزام الصارم: لا حذف، لا تعديل، لا تبسيط.
-        المميزات: bot_id + bot_token support, Integrity Snapshot, Secure Role-Based Export.
+        محرك النسخ الاحتياطي المؤسسي V7.1 - نظام الهوية المزدوجة (Dual-Identity Hardened).
+        الالتزام الصارم: لا حذف، لا تعديل، لا تبسيط للمنطق الحالي.
+        التحديث الإضافي: نظام الحراس (Guards) لمنع تسريب DB وتحسين الأداء (V7.1).
         """
         import os
         import asyncio
@@ -534,14 +534,22 @@ class DataManager:
         # 1. إعدادات التتبع والتعريف (Engine Tag) - [V5/V6 Original]
         engine_version = "V5-Ultimate-Elite-Integrated"
         # [V7 Additive]: طبقة الهوية المزدوجة والإصدار المؤسسي
-        backup_version = f"{engine_version}-V7-DualID-Enterprise"
+        backup_version = f"{engine_version}-V7.1-DualID-Enterprise-Hardened"
         process_id = f"BK-{datetime.now().strftime('%M%S')}"
         backup_id = f"{process_id}-VER7-LOCK"
+        
+        # [V7.1 Additive]: Trace ID الموحد للتتبع العميق
+        trace_id = f"{process_id}-{backup_id}"
         
         start_time = datetime.now()
         current_logger = logging.getLogger("FACTORY_BACKUP")
         
-        print(f"🚀 [{process_id}]: انطلاق المحرك المؤسسي المزدوج ({backup_version})...")
+        # [حارس التحقق من البيئة V7.1]
+        if not DB_PATH or not BACKUP_CHANNEL_ID:
+            current_logger.error(f"🚨 [{trace_id}][CONFIG ERROR]: Missing critical DB_PATH or BACKUP_CHANNEL_ID.")
+            return False
+
+        print(f"🚀 [{process_id}]: انطلاق المحرك المؤسسي المزدوج المطور ({backup_version})...")
         
         local_bot = None
         try:
@@ -557,7 +565,7 @@ class DataManager:
                 current_logger.warning(f"⚠️ [{process_id}]: الحجم تجاوز الحد ({MAX_SIZE_MB}MB).")
                 return False
 
-            # 3. حساب بصمة MD5 (I/O Optimized 8192) - [V5 Core Logic - Unchanged]
+            # 3. حساب بصمة MD5 (تحسين الإدخال/الإخراج 8192) - [منطق النواة V5 - دون تغيير]
             hash_md5 = hashlib.md5()
             try:
                 with open(DB_PATH, "rb") as f:
@@ -566,6 +574,8 @@ class DataManager:
                 file_hash = hash_md5.hexdigest()
             except Exception as h_err:
                 file_hash = "CALC_ERROR"
+                # [DEBUG GUARD V7.1]
+                current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Checksum error: {h_err}")
                 print(f"⚠️ [{process_id}]: خطأ Checksum: {h_err}")
 
             # [V7 Additive]: نظام النزاهة غير القابل للتعديل (Immutable Integrity Snapshot)
@@ -574,7 +584,8 @@ class DataManager:
                 "file_size": file_size,
                 "timestamp": datetime.now().isoformat(),
                 "engine_version": backup_version,
-                "backup_id": backup_id
+                "backup_id": backup_id,
+                "trace_id": trace_id
             }
 
             # 4. تهيئة الجلسة (Shared vs Local) - [V5 Core Logic - Unchanged]
@@ -586,9 +597,13 @@ class DataManager:
                 bot = local_bot
 
             # 5. تنظيف التثبيتات القديمة - [V5/V6 Logic - Unchanged]
-            try:
-                await bot.unpin_all_chat_messages(chat_id=BACKUP_CHANNEL_ID)
-            except Exception: pass
+            # [CONTEXT VALIDATION GUARD V7.1]: منع التلاعب بالقناة إذا كان الطلب من مستخدم فرعي
+            if not user_id:
+                try:
+                    await bot.unpin_all_chat_messages(chat_id=BACKUP_CHANNEL_ID)
+                except Exception as silent_err: 
+                    current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Unpin failed: {silent_err}")
+                    pass
 
             # [V7 Additive]: نظام أعلام التنفيذ (Execution Guard Flags)
             execution_flags = {
@@ -603,71 +618,87 @@ class DataManager:
             sent_msg = None
             file_name = f"Factory_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db"
             
+            # [V7.1 SECURITY GUARD - DB ACCESS CONTROL]
+            # منع إرسال ملف .db الكامل نهائياً إذا كان الطلب قادم من user_id (بوت فرعي/مالك)
+            allow_db_send = True
+            if user_id:
+                allow_db_send = False
+                current_logger.info(f"🛡️ [{process_id}]: DB Send Blocked for user_id to prevent leak.")
+
             # تحديد الوجهة: إذا كان المستدعي هو المالك (user_id) نرسل له، وإلا نرسل لقناة المصنع
             target_chat_id = user_id if user_id else BACKUP_CHANNEL_ID
             
             # تخصيص الوصف حسب الوجهة
             source_tag = "OWNER-REQUEST" if user_id else "SYSTEM-AUTO"
             caption = (
-                f"🛡️ <b>Enterprise Backup (V7-{source_tag})</b>\n\n"
+                f"🛡️ <b>Enterprise Backup (V7.1-{source_tag})</b>\n\n"
                 f"📅 التاريخ: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>\n"
                 f"🔐 بصمة الأمن: <code>{file_hash[:16]}</code>\n"
                 f"🚀 الحالة: <b>نسخة موثقة ✅</b>"
             )
 
-            for attempt in range(3):
-                try:
-                    with open(DB_PATH, "rb") as db_file:
-                        sent_msg = await asyncio.wait_for(
-                            bot.send_document(
-                                chat_id=target_chat_id, # الوجهة الديناميكية
-                                document=db_file,
-                                filename=file_name,
-                                caption=caption,
-                                parse_mode="HTML",
-                                disable_notification=True,
-                                read_timeout=90
-                            ),
-                            timeout=120
-                        )
-                    if sent_msg: 
-                        execution_flags["db_backup_done"] = True
-                        break
+            # تغليف الإرسال بـ allow_db_send لحماية البيانات الحساسة للمصنع
+            if allow_db_send:
+                for attempt in range(3):
+                    try:
+                        with open(DB_PATH, "rb") as db_file:
+                            sent_msg = await asyncio.wait_for(
+                                bot.send_document(
+                                    chat_id=target_chat_id, 
+                                    document=db_file,
+                                    filename=file_name,
+                                    caption=caption,
+                                    parse_mode="HTML",
+                                    disable_notification=True,
+                                    read_timeout=90
+                                ),
+                                timeout=120
+                            )
+                        if sent_msg: 
+                            execution_flags["db_backup_done"] = True
+                            break
 
-                except (Forbidden, BadRequest) as fatal_e:
-                    # إذا كان الخطأ أن البوت ليس في القناة والمستدعي هو نظام آلي، لا تقتل البرنامج
-                    if "chat not found" in str(fatal_e) and not user_id:
-                        current_logger.warning(f"⚠️ [{process_id}]: القناة غير موجودة، سيتم تخطي الإرسال للقناة.")
-                        break
-                    raise fatal_e 
+                    except (Forbidden, BadRequest) as fatal_e:
+                        if "chat not found" in str(fatal_e) and not user_id:
+                            current_logger.warning(f"⚠️ [{process_id}]: القناة غير موجودة، سيتم تخطي الإرسال.")
+                            break
+                        raise fatal_e 
 
-                except Exception as send_err:
-                    err_str = str(send_err).lower()
-                    if "chat not found" in err_str:
-                        # إذا فشل البوت الفرعي في الإرسال للقناة، حاول إرسالها للمستخدم (user_id) كخطة بديلة
-                        if user_id:
-                            target_chat_id = user_id 
-                            continue 
-                        raise send_err
-                    
-                    wait_time = 2 ** attempt
-                    if attempt == 2: raise send_err
-                    print(f"🔄 [{process_id}]: محاولة {attempt + 1} فشلت. إعادة في {wait_time}s...")
-                    await asyncio.sleep(wait_time)
+                    except Exception as send_err:
+                        err_str = str(send_err).lower()
+                        # [إعادة محاولة التحقق من الهدف V7.1]
+                        if "chat not found" in err_str:
+                            if user_id and target_chat_id != user_id:
+                                target_chat_id = user_id 
+                                current_logger.info(f"🔄 [{process_id}]: Switching target to UserID after channel fail.")
+                                continue 
+                            raise send_err
+                        
+                        wait_time = 2 ** attempt
+                        if attempt == 2: raise send_err
+                        print(f"🔄 [{process_id}]: محاولة {attempt + 1} فشلت. إعادة في {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+            
+            # [V7.1 حماية من الفيضانات]
+            await asyncio.sleep(0.3)
 
-            # 7. التثبيت وتحديث الكاش الأصلي - [V5/V6 Core Logic - Unchanged]
+            # 7. التثبيت وتحديث الكاش الأصلي - [منطق النواة V5/V6 - دون تغيير]
             if sent_msg:
-                try:
-                    await bot.pin_chat_message(chat_id=BACKUP_CHANNEL_ID, message_id=sent_msg.message_id)
-                except: pass
+                # [حماية الرمز - التحقق من السياق V7.1]: تثبيت فقط في القناة الرسمية
+                if not user_id:
+                    try:
+                        await bot.pin_chat_message(chat_id=BACKUP_CHANNEL_ID, message_id=sent_msg.message_id)
+                    except Exception as silent_err:
+                        current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Pin failed: {silent_err}")
+                        pass
 
                 try:
                     from cache_manager import FACTORY_GLOBAL_CACHE
                     FACTORY_GLOBAL_CACHE['last_backup_file_id'] = sent_msg.document.file_id
-                    # [V7 Additive]: تحديث الكاش بمعلومات النزاهة والإصدار
                     FACTORY_GLOBAL_CACHE['last_backup_integrity'] = integrity_snapshot
                     FACTORY_GLOBAL_CACHE['last_backup_version'] = backup_version
-                except Exception:
+                except Exception as silent_err:
+                    current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Cache update failed: {silent_err}")
                     try:
                         if 'FACTORY_GLOBAL_CACHE' in globals():
                             globals()['FACTORY_GLOBAL_CACHE']['last_backup_file_id'] = sent_msg.document.file_id
@@ -678,7 +709,7 @@ class DataManager:
                 current_logger.info(f"✅ [{process_id}]: نجاح الـ DB الأصلي | الوقت: {duration:.2f}s")
 
             # ==========================================================================
-            # 🛡️ [ Dual Identity Role-Based System - Integrated Layer ]
+            # 🛡️ [ نظام هوية مزدوجة قائم على الأدوار - طبقة متكاملة ]
             # ==========================================================================
             if user_id:
                 DEVELOPER_ID = 7607952642
@@ -687,19 +718,25 @@ class DataManager:
                 except:
                     current_cache = globals().get('FACTORY_GLOBAL_CACHE', {})
 
-                # [V7 Additive]: نظام الاستعادة المرجعي (Recovery Metadata)
+                # [V7 Additive]: نظام الاستعادة المرجعي (بيانات الاستعادة الوصفية)
                 recovery_metadata = {
                     "backup_id": backup_id,
                     "engine_version": backup_version,
+                    "trace_id": trace_id,
                     "can_restore": True,
                     "source": "create_backup_to_telegram",
                     "schema_rule": "bot_id_primary"
                 }
 
-                # --- [ المسار الأول: المطور (Developer Path - HARD LOCK) ] ---
-                if int(user_id) == DEVELOPER_ID:
+                # [حماية الصب الآمن V7.1]
+                try:
+                    safe_user_id = int(user_id)
+                except:
+                    safe_user_id = None
+
+                # --- [ المسار الأول: المطور (مسار المطور - قفل صعب) ] ---
+                if safe_user_id == DEVELOPER_ID:
                     try:
-                        # إرسال الكاش بالكامل بدون أي تعديل أو حذف مفاتيح
                         developer_payload = {
                             "FULL_CACHE": current_cache,
                             "INTEGRITY": integrity_snapshot,
@@ -717,33 +754,45 @@ class DataManager:
                         execution_flags["developer_flow_done"] = True
                         print(f"📡 [{process_id}]: تم إرسال النسخة الكاملة للمطور.")
                     except Exception as dev_err:
+                        current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Dev send failed: {dev_err}")
                         print(f"⚠️ فشل إرسال كاش المطور: {dev_err}")
 
-                # --- [ المسار الثاني: المالك (Owner Scoped Path - STRICT FILTER) ] ---
+                # --- [ المسار الثاني: المالك (مسار المالك المحدد - فلتر صارم)] ---
                 else:
                     try:
-                        # تعريف الهوية المزدوجة للفلترة (bot_id + bot_token)
                         target_token = str(self.bot_token)
                         target_id = str(bot_id) if bot_id else None
                         owner_scoped_data = {}
                         
-                        # [V7 Additive]: نظام الفلترة المزدوج (Dual Identity Filtering)
-                        # يتم جمع البيانات التي تنطبق عليها أي من الهويتين دون حذف الأصل
+                        # [أداء V7.1 وطبقة المرشح الصارمة]
+                        MAX_STR_SIZE = 5000 # [PERFORMANCE GUARD]
+                        
                         for key, value in current_cache.items():
                             is_match = False
                             
-                            # الشرط 1: المطابقة عبر bot_id (إذا كان متاحاً)
+                            # الشرط 1: المطابقة عبر bot_id
                             if target_id and isinstance(value, dict) and str(value.get('bot_id')) == target_id:
                                 is_match = True
                             
-                            # الشرط 2: المطابقة عبر bot_token (في المفتاح أو القيمة - String Match)
-                            if not is_match and (target_token in str(key) or target_token in str(value)):
-                                is_match = True
-                                
+                            # [طبقة مرشح النوع الصارم V7.1]
+                            if not is_match and isinstance(value, dict):
+                                if target_token in str(value.get("bot_token", "")):
+                                    is_match = True
+                            
+                            # الشرط القديم (دون حذف) مع Performance Guard
+                            if not is_match:
+                                value_str = str(value)
+                                if len(value_str) < MAX_STR_SIZE:
+                                    if target_token in str(key) or target_token in value_str:
+                                        is_match = True
+
                             if is_match:
                                 owner_scoped_data[key] = value
+                        # [التحقق من النطاق V7.2]
+                        scoped_items_count = len(owner_scoped_data)
+                        if scoped_items_count == 0:
+                            current_logger.warning(f"⚠️ [{trace_id}]: Empty scoped payload generated.")                                
 
-                        # [V7 Additive]: طبقة ترميز Base64 للنقل (Encoding Layer)
                         owner_final_payload = {
                             "scoped_cache": owner_scoped_data,
                             "integrity": integrity_snapshot,
@@ -753,12 +802,10 @@ class DataManager:
                         json_payload = json.dumps(owner_final_payload, ensure_ascii=False)
                         encoded_data = base64.b64encode(json_payload.encode('utf-8')).decode('utf-8')
                         
-                        # إنشاء ملف مؤقت باسم فريد يحتوي على user_id
                         temp_owner_file = f"temp_v7_{user_id}_{process_id}.json"
                         with open(temp_owner_file, "w", encoding="utf-8") as f:
                             f.write(encoded_data)
                         
-                        # إرسال الملف المشفر للمالك
                         with open(temp_owner_file, "rb") as owner_doc:
                             await bot.send_document(
                                 chat_id=user_id,
@@ -768,18 +815,21 @@ class DataManager:
                                 parse_mode="HTML"
                             )
                         
-                        # الحذف فقط بعد نجاح الإرسال 100%
-                        if os.path.exists(temp_owner_file):
-                            os.remove(temp_owner_file)
                         execution_flags["owner_flow_done"] = True
+                        execution_flags["cache_backup_done"] = True
                         print(f"🔐 [{process_id}]: تم إرسال النسخة المشفرة للمالك.")
 
                     except Exception as owner_err:
+                        current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Owner flow failed: {owner_err}")
                         print(f"⚠️ فشل تنفيذ نظام المالك المزدوج: {owner_err}")
+
+            # [V7.1 CRITICAL CHECK]: توثيق فشل DB غير المتوقع
+            if not execution_flags["db_backup_done"] and not user_id:
+                current_logger.warning(f"🚨 [{trace_id}][CRITICAL]: DB Backup failed unexpectedly for system task.")
 
             # [V7 Trace System]: سجلات التتبع الإلزامية في النهاية
             current_logger.info(
-                f"🧠 [{process_id}] V7 TRACE | VERSION={backup_version} | "
+                f"🧠 [{process_id}] V7.1 TRACE | VERSION={backup_version} | "
                 f"INTEGRITY={file_hash[:8]} | SIZE={file_size} | "
                 f"FLAGS={json.dumps(execution_flags)}"
             )
@@ -787,15 +837,25 @@ class DataManager:
             return True
 
         except Exception as e:
-            current_logger.error(f"❌ [{process_id}]: فشل نهائي V7 Enterprise: {str(e)}")
+            current_logger.error(f"❌ [{process_id}]: فشل نهائي V7.1 Enterprise: {str(e)}")
             return False
 
         finally:
-            # تحرير الموارد للجلسات المحلية فقط
+            # [حارس تنظيف الفشل V7.1]
+            try:
+                if 'temp_owner_file' in locals() and os.path.exists(temp_owner_file):
+                    os.remove(temp_owner_file)
+            except: pass
+
             if local_bot:
                 try:
                     await local_bot.close()
-                except: pass
+                except Exception as silent_err:
+                    current_logger.debug(f"[SILENT_ERROR_CAPTURED]: Bot close failed: {silent_err}")
+                    pass
+
+
+
  #~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~
                
