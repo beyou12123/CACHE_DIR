@@ -138,7 +138,7 @@ def get_types_menu_inline(user_id):
             descriptions = {r['key']: r['value'] for r in records if str(r['key']).startswith('desc_')}
     except: pass
 
-    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'startbot.py', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'ui_keyboards.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py']
+    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'startbot.py', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'ui_keyboards.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py', 'contact_message.py', 'contact_callback.py']
     
     dynamic_buttons = []
     for file in os.listdir('.'):
@@ -742,11 +742,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif data == "download_cache_files":
         # --- [ إضافة جديدة: حماية الإدارة ] ---
-        if user_id not in ALL_ADMINS:
+        if update.effective_user.id not in ALL_ADMINS:
             await deny_access(query)
             return
+        await db_manager.create_backup_to_telegram(shared_bot=context.bot, user_id=update.effective_user.id)
 
-        await download_bot_cache(update, context)
         
     elif data == "start_restore_request":
         # 1. حماية المطور (صحيحة)

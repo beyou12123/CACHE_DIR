@@ -1,0 +1,2406 @@
+import logging
+import re
+import io
+import os
+import g4f
+import pandas as pd
+import openpyxl
+import uuid
+import json
+import secrets
+import importlib
+from ui_keyboards import get_coach_panel_keyboard, get_tech_settings_keyboard
+import importlib.util
+from datetime import datetime
+from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+from ContentManager import content_management_handler, config_input_receiver, get_main_config_keyboard, auto_reply_engine
+# --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
+# محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
+try:
+    import google.generativeai as genai
+    AI_ENABLED = True
+except (ImportError, ModuleNotFoundError):
+    genai = None  # أضف هذا السطر لتعريف المتغير كـ None ومنع خطأ NameError
+    AI_ENABLED = False
+    print("⚠️ تنبيه: مكتبة google-generativeai غير مثبتة في البيئة الحالية.")
+
+
+ # ضروري لعمليات استيراد وتصدير الإكسل
+   # محرك معالجة ملفات xlsx
+# --- [ 3. مكتبات تليجرام بوت (النسخة الحديثة) ] ---
+from telegram import (
+    Update, 
+    InlineKeyboardButton, 
+    InlineKeyboardMarkup, 
+    Bot, 
+    ChatMember
+)
+from telegram.ext import (
+    ApplicationBuilder, 
+    ContextTypes, 
+    ChatMemberHandler, 
+    CommandHandler,      
+    CallbackQueryHandler, 
+    MessageHandler, 
+    filters,
+    JobQueue
+)
+
+from startbot import (
+    # --- المتغيرات والثوابت والمعرفات ---
+    TOKEN,
+    DEVELOPER_ID,
+    BACKUP_CHANNEL_ID,
+    ADMIN_IDS,
+    ALL_ADMINS,
+    ADMIN_ID,
+    CHOOSING_TYPE,
+    GETTING_TOKEN,
+    GETTING_NAME,
+    WAITING_FOR_MODULE_NAME,
+    WAITING_BROADCAST_CONTENT,
+    RUNNING_BOTS,
+    _running_bot_tokens,
+    RUNNING_LOCK,
+    ACTIVE_RUNTIME_BOTS,
+    BASE_DIR, 
+    CACHE_DIR, 
+    BOT_PROCESS_LOCK_FILE,
+    CHECK_INTERVAL, 
+    LAST_CHECK_TIME, 
+    
+    # --- الدوال الأساسية وإدارة النظام ---
+    acquire_process_lock,
+    release_process_lock,
+    is_bot_running,
+    mark_bot_running,
+    mark_bot_stopped,
+    
+    
+    # --- دوال التشغيل والمحركات الفرعية ---
+    start_all_sub_bots,
+    DB_PATH,
+    run_dynamic_bot,
+    
+    # --- معالجات الأوامر والمحادثات (Handlers) ---
+    
+    start_create_bot,
+    select_type,
+    receive_token,
+    cancel
+)
+from sheets import 
+from sheets import 
+
+from sheets import (
+    get_bot_config, 
+    add_log_entry, 
+    get_bot_users_count, 
+    get_bot_blocks_count,
+    save_user,
+    get_all_categories,
+    add_new_category,
+    delete_category_by_id,
+    update_category_name,
+    add_new_course,
+    get_courses_by_category,
+    delete_course_by_id,
+    get_ai_setup,
+    link_user_to_inviter,
+    check_user_permission,
+    ss,
+    get_user_referral_stats,
+    get_bot_setting,
+    redeem_points_for_course,
+    courses_sheet,
+    get_all_coaches,
+    delete_coach_from_sheet,
+    add_new_coach_advanced,
+    smart_sync_check,
+    get_bot_data_from_cache,
+    delete_question_from_bank,
+    add_question_to_bank,
+    create_auto_quiz,
+    toggle_quiz_visibility,
+    ensure_permission_row_exists,
+    get_employee_permissions,
+    save_group_to_db,
+    delete_group_by_id,
+    update_group_field,
+    toggle_scope_id,
+    get_all_personnel_list,
+    toggle_employee_permission,
+    get_newly_activated_students,
+    update_global_version,
+    find_user_by_username,
+    add_new_branch_db,
+    update_content_setting,
+    client,
+    save_ai_setup,
+    add_new_employee_advanced,
+    process_referral_reward_on_purchase,
+    seed_default_settings,
+    update_withdrawal_status,
+    create_withdrawal_request,
+    get_system_time, 
+    get_courses_knowledge_base, 
+    delete_branch_db
+)
+# --- [ استيرادات الموديلات الأخرى ] ---
+
+from educational_manager import (
+    list_all_discounts_ui,
+    process_dsc_ask_desc,
+    process_dsc_check,
+    add_discount_start,
+    manage_control_ui,
+    validate_dsc_max,
+    validate_dsc_expiry,
+    validate_dsc_value,
+    validate_dsc_desc,
+    show_lectures_logic,
+    view_discount_details_ui,
+    show_discount_codes_logic,
+    manage_library_selector,
+    manage_groups_main,
+    manage_categories_main,
+    quiz_create_start_ui,
+    start_add_question_flow, 
+    process_q_flow,
+    quiz_gen_select_groups_ui,
+    q_bank_manager_ui,
+    browse_q_bank_ui,
+    view_question_details_ui,
+    start_add_question_ui,
+    quiz_activation_start,
+    quiz_activation_groups,
+    employee_quiz_view,
+    quiz_options_ui,
+    start_add_group,
+    confirm_group_save,
+    group_options_ui,
+    confirm_delete_group_ui,
+    process_grp_name,
+    process_grp_days,
+    process_grp_time
+)
+# --- [ محرك الدورات ] ---
+
+from course_engine import (
+    # --- إدارة الإعلانات والحملات ---
+    ad_create_start, 
+    ad_report_view, 
+    manage_ads_main_ui,
+    process_ad_campaign_flow,
+
+    # --- إعدادات النظام والعملة ---
+    show_system_setup_information,
+    set_currency_unit_flow,
+    save_currency_unit_logic,
+    set_default_payment_flow,
+    save_payment_info_logic,
+
+    # --- نظام التسويق بالعمولة والنقاط ---
+    set_marketers_commission_flow,
+    save_marketers_commission_logic,
+    set_ref_points_join_flow,
+    save_ref_points_join_logic,
+    set_ref_points_purchase_flow,
+    save_ref_points_purchase_logic,
+    set_min_payout_flow,
+    save_min_payout_logic,
+
+    # --- إدارة الواجبات والدرجات ---
+    set_homework_grade_flow,
+    save_homework_grade_logic,
+    set_min_passing_grade_flow,
+    save_min_passing_grade_logic,
+    set_max_passing_grade_flow,
+    save_max_passing_grade_logic,
+
+    # --- عرض المحتوى ولوحة الشرف ---
+    show_honors_main_menu,
+    show_course_content_ui
+)
+# --- [ إدارة الكاش والبيانات ] ---
+from cache_manager import (
+    FACTORY_GLOBAL_CACHE,
+    save_cache_to_disk, 
+    fetch_full_factory_data,
+    export_bot_data_to_excel,
+    db_manager,
+    update_global_version,
+    export_bot_data_to_excel,
+    fetch_full_factory_data,
+    check_excel_permission_from_cache
+)
+
+
+# --------------------------------------------------------------------------
+# --- [ معالج ضغطات الأزرار (Callback Query Handler) ] ---
+# --------------------------------------------------------------------------
+async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التحكم في كافة عمليات الضغط على الأزرار الشفافة Inline Buttons"""
+    print("--- [DEBUG]: تم ضغط زر في البوت الآن والطلب وصل للمعالج ---")    
+    query = update.callback_query
+    data = query.data
+    
+    user_id = query.from_user.id
+    bot_token = context.bot.token
+    config = get_bot_config(bot_token)
+
+    bot_owner_id = int(config.get("admin_ids", 0))
+    await query.answer()
+# --------------------------------------------------------------------------
+
+    # 1. معالجة جداول المحاضرات
+    if data == "schedules_lectures":
+
+        await show_lectures_logic(update, context)
+        
+    # 2. فتح لوحة إدارة أكواد الخصم الرئيسية
+    elif data == "discount_codes":
+
+        await show_discount_codes_logic(update, context)
+
+    # 3. زر "إضافة كود جديد" (هذا الزر كان مفقوداً في ملفك)
+    elif data == "add_discount_start":
+
+        await add_discount_start(update, context)
+
+    # 4. معالجة خطوات التحقق من الدورة والاستمرار
+    # التعديل المطلوب لضمان الاستجابة وعدم التجمد:
+    elif data.startswith("d_ch_"): # استخدمنا d_ch_ بدلاً من dsc_check_
+        course_id = data.replace("d_ch_", "")
+
+        await process_dsc_check(update, context, course_id)
+    #>>>>>>>>>>>>>>>>    
+# داخل contact_callback_handler (عند اختيار "أريدها لي"):
+    elif data.startswith("buy_c_me_"):
+        course_id = data.replace("buy_c_me_", "")
+        await course_engine.start_registration_flow(update, context, course_id, payment_method="points")
+#>>>>>>>>>>>>>>>>
+    # معالجة أزرار الجنس والتأكيد من محرك التسجيل
+    elif data.startswith("reg_gen_"):
+        gender = "ذكر" if "male" in data else "أنثى"
+        context.user_data['reg_flow']['gender'] = gender
+        context.user_data['reg_flow']['step'] = 'awaiting_country'
+        await query.message.reply_text("🌍 يرجى إرسال <b>اسم البلد</b> الحالي:")
+
+    elif data == "confirm_reg_final":
+        await course_engine.finalize_and_save(update, context)
+#>>>>>>>>>>>>>>>>*
+#©©©©©©©©©©
+# المناداة لدالة معلومات تهيئة البوت 
+    elif data == "system_setup_information":
+
+        await show_system_setup_information(update, context)
+
+
+    elif data == "dsc_continue":
+
+        await process_dsc_ask_desc(update, context)
+
+    # 5. عرض وإدارة الأكواد للمالك
+    elif data == "list_all_discounts":
+        
+        await list_all_discounts_ui(update, context)
+
+    # 6. عرض تفاصيل كود محدد
+    elif data.startswith("view_disc_"):
+        disc_id = data.replace("view_disc_", "")
+
+        await view_discount_details_ui(update, context, disc_id)
+#>>>>>>>>>>>>>>>>
+    # 7. معالج حذف الكود
+    elif data.startswith("confirm_del_disc_"):
+        disc_id = data.replace("confirm_del_disc_", "")
+
+        sheet = ss.worksheet("أكواد_الخصم")
+        try:
+            cell = sheet.find(disc_id, in_column=3)
+            if cell:
+                sheet.delete_rows(cell.row)
+                await query.answer("✅ تم حذف كود الخصم بنجاح!", show_alert=True)
+
+                await list_all_discounts_ui(update, context)
+        except:
+            await query.answer("❌ فشل الحذف.", show_alert=True)
+
+    # 8. زر العودة للقائمة الرئيسية (تم تصحيح الشرط هنا لضمان تسلسل elif)
+    elif data == "main_menu":
+        await start_handler(update, context)
+#>>>>>>>>>>>>>>>>
+    # معالج اربح معنا (تم ربطه بـ elif لضمان الاستجابة)
+    elif data == "referral_system":
+        # ملاحظة: تم إزالة query.answer() المكررة هنا لأنها تم استدعاؤها في بداية الدالة
+        user_id = query.from_user.id
+        bot_token = context.bot.token
+        
+        # جلب يوزر البوت ديناميكياً لتوليد الرابط
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
+        referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+        
+        # جلب إحصائيات الإحالة والرصيد من ملف sheets
+
+        stats = get_user_referral_stats(bot_token, user_id)
+        
+        text = (
+            f"💰 <b>نظام المكافآت والإحالة</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"مرحباً بك! يمكنك الآن الحصول على دوراتنا <b>مجاناً</b> عبر دعوة أصدقائك للمنصة.\n\n"
+            f"📢 <b>كيف يعمل النظام؟</b>\n"
+            f"1️⃣ انسخ رابطك الفريد أدناه.\n"
+            f"2️⃣ شاركه مع أصدقائك أو في مجموعات الدراسة.\n"
+            f"3️⃣ مقابل كل شخص يسجل عبرك، ستحصل على <b>نقاط رصيد</b>.\n\n"
+            f"🔗 <b>رابط الإحالة الخاص بك:</b>\n"
+            f"<code>{referral_link}</code>\n\n"
+            f"📊 <b>إحصائياتك الحالية:</b>\n"
+            f"👤 عدد الناجحين في دعوتهم: <b>{stats.get('count', 0)}</b> طالب\n"
+            f"💰 رصيدك المكتسب: <b>{stats.get('balance', 0)} نقطة</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"💡 <i>يمكنك استبدال النقاط بفتح الدورات المدفوعة فور وصولك للحد المطلوب.</i>"
+        )
+        
+        # تعديل أزرار قائمة الإحالة لتشمل المتجر وطلب السحب
+        keyboard = [
+            [InlineKeyboardButton("🛒 استبدال النقاط بالدورات", callback_data="redeem_store")],
+            [InlineKeyboardButton("💰 سحب الأرباح (كاش)", callback_data="request_payout_start")], 
+            [InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="referral_system")],
+            [InlineKeyboardButton("🔙 العودة للقائمة", callback_data="main_menu")]
+        ]
+
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    elif data == "request_payout_start":
+        bot_token = context.bot.token
+        # 1. جلب الإعدادات الديناميكية لهذا البوت من ورقة الإعدادات
+        currency = get_bot_setting(bot_token, "currency_unit", default="نقطة")
+        min_payout = float(get_bot_setting(bot_token, "maximum_withdrawal_marketers", default=50))
+        
+        # 2. جلب رصيد المسوق الحالي من البيانات
+        stats = get_user_referral_stats(bot_token, user_id)
+        current_balance = float(stats.get('balance', 0))
+        
+        # 3. التحقق من الحد الأدنى للسحب
+        if current_balance < min_payout:
+            await query.answer(f"⚠️ رصيدك {current_balance} {currency}. الحد الأدنى للسحب هو {min_payout} {currency}.", show_alert=True)
+            return
+
+        # 4. حفظ البيانات المؤقتة في الذاكرة لبدء طلب وسيلة التحويل
+        context.user_data['payout_amount'] = current_balance
+        context.user_data['currency'] = currency 
+        context.user_data['action'] = 'awaiting_payout_method'
+        
+        text = (
+            f"💰 <b>طلب سحب الأرباح</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"الرصيد القابل للسحب: <b>{current_balance} {currency}</b>\n\n"
+            f"يرجى إرسال <b>وسيلة التحويل</b> وبياناتك (مثلاً: رقم الحساب أو المحفظة):\n"
+        )
+        await query.edit_message_text(text, parse_mode="HTML")
+
+
+
+#>>>>>>>>>>>>>>>>
+    # اعتماد صرف الأرباح - (المرحلة 1: طلب صورة الإيصال)
+    elif data.startswith("payout_approve_"):
+        req_id = data.replace("payout_approve_", "")
+        
+        # جلب بيانات الطلب من البيانات لمعرفة من هو صاحب الطلب (المسوق)
+        sheet_req = ss.worksheet("سجل_السحوبات")
+        cell = sheet_req.find(str(req_id), in_column=4)
+        if cell:
+            row_data = sheet_req.row_values(cell.row)
+            target_user_id = row_data[1] # العمود الثاني هو ID المسوق
+            context.user_data['target_payout_user_id'] = target_user_id
+            context.user_data['payout_req_id'] = req_id
+            context.user_data['action'] = 'awaiting_payout_proof'
+            
+            await query.edit_message_text(
+                f"📸 <b>يرجى إرسال صورة الإيصال للطلب {req_id}</b>\n"
+                f"سيتم إرسالها فوراً للمسوق وتحديث السجل.", 
+                parse_mode="HTML"
+            )
+
+
+    # رفض طلب السحب وإرجاع الرصيد (يبقى كما هو لأنه صحيح وآمن)
+    elif data.startswith("payout_reject_"):
+        req_id = data.replace("payout_reject_", "")
+        try:
+            sheet_req = ss.worksheet("سجل_السحوبات")
+            row_cell = sheet_req.find(str(req_id), in_column=4)
+            if row_cell:
+                req_data = sheet_req.row_values(row_cell.row)
+                target_user_id = req_data[1] 
+                refund_amount = float(req_data[4])
+                
+                sheet_users = ss.worksheet("المستخدمين")
+                u_cell = sheet_users.find(str(target_user_id), in_column=1)
+                if u_cell:
+                    old_bal = float(sheet_users.cell(u_cell.row, 11).value or 0)
+                    sheet_users.update_cell(u_cell.row, 11, old_bal + refund_amount)
+               
+               
+                update_withdrawal_status(bot_token, req_id, "مرفوض", admin_note="تم الرفض وإعادة الرصيد")
+                await query.edit_message_text(f"❌ تم رفض الطلب <code>{req_id}</code> وإعادة {refund_amount} إلى رصيد المسوق.", parse_mode="HTML")
+        except Exception as e:
+            await query.answer(f"❌ خطأ في عملية الرفض: {e}")
+
+
+#>>>>>>>>>>>>>>>>
+
+
+
+
+    # معالج تعطيل/تفعيل الكود مؤقتاً
+    elif data.startswith("dsc_tog_"):
+        parts = data.split("_")
+        disc_id = parts[2]
+        new_action = parts[3] # on أو off
+        
+ 
+        sheet = ss.worksheet("أكواد_الخصم")
+        try:
+            cell = sheet.find(disc_id, in_column=3) # البحث في عمود معرف_الخصم
+            if cell:
+                new_status = "نشط" if new_action == "on" else "معطل"
+                sheet.update_cell(cell.row, 11, new_status) # تحديث العمود 11 (الحالة)
+                await query.answer(f"✅ تم تغيير حالة الكود إلى: {new_status}", show_alert=True)
+                
+                # إعادة تحديث الواجهة لإظهار الحالة الجديدة
+
+                await view_discount_details_ui(update, context, disc_id)
+        except Exception as e:
+            await query.answer("❌ فشل تحديث الحالة.")
+#>>>>>>>>>>>>>>>>
+    # استبدال النقاط بالدورات - عرض المتجر
+    elif data == "redeem_store":
+        await query.answer()
+        
+        stats = get_user_referral_stats(bot_token, user_id)
+        current_balance = stats.get('balance', 0)
+        
+        # جلب سعر الدورة الموحد من الإعدادات
+        redeem_cost = get_bot_setting(bot_token, "min_points_redeem", default=100)
+        
+        text = (
+            f"🛒 <b>متجر استبدال النقاط</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"رصيدك الحالي: 💰 <b>{current_balance} نقطة</b>\n"
+            f"تكلفة فتح أي دورة: 🎫 <b>{redeem_cost} نقطة</b>\n\n"
+            f"اختر الدورة التي تود فتحها برصيدك:"
+        )
+        
+        # جلب الدورات المتاحة من البيانات
+        courses_ws = ss.worksheet("الدورات_التدريبية")
+        all_courses = courses_ws.get_all_records()
+        
+        keyboard = []
+        for course in all_courses:
+            if str(course.get('bot_id')) == str(bot_token):
+                c_name = course.get('اسم_الدورة')
+                c_id = course.get('ID_الدورة')
+                
+                # زر الشراء يتغير حسب الرصيد
+                if float(current_balance) >= float(redeem_cost):
+                    keyboard.append([InlineKeyboardButton(f"✅ فتح: {c_name}", callback_data=f"select_c_{c_id}")])
+                else:
+                    keyboard.append([InlineKeyboardButton(f"🔒 {c_name} (تحتاج نقاط)", callback_data="insufficient_points")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 العودة", callback_data="referral_system")])
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # المرحلة الوسيطة: اختيار (لي أم لمشترك آخر)
+    elif data.startswith("select_c_"):
+        course_id = data.replace("select_c_", "")
+        
+        # جلب اسم الدورة للتوضيح
+        courses_ws = ss.worksheet("الدورات_التدريبية")
+        course_row = courses_ws.find(str(course_id), in_column=2) # نفترض ID الدورة في العمود 2
+        course_name = courses_ws.cell(course_row.row, 3).value if course_row else "الدورة المختارة"
+
+        text = (
+            f"🎯 <b>تأكيد اختيار الدورة</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"الدورة المختارة هي: <b>{course_name}</b>\n\n"
+            f"هل تريد التسجيل في هذه الدورة لنفسك، أم تريد إهداءها لمشترك آخر؟"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("👤 أريدها لي", callback_data=f"buy_c_me_{course_id}")],
+            [InlineKeyboardButton("🎁 أريدها لمشترك آخر", callback_data=f"buy_c_gift_{course_id}")],
+            [InlineKeyboardButton("🔙 عودة للقائمة السابقة", callback_data="redeem_store")]
+        ]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # تنفيذ عملية الشراء "لي"
+    elif data.startswith("buy_c_me_"):
+        course_id = data.replace("buy_c_me_", "")
+        redeem_cost = get_bot_setting(bot_token, "min_points_redeem", default=100)
+        
+        # استدعاء دالة الخصم والتفعيل
+        success, new_balance = redeem_points_for_course(bot_token, user_id, redeem_cost)
+        
+        if success:
+            await query.answer("🎉 مبروك! تم فتح الدورة بنجاح", show_alert=True)
+            await query.edit_message_text(
+                f"✅ <b>تم شراء الدورة بنجاح!</b>\n"
+                f"رصيدك المتبقي: <b>{new_balance} نقطة</b>.\n\n"
+                f"تم تفعيل الدورة في حسابك، يمكنك البدء الآن من القائمة الرئيسية.",
+                parse_mode="HTML"
+            )
+        else:
+            await query.answer("❌ فشلت العملية، تأكد من رصيدك.", show_alert=True)
+
+    # تنفيذ عملية الإهداء لمشترك آخر (نظام روابط الإهداء المشفرة)
+    elif data.startswith("buy_c_gift_"):
+        course_id = data.replace("buy_c_gift_", "")
+        bot_token = context.bot.token
+        
+        # 1. التحقق من وجود رابط هدية نشط لم يُستخدم بعد لهذا المسوق (القفل الذكي)
+
+        sheet_coupons = ss.worksheet("الكوبونات")
+        records = sheet_coupons.get_all_records()
+        
+        active_code = None
+        for r in records:
+            if (str(r.get("bot_id")) == str(bot_token) and 
+                str(r.get("معرف_الطالب")) == str(user_id) and 
+                str(r.get("حالة_الكوبون")) == "نشط"):
+                active_code = r.get("معرف_الكوبون")
+                break
+        
+        # 2. إذا وجد رابط نشط، يتم تزويد المسوق به بدلاً من توليد جديد
+        if active_code:
+            bot_info = await context.bot.get_me()
+            old_link = f"https://t.me/{bot_info.username}?start=gift_{active_code}"
+            
+            text = (
+                f"⚠️ <b>عذراً عزيزي المسوق!</b>\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"لديك بالفعل <b>هدية سارية المفعول</b> لم يتم استخدامها بعد. نظامنا يسمح بهدية واحدة نشطة في كل مرة لضمان دقة حساباتك.\n\n"
+                f"🔗 <b>رابط الهدية الحالي:</b>\n"
+                f"<code>{old_link}</code>\n\n"
+                f"✨ <i>يرجى مشاركة الرابط أعلاه، وفور استخدامه ستتمكن من توليد هدية جديدة.</i>"
+            )
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 العودة للمتجر", callback_data="redeem_store")]
+            ]), parse_mode="HTML")
+            return
+
+        # 3. توليد كود هدية جديد وحفظه (بدون خصم نقاط في هذه المرحلة)
+        import secrets
+        gift_code = f"GFT{secrets.token_hex(3).upper()}"
+        
+        # ترتيب الأعمدة في شيت الكوبونات (11 عمود):
+        # bot_id, معرف_الفرع, معرف_الكوبون, معرف_الطالب (نخزن فيه ID المهدِي), قيمة_الخصم, 
+        # نوع_الخصم, الحد_الأقصى_للاستخدام, حالة_الكوبون, تاريخ_الإنشاء, تاريخ_الانتهاء, ملاحظات
+
+        new_row = [
+            str(bot_token), "1001001", gift_code, str(user_id), "100", 
+            "هدية دورة", "1", "نشط", get_system_time("date"), "2026-12-31", f"دورة_{course_id}"
+        ]
+        sheet_coupons.append_row(new_row, value_input_option='USER_ENTERED')
+
+        update_global_version(bot_token)
+
+        bot_info = await context.bot.get_me()
+        new_link = f"https://t.me/{bot_info.username}?start=gift_{gift_code}"
+        
+        success_text = (
+            f"🎁 <b>تم تجهيز رابط الهدية بنجاح!</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"يمكنك الآن إرسال هذا الرابط لمن تحب. سيتم خصم النقاط من رصيدك <b>فقط</b> عندما يقوم الطرف الآخر بالتسجيل الفعلي.\n\n"
+            f"🔗 <b>رابط الإهداء الخاص بك:</b>\n"
+            f"<code>{new_link}</code>\n\n"
+            f"📢 <i>سيصلك إشعار فوري فور تفعيل الهدية.</i>"
+        )
+        await query.edit_message_text(success_text, reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 العودة للمتجر", callback_data="redeem_store")]
+        ]), parse_mode="HTML")
+
+
+#>>>>>>>>>>>>>>>>
+# ربط الدورات بالنقاط
+
+    # --- [ ملفي الدراسي - عرض الدورات المشترك بها ] ---
+    elif data == "my_profile":
+        
+        
+        # جلب البيانات من الكاش لسرعة استجابة فائقة
+        all_regs = FACTORY_GLOBAL_CACHE["data"].get("سجل_التسجيلات", [])
+        
+        # تصفية الدورات الخاصة بهذا الطالب في هذا البوت
+        student_courses = [
+            r for r in all_regs 
+            if str(r.get("bot_id")) == str(bot_token) and str(r.get("ID_المستخدم_تيليجرام")) == str(user_id)
+        ]
+
+        if not student_courses:
+            text = (
+                "👤 <b>ملفك الدراسي</b>\n\n"
+                "⚠️ أنت غير مشترك في أي دورة تعليمية حالياً.\n"
+                "💡 يمكنك استعراض الدورات المتاحة والاشتراك بها."
+            )
+            keyboard = [
+                [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
+                [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")]
+            ]
+        else:
+            text = (
+                "👤 <b>ملفك الدراسي</b>\n\n"
+                "إليك قائمة بالدورات التي تمتلك حق الوصول إليها:\n"
+                "👇 انقر على اسم الدورة لفتح المحتوى التعليمي"
+            )
+            keyboard = []
+            for reg in student_courses:
+                c_name = reg.get('اسم_الدورة', 'دورة غير مسمى')
+                c_id = reg.get('معرف_الدورة')
+                keyboard.append([InlineKeyboardButton(f"📖 {c_name}", callback_data=f"open_content_{c_id}")])
+
+        keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="main_menu")])
+        
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        except Exception as e:
+            await query.answer("جاري عرض ملفك الدراسي...")
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- [ محرك فتح محتوى الدورة ] ---
+    elif data.startswith("open_content_"):
+        course_id = data.replace("open_content_", "")
+
+        # استدعاء الواجهة البرمجية لعرض الدروس (الموجودة في ملف course_engine.py)
+        await show_course_content_ui(update, context, course_id)
+
+# --------------------------------------------------------------------------
+    # --- [ معالج استعراض الأقسام للطالب ] ---
+    elif data == "view_categories":
+        # جلب الأقسام من الكاش لسرعة الاستجابة
+
+        categories = get_all_categories(bot_token)
+        
+        if not categories:
+            await query.edit_message_text(
+                "⚠️ <b>تنبيه:</b> لا توجد أقسام تعليمية متاحة حالياً.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]]),
+                parse_mode="HTML"
+            )
+            return
+
+        # بناء قائمة الأقسام كأزرار
+        keyboard = []
+        for cat in categories:
+            keyboard.append([InlineKeyboardButton(f"📁 {cat['name']}", callback_data=f"std_view_cat_{cat['id']}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="main_menu")])
+        
+        await query.edit_message_text(
+            "📚 <b>المكتبة التعليمية:</b>\nاختر القسم الذي ترغب في استعراض دوراته:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    # --- [ معالج عرض دورات قسم محدد للطالب ] ---
+    elif data.startswith("std_view_cat_"):
+        cat_id = data.replace("std_view_cat_", "")
+
+        
+        courses = get_courses_by_category(bot_token, cat_id)
+        
+        if not courses:
+            await query.edit_message_text(
+                "⚠️ لا توجد دورات متاحة في هذا القسم حالياً.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة للأقسام", callback_data="view_categories")]]),
+                parse_mode="HTML"
+            )
+            return
+
+        keyboard = []
+        for crs in courses:
+            keyboard.append([InlineKeyboardButton(f"📘 {crs['name']}", callback_data=f"std_course_info_{crs['id']}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 عودة للأقسام", callback_data="view_categories")])
+        
+        await query.edit_message_text(
+            "📖 <b>الدورات المتاحة:</b>\nاختر دورة لمعرفة التفاصيل والتسجيل:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+# ==========================================
+# الكود الجديد الذي تضعه هنا (من السطر 180 تقريباً)
+# ==========================================
+    # الإصلاح: معالجة الزر العام للمكتبة
+    elif data == "manage_library":
+
+        await manage_library_selector(update, context)
+        
+    elif data.startswith("manage_library_"):
+        course_id = data.replace("manage_library_", "")
+        await course_engine.show_library_menu(update, context, course_id)
+
+    elif data.startswith("view_file_"):
+        file_id = data.replace("view_file_", "")
+        await course_engine.view_file_details(update, context, file_id)
+# ==========================================
+#~~~~~~~~~~~~~~~~
+#المكتبة 
+    elif data.startswith("add_lib_file_"):
+        course_id = data.replace("add_lib_file_", "")
+        await educational_manager.prompt_add_library_file(update, context, course_id)
+#~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~
+
+    data = query.data
+    await query.answer()
+
+    # --- [ ممرات إدارة الحملات الإعلانية - الإضافة هنا ] ---
+    if data == "manage_ads":
+        await manage_ads_main_ui(update, context)
+        return
+
+    elif data == "ad_create_start":
+        await ad_create_start(update, context)
+        return
+
+    elif data == "ad_report_view":
+        await ad_report_view(update, context)
+        return
+
+    elif data.startswith("ad_set_crs_"):
+        course_id = data.replace("ad_set_crs_", "")
+        context.user_data['temp_ad'] = {'course_id': course_id}
+        context.user_data['action'] = 'awaiting_ad_platform'
+        await query.edit_message_text("🌐 <b>الخطوة 2:</b> أرسل اسم المنصة الإعلانية (مثلاً: فيسبوك):", parse_mode="HTML")
+        return
+    # --- [ نهاية الإضافة ] ---
+
+
+#~~~~~~~~~~~~~~~~
+# --------------------------------------------------------------------------
+    # --- [ معالج الدعم الفني ] ---
+    elif data == "contact_admin":
+        # جلب إعدادات البوت لمعرفة هوية الإدارة
+
+        config = get_bot_config(bot_token)
+        
+        # تحويل معرف المالك إلى نص نظيف
+        admin_id = str(config.get("admin_ids", "")).split(',')[0].strip()
+        
+        if admin_id:
+            text = (
+                "💬 <b>قسم الدعم الفني:</b>\n"
+                "━━━━━━━━━━━━━━\n"
+                "يمكنك التواصل مباشرة مع إدارة المنصة للاستفسار عن الدورات أو حل المشكلات التقنية.\n\n"
+                "👇 اضغط على الزر أدناه لبدء المحادثة:"
+            )
+            # إنشاء زر يحول الطالب لمحادثة خاصة مع المالك
+            keyboard = [
+                [InlineKeyboardButton("📨 إرسال رسالة للإدارة", url=f"tg://user?id={admin_id}")],
+                [InlineKeyboardButton("🔙 العودة للقائمة", callback_data="main_menu")]
+            ]
+        else:
+            # حالة عدم وجود معرف أدمن مسجل في البيانات
+            text = "⚠️ عذراً، لم يتم ضبط حساب الدعم الفني لهذه المنصة بعد. يرجى المحاولة لاحقاً."
+            keyboard = [[InlineKeyboardButton("🔙 العودة", callback_data="main_menu")]]
+
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+# --------------------------------------------------------------------------
+    # --- [ معالج الأسئلة الشائعة ] ---
+    elif data == "view_faq":
+        
+        
+        # جلب بيانات الأسئلة الشائعة من الكاش (الرام)
+        all_faq = FACTORY_GLOBAL_CACHE["data"].get("الأسئلة_الشائعة", [])
+        bot_faq = [f for f in all_faq if str(f.get("bot_id")) == str(bot_token)]
+        
+        if not bot_faq:
+            text = "❓ <b>الأسئلة الشائعة:</b>\n\nلا توجد أسئلة شائعة مضافة حالياً في هذا البوت."
+        else:
+            text = "❓ <b>الأسئلة الشائعة:</b>\n\n"
+            for item in bot_faq:
+                # عرض السؤال والإجابة من العمود "محتوى_السؤال_مع_الإجابة"
+                text += f"📍 <b>{item.get('محتوى_السؤال_مع_الإجابة', 'سؤال غير مسمى')}</b>\n"
+                text += "━━━━━━━━━━━━━━\n"
+
+        keyboard = [[InlineKeyboardButton("🔙 العودة", callback_data="main_menu")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+# --------------------------------------------------------------------------
+# الربط مع الأسئلة
+    elif data == "add_question_bank":
+        # استدعاء دالة بدء التدفق من المدير التعليمي
+        await educational_manager.start_add_question_flow(update, context)
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+    # --- 1. إدارة الإحصائيات ---
+    if data == "admin_stats":
+        total_students = get_bot_users_count(bot_token)
+        blocks = get_bot_blocks_count(bot_token)
+        stats_text = (
+            f"<b>📊 تقرير المنصة الحالي:</b>\n"
+            f"-----------------------\n"
+            f"👥 إجمالي الطلاب: {total_students}\n"
+            f"🚫 عدد المحظورين: {blocks}\n"
+            f"💰 مبيعات اليوم: 0.00$\n"
+            f"📈 أكثر دورة طلباً: لا يوجد بيانات بعد"
+        )
+        await query.edit_message_text(stats_text, reply_markup=get_admin_panel(), parse_mode="HTML")
+
+    # --- 2. إدارة الدورات التدريبية (الواجهة الرئيسية) ---
+
+# --------------------------------------------------------------------------
+    # إضافة هذا القسم للتعامل مع زر إدارة المجموعات
+    elif data == "manage_group":
+        # بما أن إدارة المجموعات تتطلب معرفة الدورة، سنعرض قائمة الدورات أولاً لاختيار واحدة
+
+        all_courses = courses_sheet.get_all_records()
+        bot_courses = [c for c in all_courses if str(c.get('bot_id')) == str(bot_token)]
+        
+        if not bot_courses:
+            await query.edit_message_text("⚠️ لا توجد دورات مضافة حالياً لإنشاء مجموعات لها.")
+            return
+
+        keyboard = [[InlineKeyboardButton(f"📖 {c['اسم_الدورة']}", callback_data=f"sel_course_groups_{c['معرف_الدورة']}")] for c in bot_courses]
+        keyboard.append([InlineKeyboardButton("🔙 عودة", callback_data="main_menu")])
+        
+        await query.edit_message_text("🎯 **اختر الدورة المراد إدارة مجموعاتها:**", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # معالجة اختيار الدورة للانتقال لملف المجموعات
+    elif data.startswith("sel_course_groups_"):
+        course_id = data.replace("sel_course_groups_", "")
+
+        await manage_groups_main(update, context, course_id)
+
+
+
+
+# --------------------------------------------------------------------------
+    # --- 3. إدارة شؤون المدربين والموظفين (نسخة روابط الانضمام اللحظية) ---
+    elif data == "manage_coaches":
+        text = (
+            "👨‍🏫 <b>إدارة الكادر التعليمي والإداري:</b>\n\n"
+            "يمكنك توليد روابط انضمام فريدة صالحة لمرة واحدة لإضافة المدربين أو الموظفين آلياً إلى النظام."
+        )
+        keyboard = [
+            [InlineKeyboardButton("➕ توليد رابط مدرب جديد", callback_data="gen_reg_coach")],
+            [InlineKeyboardButton("➕ توليد رابط موظف جديد", callback_data="gen_reg_staff")],
+            [InlineKeyboardButton("📋 عرض قائمة المدربين الحالية", callback_data="list_coaches")],
+            [InlineKeyboardButton("🔙 عودة للوحة التحكم", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # منطق توليد روابط الانضمام اللحظية (مدربين وموظفين)
+    elif data in ["gen_reg_coach", "gen_reg_staff"]:
+        import secrets
+        
+        
+        role = "coach" if data == "gen_reg_coach" else "staff"
+        token = secrets.token_hex(4).upper() # توليد كود فريد قصير
+        
+        # تخزين الكود مع الرتبة في الذاكرة المركزية RAM
+        FACTORY_GLOBAL_CACHE["temp_registration_tokens"][token] = role
+        
+        bot_info = await context.bot.get_me()
+        reg_link = f"https://t.me/{bot_info.username}?start=reg_{token}"
+        
+        role_name = "مدرب" if role == "coach" else "موظف"
+        text = (
+            f"✅ <b>تم توليد رابط انضمام ({role_name}) جديد:</b>\n\n"
+            f"<code>{reg_link}</code>\n\n"
+            f"⚠️ <b>ملاحظة:</b> هذا الرابط صالح للاستخدام مرة واحدة فقط وسيختفي من الذاكرة بمجرد استخدامه."
+        )
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data="manage_coaches")]]), parse_mode="HTML")
+
+# --------------------------------------------------------------------------
+
+    # 1. معالجة ضغطة "اعتماد" القادمة من المالك
+    elif data.startswith("approve_reg_"):
+        parts = data.split("_")
+        role = parts[2]
+        candidate_id = int(parts[3]) # هذا هو المعرف الذي أرسلته أنت في الزر
+        
+        # 🚨 النقطة الجوهرية: سحب البيانات من ذاكرة "المرشح" وليس "المالك"
+        candidate_context = context.application.user_data.get(candidate_id)
+        
+        if candidate_context and 'reg_data' in candidate_context:
+            # نقل البيانات لذاكرة المالك مؤقتاً لإتمام عملية اختيار الفرع
+            context.user_data['reg_data'] = candidate_context['reg_data']
+            context.user_data['pending_approve'] = {'role': role, 'id': candidate_id}
+            context.user_data['candidate_username'] = candidate_context['reg_data'].get('username', 'بدون')
+        else:
+            # إذا لم يجد البيانات (بسبب ريستارت أو مسح الذاكرة)
+            await query.answer("⚠️ عذراً، تعذر استعادة بيانات المرشح من الذاكرة. اطلب منه التسجيل مجدداً.", show_alert=True)
+            return
+
+        # 2. عرض قائمة الفروع المحدثة من الكاش (نظام 1001001)
+        
+        bot_branches = [r for r in FACTORY_GLOBAL_CACHE.get("data", {}).get("إدارة_الفروع", []) if str(r.get("bot_id")) == str(bot_token)]
+        
+        if not bot_branches:
+            await query.edit_message_text("⚠️ لا توجد فروع مسجلة. أضف فرعاً أولاً من الإعدادات.")
+            return
+
+        # بناء أزرار الفروع
+        keyboard = [[InlineKeyboardButton(f"🏢 {b.get('اسم_الفرع')}", callback_data=f"final_save_reg_{b.get('معرف_الفرع')}")] for b in bot_branches]
+        await query.edit_message_text("🎯 <b>بيانات المرشح جاهزة:</b> اختر الفرع لإتمام الاعتماد:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("reject_reg_"):
+        candidate_id = data.replace("reject_reg_", "")
+        await query.edit_message_text("❌ تم رفض الطلب بنجاح.")
+        try:
+            await context.bot.send_message(chat_id=candidate_id, text="⚠️ نعتذر منك، تم رفض طلب انضمامك للكادر حالياً.")
+        except: pass
+
+# --------------------------------------------------------------------------
+    # التنفيذ النهائي والحفظ (المحرك الموحد المطور لـ 43 عموداً - دمج المدربين والموظفين)
+    elif data.startswith("final_save_reg_"):
+        branch_id_selected = data.replace("final_save_reg_", "").strip()
+        pending = context.user_data.get('pending_approve')
+        reg_info = context.user_data.get('reg_data') # البيانات المستعادة من الذاكرة المؤقتة
+        
+        # 🛡️ حماية ضد التهنيج: إذا فُقدت البيانات من الرام (بسبب ريستارت أو تأخير)
+        if not pending or not reg_info:
+            await query.edit_message_text(
+                "⚠️ <b>انتهت صلاحية الجلسة:</b>\nعذراً، فُقدت البيانات المؤقتة. يرجى إعادة الضغط على زر (✅ اعتماد) من رسالة الطلب الأصلية لبدء العملية مجدداً.",
+                parse_mode="HTML"
+            )
+            return
+
+        # 🚀 الربط الآلي: جلب تفاصيل الفرع من الذاكرة المركزية RAM لضمان جلب الاسم الصحيح
+        
+        br_records = FACTORY_GLOBAL_CACHE.get("data", {}).get("إدارة_الفروع", [])
+        # تنظيف المعرف لضمان مطابقة دقيقة للأرقام النقية (نظام 1001001)
+        branch = next((b for b in br_records if str(b.get("معرف_الفرع")).replace("'", "").strip() == branch_id_selected), {})
+        branch_name = branch.get('اسم_الفرع', 'الرئيسي')
+
+        # استعادة اليوزرنيم المحفوظ أو وضع قيمة افتراضية
+                # 🚨 التصحيح: سحب اليوزرنيم من قاموس بيانات المرشح المستعادة
+        candidate_username = reg_info.get('username', 'بدون')
+        
+        # 🟢 التعبئة الآلية للرتبة: تحويل نوع الطلب لوسم عربي (مدرب/موظف) للعمود 42
+        role_type_ar = "مدرب" if pending['role'] == "coach" else "موظف"
+
+
+        
+        # تنفيذ الحفظ الموحد في ورقة "إدارة_الموظفين" (المحرك الجديد بـ 43 عموداً)
+        success = add_new_employee_advanced(
+            bot_token=bot_token,
+            employee_id=pending['id'],     # ID التيليجرام (العمود 3)
+            name=reg_info['name'],         # الاسم الكامل (العمود 5)
+            job_title=reg_info['info'],    # التخصص أو المسمى (العمود 11 و 12)
+            phone=reg_info['phone'],       # الهاتف (العمود 18)
+            branch_id=branch_id_selected,  # معرف الفرع الرقمي (العمود 2)
+            branch_name=branch_name,       # اسم الفرع المجلوب آلياً (العمود 43)
+            role_tag=role_type_ar,         # الرتبة المحددة آلياً (العمود 42)
+            email=reg_info['email'],       # البريد (العمود 21)
+            username=candidate_username    # ✅ اليوزرنيم الحقيقي (العمود 41)
+        )
+
+
+        if success:
+            await query.edit_message_text(
+                f"✅ تم اعتماد <b>{role_type_ar}</b> بنجاح!\n"
+                f"🏢 الفرع: {branch_name}\n"
+                f"🆔 تم توليد معرف مهني (100) وحفظه في قسم الموظفين.", 
+                parse_mode="HTML"
+            )
+            
+            # تحديث نبضة النظام العالمية للمزامنة اللحظية
+            update_global_version(bot_token)
+            
+            try:
+                # إشعار الكادر بالقبول النهائي وتحديد دوره وفرعه
+                await context.bot.send_message(
+                    chat_id=pending['id'], 
+                    text=f"🎊 <b>مبروك!</b> تم قبول طلب انضمامك واعتمادك رسمياً كمـ ({role_type_ar}) في المنصة.\n🏢 الفرع المخصص: {branch_name}",
+                    parse_mode="HTML"
+                )
+            except: pass
+            
+            # تنظيف الذاكرة المؤقتة بعد النجاح لضمان عدم تداخل الطلبات المستقبيلة
+            context.user_data.pop('pending_approve', None)
+            context.user_data.pop('reg_data', None)
+        else:
+            await query.answer("❌ فشل الحفظ، تأكد من تحديث هيكل قسم إدارة_الموظفين لـ 43 عموداً.", show_alert=True)
+ 
+# --------------------------------------------------------------------------
+    # عودة المالك ومدير النظام
+    # تصحيح زر العودة للوحة الإدارة الرئيسية
+    elif data in ["back_to_admin", "get_admin_panel"]:
+        # قمنا بحذف المتغير current_msg الذي يسبب التعليق ووضعنا نصاً مباشراً
+        welcome_text = "<b>مرحباً بك مجدداً في لوحة القيادة 🎓</b>\n\nاختر من الخيارات أدناه لإدارة النظام:"
+        await query.edit_message_text(
+            text=welcome_text, 
+            reply_markup=get_admin_panel(), # استدعاء الدالة التي تحتوي على الأزرار الـ 5
+            parse_mode="HTML"
+        )
+
+
+    # عودة الموظف
+    elif data == "get_employee_panel":
+        text = "👨‍🏫 <b>قسم الشؤون التعليمية:</b> ابدأ الإدارة الآن." 
+        await query.edit_message_text(text, reply_markup=get_employee_panel(), parse_mode="HTML")
+
+    # عودة المدرب
+    elif data == "get_coach_panel":
+        text = f"<b>{current_msg}</b>\n\n👨‍🏫 <b>الغرفة الأكاديمية:</b> مهامك بانتظارك أيها المدرب."
+        await query.edit_message_text(text, reply_markup=get_coach_panel(), parse_mode="HTML")
+
+#إعدادات المحتوى
+    elif data == "contentcanager":
+        # عرض لوحة التحكم مع تعليمات الاستخدام لصاحب البوت
+        instructions = (
+            "⚙️ **لوحة التحكم بإعدادات المحتوى**\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "مرحباً بك في نظام إدارة المحتوى الذكي. يمكنك تخصيص البوت الخاص بك من خلال الخيارات أدناه:\n\n"
+            "🔹 **الأقسام الأساسية:** لضبط اسم المؤسسة والرسائل الترحيبية.\n"
+            "🤖 **الرد الآلي والذكاء:** لضبط الكلمات المفتاحية وتعليمات AI.\n"
+            "⏰ **الترحيب المتقدم:** لضبط رسائل متغيرة حسب وقت اليوم.\n"
+            "🛡️ **الحماية:** لإدارة المحظورات وصلاحيات المشرفين.\n\n"
+            "💡 **تعليمات:** عند اختيار أي قسم، سيظهر لك ما إذا كان 'مضافاً مسبقاً' أو 'فارغاً'. اضغط على زر الإضافة أو التحديث ثم أرسل النص الجديد مباشرة."
+        )
+        
+        await query.message.edit_text(
+            text=instructions, 
+            reply_markup=get_main_config_keyboard(),
+            parse_mode="Markdown"
+        )
+
+#ضبط الذكاء الاصطناعي 
+    elif data == "setup_ai_start":
+        context.user_data['action'] = 'awaiting_institution_name'
+        await query.edit_message_text("🤖 <b>إعداد الهوية الذكية:</b>\nيرجى إرسال اسم المنصة التعليمية الآن:",parse_mode="HTML")
+# --------------------------------------------------------------------------
+
+
+# المزامنة
+    elif data == "manual_cache_sync":
+        await query.edit_message_text("⏳ <b>جاري سحب البيانات  وتحديث الذاكرة المركزية...</b>", parse_mode="HTML")
+        
+        if fetch_full_factory_data(): # استدعاء الدالة الموجودة في ملفك
+            await query.message.reply_text("✅ <b>تمت المزامنة بنجاح!</b>\nالبوت الآن يقرأ أحدث البيانات  مباشرة.", parse_mode="HTML")
+        else:
+            await query.message.reply_text("❌ فشلت المزامنة، يرجى التحقق من سجل الأخطاء.")
+ # --------------------------------------------------------------------------
+    elif data == "fin_summary":
+        # استدعاء المحرك التنفيذي من ملف course_engine
+        await course_engine.show_financial_dashboard(update, context)
+ #>>>>>>>>>>>>>>>>       
+    elif data == "fin_payroll":
+        await course_engine.show_payroll_management(update, context)
+        
+    elif data == "fin_payouts":
+        await course_engine.show_marketers_payouts(update, context)
+        
+    elif data == "fin_settings":
+        # استدعاء محرك الضبط من course_engine
+        await course_engine.show_financial_settings(update, context)
+
+    elif data == "honors_achievements":
+        # عرض لوحة التحكم الموحدة للأوسمة والإنجازات
+
+        await show_honors_main_menu(update, context)
+
+
+
+
+# --------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------
+    # عرض قائمة المدربين كأزرار
+    elif data == "list_coaches":
+
+        coaches = get_all_coaches(bot_token)
+        if not coaches:
+            await query.edit_message_text("⚠️ لا يوجد مدربون مسجلون حالياً.", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data="manage_coaches")]]))
+            return
+
+        keyboard = [[InlineKeyboardButton(f"👤 {c['name']}", callback_data=f"view_coach_{c['id']}")] for c in coaches]
+        keyboard.append([InlineKeyboardButton("🔙 عودة", callback_data="manage_coaches")])
+        await query.edit_message_text("🎯 **اختر مدرباً لعرض تفاصيله أو حذفه:**", reply_markup=InlineKeyboardMarkup(keyboard))
+# --------------------------------------------------------------------------
+    # عرض تفاصيل مدرب محدد مع زر الحذف
+    elif data.startswith("view_coach_"):
+        coach_id = data.replace("view_coach_", "")
+
+        coaches = get_all_coaches(bot_token)
+        coach = next((c for c in coaches if str(c['id']) == str(coach_id)), None)
+        
+        if coach:
+            text = f"👤 **معلومات المدرب:**\n━━━━━━━━━━━━━━\nالاسم: {coach['name']}\nID: <code>{coach['id']}</code>"
+            keyboard = [
+                [InlineKeyboardButton("🗑️ حذف المدرب نهائياً", callback_data=f"del_coach_{coach['id']}")],
+                [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="list_coaches")]
+            ]
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+# --------------------------------------------------------------------------
+    # تنفيذ الحذف الفعلي للمدرب
+    elif data.startswith("del_coach_"):
+        coach_id = data.replace("del_coach_", "")
+
+        if delete_coach_from_sheet(bot_token, coach_id):
+            await query.answer("✅ تم حذف المدرب بنجاح", show_alert=True)
+            await query.edit_message_text("✅ تم الحذف. هل تريد إدارة مدرب آخر؟", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 عرض القائمة", callback_data="list_coaches")]]))
+        else:
+            await query.answer("❌ فشل الحذف", show_alert=True)
+# --------------------------------------------------------------------------
+    elif data == "bulk_add_start":
+        context.user_data['action'] = 'awaiting_bulk_courses'
+        instruction = (
+            "📥 <b>إضافة دورات دفعة واحدة:</b>\n\n"
+            "يرجى إرسال الدورات بحيث يكون كل سطر دورة مستقلة بهذا التنسيق:\n"
+            "<code>اسم الدورة |  الوصف وعدد الساعات | السعر | معرف المدرب | معرف القسم</code>\n\n"
+            "💡 مثال:\n"
+            "<code>دورة البرمجة | 40 | 150 | 873158997 | C1234</code>"
+        )
+        await query.edit_message_text(instruction, parse_mode="HTML")
+# --------------------------------------------------------------------------
+#دالة إرسال ملف للموظف وانتظار رفعه الى السيرفر 
+    elif data == "excel_import_start":
+        import pandas as pd
+        import io
+        
+        # تجهيز البيانات العشوائية المترابطة (Sample Data) لضمان فهم الموظف للربط
+        # لاحظ أن كلمة "البرمجة" و "أحمد علي" و "بايثون" ستتكرر للربط
+        
+        sheets_content = {
+            "الاقسام": {
+                "اسم_القسم": ["البرمجة"],
+                "الوصف": ["دورات لغات البرمجة وتطوير المواقع"]
+            },
+            "المدربين": {
+                "اسم_المدرب": ["أحمد علي"],
+                "التخصص": ["بايثون"],
+                "رقم_الهاتف": ["0501234567"],
+                "ID_المدرب": ["873158997"] # معرف تيليجرام
+            },
+            "الدورات": {
+                "الاسم": ["بايثون للمبتدئين"],
+                "الوصف": ["دورة شاملة من الصفر - 40 ساعة"],
+                "السعر": [150],
+                "اسم_المدرب": ["أحمد علي"], # يطابق ورقة المدربين
+                "اسم_القسم": ["البرمجة"]      # يطابق ورقة الأقسام
+            },
+            "المجموعات": {
+                "اسم_المجموعة": ["مجموعة التميز A"],
+                "اسم_الدورة": ["بايثون للمبتدئين"], # يطابق ورقة الدورات
+                "الحد_الأقصى": [25]
+            },
+            "الموظفين": {
+                "اسم_الموظف": ["سارة خالد"],
+                "الوظيفة": ["مسؤولة دعم"],
+                "رقم_الهاتف": ["0551112223"]
+            },
+            "قاعده بيانات الطلاب": {
+                "الاسم_بالعربي": ["خالد محمد"],
+                "رقم_الهاتف": ["0540001112"],
+                "البريد_الإلكتروني": ["khaled@test.com"],
+                "اسم_الدورة": ["بايثون للمبتدئين"] # يطابق ورقة الدورات
+            },
+            "الإختبارات الآلية": {
+                "اسم_الاختبار": ["اختبار بايثون الأساسي"],
+                "اسم_الدورة": ["بايثون للمبتدئين"], # يطابق ورقة الدورات
+                "درجة_النجاح": [60]
+            },
+            "الأسئلة": {
+                "اسم_الاختبار": ["اختبار بايثون الأساسي"], # يطابق ورقة الاختبارات
+                "نص_السؤال": ["ما هي دالة الطباعة في بايثون؟"],
+                "الخيار_1": ["print()"],
+                "الخيار_2": ["echo()"],
+                "الخيار_3": ["echo()"],
+                "الإجابة_الصحيحة": ["print()"]
+            },
+            "الكوبونات": {
+                "كود_الكوبون": ["PROMO2026"],
+                "قيمة_الخصم": ["50"],
+                "تاريخ_الانتهاء": ["2026-12-31"]
+            },
+            "اكود الخصم": {
+                "كود_الخصم": ["SAVE20"],
+                "اسم_الدورة": ["بايثون للمبتدئين"], # يطابق ورقة الدورات
+                "قيمة_الخصم": ["20"]
+            },
+            "الأسئلة الشائعة": {
+                "اسم_الدورة": ["بايثون للمبتدئين"], # يطابق ورقة الدورات
+                "السؤال": ["هل يوجد شهادة؟"],
+                "الإجابة": ["نعم، شهادة معتمدة عند الاجتياز"]
+            }
+        }
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            for name, data in sheets_content.items():
+                pd.DataFrame(data).to_excel(writer, index=False, sheet_name=name)
+        
+        output.seek(0)
+        context.user_data['action'] = 'awaiting_excel_file'
+        
+        caption = (
+            "🚀 <b>نموذج الرفع الشامل للمنصة التعليمية:</b>\n\n"
+            "يرجى تعبئة الملف مع الالتزام التام بـ <b>قاعدة التطابق:</b>\n"
+            "⚠️ <b>الأسماء المرتبطة</b> (مثل اسم الدورة أو القسم) يجب أن ترفع بنفس النص في كافة الأوراق دون اختلاف حرف واحد.\n\n"
+            "💡 <b>مثال:</b> إذا سميت القسم 'البرمجة' في ورقة الأقسام، يجب أن تكتبه 'البرمجة' في ورقة الدورات وليس 'برمجة'.\n\n"
+            "📦 الملف يحتوي على بيانات تجريبية مترابطة، امسحها وأضف بياناتك الحقيقية."
+        )
+
+        await context.bot.send_document(chat_id=query.message.chat_id, document=output, 
+                                        filename="نموذج_إدارة_المنصة_الشامل.xlsx", caption=caption, parse_mode="HTML")
+
+
+
+    elif data == "csv_import_start":
+        context.user_data['action'] = 'awaiting_csv_file'
+        await query.edit_message_text("📄 أرسل ملف CSV الآن:")
+
+    elif data == "sheet_link_import":
+        context.user_data['action'] = 'awaiting_sheet_link'
+        await query.edit_message_text("🔗 أرسل رابط Google Sheet المفتوح للمشاركة:")
+
+# --------------------------------------------------------------------------
+# إضافة مدرب
+    elif data == "start_add_coach":
+        context.user_data['action'] = 'await_coach_name'
+        await query.edit_message_text("✍️ <b>الخطوة 1:</b> أرسل اسم المدرب الثلاثي:", parse_mode="HTML")
+
+    elif data == "confirm_save_coach":
+
+        c = context.user_data.get('temp_coach')
+        
+        if not c:
+            await query.edit_message_text("⚠️ خطأ: تعذر العثور على البيانات، يرجى إعادة المحاولة من جديد.")
+            return
+
+        success = add_new_coach_advanced(
+            bot_token=bot_token,
+            coach_id=c['id'],
+            name=c['name'],
+            specialty=c['spec'],
+            phone=c['phone'],
+            notes="تمت الإضافة عبر لوحة التحكم"
+        )
+        
+        if success:
+            await query.edit_message_text(
+                f"✅ <b>تم تسجيل المدرب بنجاح!</b>\n\n"
+                f"👤 الاسم: {c['name']}\n"
+                f"🎓 التخصص: {c['spec']}\n"
+                f"🆔 المعرف: <code>{c['id']}</code>",
+                reply_markup=get_admin_panel(),
+                parse_mode="HTML"
+            )
+            context.user_data.pop('temp_coach', None)
+        else:
+            await query.edit_message_text("❌ حدث خطأ تقني أثناء الحفظ في قاعدة البيانات.")
+
+# --------------------------------------------------------------------------
+    # --- 4. معالجة القسم المختار للدورة وبدء طلب الاسم ---
+    elif data.startswith("set_crs_cat_"):
+        cat_id = data.replace("set_crs_cat_", "")
+        context.user_data['temp_crs_cat'] = cat_id
+        context.user_data['action'] = 'awaiting_crs_name'
+        await query.edit_message_text("✍️ **الخطوة 2:** أرسل اسم الدورة الآن:")
+
+    elif data == "confirm_save_full_crs":
+
+        import uuid
+        
+        # 1. جلب البيانات المؤقتة (البيانات + معرف القسم)
+        d = context.user_data.get('temp_crs')
+        cat_id = context.user_data.get('temp_crs_cat') # هذا هو الرابط الضروري
+        
+        if not d or not cat_id:
+            await query.edit_message_text("⚠️ خطأ: تعذر العثور على البيانات المؤقتة، يرجى المحاولة مجدداً.")
+            return
+
+        # 2. توليد معرف فريد للدورة
+        c_id = f"CRS{str(uuid.uuid4().int)[:4]}"
+        
+        # 3. تنفيذ الحفظ الفعلي (إرسال الـ 17 متغير بالترتيب)
+        success = add_new_course(
+            bot_token,          # 1
+            c_id,               # 2
+            d['name'],          # 3
+            d['hours'],         # 4
+            d['start_date'],    # 5
+            "",                 # 6
+            "أونلاين",          # 7
+            d['price'],         # 8
+            "100",              # 9
+            "لا يوجد",          # 10
+            "إدارة المنصة",      # 11
+            "ADMIN01",          # 12
+            "عام",              # 13
+            d['coach_user'],    # 14
+            d['coach_id'],      # 15
+            d['coach_name'],    # 16
+            cat_id              # 17. تم إضافة معرف القسم هنا بنجاح!
+        )
+        
+        if success:
+            await query.edit_message_text(
+                f"✅ <b>تم اعتماد الدورة وحفظها بنجاح!</b>\n\n"
+                f"🆔 المعرف: <code>{c_id}</code>\n"
+                f"📂 القسم: <code>{cat_id}</code>\n"
+                f"👨‍🏫 المدرب: {d['coach_name']}",
+                reply_markup=get_admin_panel(),
+                parse_mode="HTML"
+            )
+            # تنظيف الذاكرة بعد النجاح
+            context.user_data.pop('temp_crs', None)
+            context.user_data.pop('temp_crs_cat', None)
+        else:
+            await query.edit_message_text("❌ فشل الحفظ في قاعدة البيانات، تأكد من إعدادات دالة add_new_course.")
+
+    # --- 5. إدارة الأقسام (عرض القائمة) ---
+    # إضافة معالج زر إدارة الأقسام
+    elif data == "manage_cats":
+        # 1. التحقق أولاً من الصلاحية قبل تنفيذ أي أمر (الالتزام بالمنطق البرمجي)
+        if not check_user_permission(context.bot.token, update.effective_user.id, "صلاحية_الأقسام"):
+            await query.answer("🚫 ليس لديك صلاحية لإدارة الأقسام.", show_alert=True)
+            return
+
+        # 2. إذا كان لديه صلاحية، يتم جلب البيانات
+        bot_token = context.bot.token
+        categories = get_all_categories(bot_token)
+
+        # 3. استدعاء الدالة الرئيسية لعرض واجهة الأقسام (تأكد من تمرير المتغيرات اللازمة)
+        await manage_categories_main(update, context)
+
+
+# --------------------------------------------------------------------------
+    # --- [ 1. معالج إدارة الدورات الديناميكي بناءً على الرتبة ] ---
+    elif data in ["manage_courses", "manage_courses_employee", "manage_courses_coach"]:
+        keyboard = []
+        # تحديد المسار لضمان العودة الصحيحة لاحقاً
+        context.user_data['entry_point'] = data
+        
+        if data == "manage_courses":
+            text = "📚 <b>إدارة واستيراد الدورات (المالك):</b>\n\nاختر الطريقة التي تفضلها لإضافة البيانات:"
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة دورة فردية", callback_data="start_add_course")],
+                [InlineKeyboardButton("📥 نصية (|)", callback_data="bulk_add_start")],
+                [InlineKeyboardButton("📄 ملف CSV", callback_data="csv_import_start"),
+                 InlineKeyboardButton("🔗 رابط Google Sheet", callback_data="sheet_link_import")],
+                [InlineKeyboardButton("🔙 عودة", callback_data="back_to_admin")]
+            ]
+
+        elif data == "manage_courses_employee":
+            text = "👨‍🏫 <b>إدارة الدورات (الموظف):</b>\n\nيمكنك إضافة دورات جديدة أو استعراض القائمة الحالية."
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة دورة فردية", callback_data="start_add_course")],
+                [InlineKeyboardButton("📋 عرض الدورات", callback_data="view_courses_admin")],
+                [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
+            ]
+
+        elif data == "manage_courses_coach":
+            text = "👨‍🏫 <b>غرفة المدرب الأكاديمية:</b>\n\nيمكنك استعراض دوراتك أو طلب إضافة دورة جديدة."
+            keyboard = [
+                [InlineKeyboardButton("📚 عرض دوراتي المتاحة", callback_data="manage_courses")], 
+                [InlineKeyboardButton("📝 طلب إضافة دورة جديدة", callback_data="request_course_coach")],
+                [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
+            ]
+
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- [ 2. معالج بدء إضافة دورة (نسخة مسرعة بنظام الكاش + فرز الرتب) ] ---
+    elif data == "start_add_course":
+        # إرسال إشارة استجابة فورية للتطبيق لإزالة حالة الانتظار من الزر
+        await query.answer("⌛ جاري تجهيز القائمة...")
+        
+        # استدعاء دوال المزامنة والذاكرة المؤقتة لضمان السرعة وعدم ثقل الزر
+
+        
+        # إجراء فحص المزامنة الصامت
+        
+        
+        # سحب الأقسام من الرام (RAM) مباشرة
+        records = get_bot_data_from_cache(bot_token, "الأقسام")
+        categories = [{"id": r.get("معرف_القسم"), "name": r.get("اسم_القسم")} for r in records]
+        
+        # تحديد زر العودة بناءً على نقطة الدخول المحفوظة
+        back_call = context.user_data.get('entry_point', 'manage_courses')
+        
+        # التحقق من الرتبة (إدمن أم لا) لتخصيص الرد
+        config = get_bot_config(bot_token)
+        bot_owner_id = int(config.get("admin_ids", 0))
+        
+        if not categories:
+            if user_id == bot_owner_id:
+                # رد خاص بالإدمن (يسمح له بإضافة قسم)
+                text = "⚠️ <b>تنبيه:</b> لا توجد أقسام تعليمية مضافة حالياً.\nيرجى إضافة قسم أولاً لتتمكن من إدراج الدورات تحته."
+                kb = [[InlineKeyboardButton("➕ إضافة قسم جديد", callback_data="add_cat_start")],
+                      [InlineKeyboardButton("🔙 عودة", callback_data=back_call)]]
+            else:
+                # رد خاص بالموظف/المدرب (يوجهه للتواصل مع الإدارة)
+                text = "⚠️ <b>عذراً:</b> لا توجد أقسام متاحة حالياً.\nيرجى التواصل مع الإدارة لتفعيل الأقسام وتحديد الصلاحيات."
+                kb = [[InlineKeyboardButton("🔙 عودة", callback_data=back_call)]]
+                
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+            return
+
+        # بناء لوحة المفاتيح ديناميكياً من بيانات الكاش في حال وجود أقسام
+        keyboard = [[InlineKeyboardButton(f"📁 {cat['name']}", callback_data=f"set_crs_cat_{cat['id']}")] for cat in categories]
+        keyboard.append([InlineKeyboardButton("❌ إلغاء", callback_data=back_call)])
+        
+        await query.edit_message_text("🎯 **الخطوة 1:** اختر القسم المخصص للدورة:", 
+                                     reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- [ 3. معالجة اختيار المدرب من القائمة (نسخة محسنة الأداء) ] ---
+    elif data.startswith("sel_coach_for_crs_"):
+        coach_id = data.replace("sel_coach_for_crs_", "")
+        
+
+        smart_sync_check(bot_token)
+        coaches_records = get_bot_data_from_cache(bot_token, "المدربين")
+        
+        # البحث عن المدرب في الكاش
+        coach = next((c for c in coaches_records if str(c.get('ID')) == str(coach_id)), None)
+        
+        if coach:
+            if 'temp_crs' not in context.user_data:
+                context.user_data['temp_crs'] = {}
+                
+            context.user_data['temp_crs'].update({
+                'coach_user': "اختيار من القائمة",
+                'coach_id': coach.get('ID'),
+                'coach_name': coach.get('اسم_المدرب')
+            })
+            
+            context.user_data['action'] = 'awaiting_crs_date'
+            await query.edit_message_text(
+                f"✅ تم اختيار المدرب: <b>{coach.get('اسم_المدرب')}</b>\n\n"
+                f"🗓 <b>الخطوة 6:</b> أرسل الآن تاريخ بداية الدورة (مثلاً: 2026/05/01):",
+                parse_mode="HTML"
+            )
+        else:
+            await query.answer("⚠️ عذراً، تعذر العثور على بيانات هذا المدرب.", show_alert=True)
+
+
+
+########
+
+
+    elif data.startswith("edit_cat_"):
+        cat_id = data.replace("edit_cat_", "")
+        context.user_data['selected_cat_id'] = cat_id
+        
+        keyboard = [
+            [InlineKeyboardButton("📝 تعديل اسم القسم", callback_data="rename_cat")],
+            [InlineKeyboardButton("📚 عرض دورات القسم", callback_data=f"view_crs_in_{cat_id}")],
+            [InlineKeyboardButton("🗑️ حذف القسم", callback_data="confirm_delete_cat")],
+            [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="manage_cats")]
+        ]
+        await query.edit_message_text(
+            f"🛠 <b>إدارة القسم:</b>\n🆔 المعرف: <code>{cat_id}</code>\n\nاختر الإجراء المطلوب:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif data.startswith("view_crs_in_"):
+        cat_id = data.replace("view_crs_in_", "")
+
+        courses = get_courses_by_category(bot_token, cat_id)
+        
+        keyboard = []
+        if courses:
+            for crs in courses:
+                keyboard.append([InlineKeyboardButton(f"📖 {crs['name']}", callback_data=f"manage_crs_{crs['id']}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 عودة للقسم", callback_data=f"edit_cat_{cat_id}")])
+        
+        await query.edit_message_text(
+            f"📚 <b>الدورات التابعة للقسم {cat_id}:</b>",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif data == "add_cat_start":
+        context.user_data['action'] = 'awaiting_cat_name'
+        await query.edit_message_text(
+            "✍️ <b>إضافة قسم جديد:</b>\n\nيرجى إرسال اسم القسم الذي تريد إنشاءه الآن:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ إلغاء العملية", callback_data="manage_cats")]]),
+            parse_mode="HTML"
+        )
+
+    elif data == "confirm_delete_cat":
+        keyboard = [
+            [InlineKeyboardButton("✅ نعم، احذف", callback_data="exec_delete_cat")],
+            [InlineKeyboardButton("❌ تراجع", callback_data="manage_cats")]
+        ]
+        await query.edit_message_text(
+            "⚠️ <b>تنبيه هام!</b>\nهل أنت متأكد من حذف هذا القسم؟",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif data == "exec_delete_cat":
+        cat_id = context.user_data.get('selected_cat_id')
+        if delete_category_by_id(bot_token, cat_id):
+            await query.edit_message_text("✅ <b>تم حذف القسم بنجاح!</b>", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للأقسام", callback_data="manage_cats")]]), parse_mode="HTML")
+        else:
+            await query.edit_message_text("❌ حدث خطأ أثناء محاولة الحذف.")
+
+    elif data == "rename_cat":
+        context.user_data['action'] = 'awaiting_new_cat_name'
+        await query.edit_message_text(
+            "📝 <b>تعديل اسم القسم:</b>\nيرجى إرسال الاسم الجديد الآن:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ إلغاء", callback_data="manage_cats")]]),
+            parse_mode="HTML"
+        )
+
+    elif data.startswith("manage_crs_"):
+        course_id = data.replace("manage_crs_", "")
+        context.user_data['selected_course_id'] = course_id
+        
+        keyboard = [
+            [InlineKeyboardButton("🗑️ حذف هذه الدورة", callback_data="confirm_delete_crs")],
+            [InlineKeyboardButton("🔙 عودة لقائمة الدورات", callback_data="manage_courses")]
+        ]
+        await query.edit_message_text(f"📖 <b>إدارة الدورة:</b>\n🆔 المعرف: <code>{course_id}</code>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "confirm_delete_crs":
+        keyboard = [
+            [InlineKeyboardButton("✅ نعم، احذف الدورة", callback_data="exec_delete_crs")],
+            [InlineKeyboardButton("❌ تراجع", callback_data="manage_courses")]
+        ]
+        await query.edit_message_text("⚠️ <b>تأكيد الحذف:</b>\nهل أنت متأكد من حذف هذه الدورة؟", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "exec_delete_crs":
+        course_id = context.user_data.get('selected_course_id')
+        if delete_course_by_id(bot_token, course_id):
+            await query.edit_message_text("✅ <b>تم حذف الدورة بنجاح!</b>", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة", callback_data="manage_courses")]]), parse_mode="HTML")
+
+    elif data == "smart_broadcast":
+        await query.edit_message_text("📡 <b>الإذاعة الذكية:</b>\n\n"
+                                   "💡 هذه هي الإذاعة الذكية حيث يمكنك إرسال رسائل جماعية إلى مشتركيك.\n"
+                                   "📊 يمكنك إرسال رسائل إلى جميع المشتركين أو إلى مشتركي دورة معينة أو مجموعة معينة.\n"
+                                   "🔍 يمكنك استخدم الإذاعة الذكية لترسل رسائل ترويجية أو إعلامية أو تعليمية إلى مشتركيك.\n\n"
+                                   "🔝اختر خيارًا لإرسال رسالتك:",
+            reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 للكل", callback_data="bc_all"), 
+             InlineKeyboardButton("🎓 لمشتركي دورة", callback_data="bc_course"), 
+             InlineKeyboardButton("🎓 لمشتركي مجموعة", callback_data="bc_group")],
+            [InlineKeyboardButton("🔙 العودة", callback_data="main_menu")]
+        ]), parse_mode="HTML")
+#>>>>>>>>>>>>>>>>
+    # --- [ لوحة المفاتيح الذكية للآدمن ] ---
+    elif data == "tech_settings":
+        # 1. جلب البيانات اللازمة
+        config = get_bot_config(bot_token)
+        m_status = "🔴 (نشط)" if str(config.get("maintenance_mode", "FALSE")).upper() == "TRUE" else "🟢 (متوقف)"    	
+        
+        # 2. نص الرسالة
+        text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
+        
+        # 3. استدعاء الأزرار من الملف الخارجي وتمرير حالة الصيانة لها
+        reply_markup = ui_keyboards.get_tech_settings_keyboard(m_status)
+        
+        # 4. التحديث
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
+
+
+
+
+#>>>>>>>>>>>>>>>
+    # --- [ إضافة معالج الإكسل الناقص ] ---
+    elif data == "excel_export_start":
+        # استدعاء الدالة التي أضفتها أنت في ملف الكاش
+        excel_file, status = export_bot_data_to_excel(bot_token)
+        
+        if status == "success":
+            await query.answer("جاري التصدير... ✅")
+            timestamp = datetime.now().strftime("%Y-%m-%d")
+            await query.message.reply_document(
+                document=excel_file,
+                filename=f"Data_Backup_{timestamp}.xlsx",
+                caption="📊 **تم تصدير نسخة البيانات كاملة من الكاش.**"
+            )
+        else:
+            # رسالة الرفض التسويقية في حال كانت الميزة FALSE
+            await query.answer("🚫 الميزة غير مفعلة", show_alert=True)
+            await query.message.reply_text(f"{status}\n\n💡 تواصل مع المطور لتفعيل الميزة.")
+
+    elif data == "excel_import_start":
+       
+        if not check_excel_permission_from_cache(bot_token):
+             await query.answer("🚫 غير مصرح", show_alert=True)
+             await query.message.reply_text("⚠️ هذه الميزة مخصصة للباقات المتقدمة.")
+             return
+        await query.answer()
+        await query.edit_message_text("📥 يرجى رفع ملف Excel الآن لبدء الاستيراد.")
+        context.user_data['action'] = 'awaiting_excel_file'
+
+    elif data == "passing_grade":
+        keyboard = [
+            [InlineKeyboardButton("درجة النجاح الصغرى", callback_data="minimum_passing_grade")],
+            [InlineKeyboardButton("درجة النجاح الكبر", callback_data="greatest_success_grade")],
+            [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text("💰 <b>درجات النجاح الافتراضية :</b>\nيرجى ضبط اعدادات الدراجات لإعتمادها في الاختبارات .", 
+                                      reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+#>>>>>>>>>>>>>>>>#>>>>>>>>>>>>>>>>
+    elif data == "manage_financial":
+        keyboard = [
+            [InlineKeyboardButton("📊 تقرير الأرباح والخزينة", callback_data="fin_summary")],
+            [InlineKeyboardButton("👔 كشوف المرتبات (الكادر)", callback_data="fin_payroll")],
+            [InlineKeyboardButton("💸 طلبات سحب المسوقين", callback_data="fin_payouts")],
+            [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text("💰 <b>وحدة الإدارة المالية:</b>\nيرجى اختيار القسم المطلوب للمراجعة أو الصرف.", 
+                                      reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
+#>>>>>>>>>>>>>>>>
+    elif data == "manage_welcome_texts":
+        keyboard = [
+            [InlineKeyboardButton("🌅 الصباحية", callback_data="edit_welcome_morning"), InlineKeyboardButton("☀️ الظهرية", callback_data="edit_welcome_noon")],
+            [InlineKeyboardButton("🌆 المسائية", callback_data="edit_welcome_evening"), InlineKeyboardButton("🌃 الليلية", callback_data="edit_welcome_night")],
+            [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text("🖼 <b>تعديل كليشات الترحيب:</b>\nاختر الفترة التي تريد تغيير رسالتها:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("edit_welcome_"):
+        period = data.replace("edit_welcome_", "")
+        context.user_data['edit_period'] = period
+        context.user_data['action'] = 'awaiting_new_welcome_text'
+        periods_ar = {"morning": "الصباحية", "noon": "الظهرية", "evening": "المسائية", "night": "الليلية"}
+        await query.edit_message_text(f"✍️ <b>تعديل الرسالة {periods_ar[period]}:</b>\n\nأرسل الآن النص الجديد (يمكنك استخدام HTML):")
+# --------------------------------------------------------------------------
+    elif data == "manage_branches":
+        keyboard = [
+            [InlineKeyboardButton("🏢 عرض قائمة الفروع", callback_data="list_branches")],
+            [InlineKeyboardButton("➕ إضافة فرع جديد", callback_data="add_branch_start")],
+            [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+        ]
+        await query.edit_message_text(
+            "🏢 <b>إدارة فروع المنصة:</b>\n\nيمكنك استعراض الفروع الحالية أو إضافة فرع جديد للنظام.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    # بدء عملية الإضافة عند الضغط على الزر الجديد
+    elif data == "add_branch_start":
+        context.user_data['action'] = 'awaiting_branch_name'
+        await query.edit_message_text("🏢 <b>إضافة فرع جديد:</b>\n\nيرجى إرسال <b>اسم الفرع</b> الآن:", parse_mode="HTML")
+
+    # عرض قائمة الفروع من الكاش
+    elif data == "list_branches":
+        # جلب البيانات من الذاكرة المركزية RAM حصراً لسرعة الاستجابة ومنع حظر جوجل
+        
+        all_records = FACTORY_GLOBAL_CACHE.get("data", {}).get("إدارة_الفروع", [])
+        
+        # تصفية الفروع التابعة لهذا البوت فقط من مصفوفة الذاكرة
+        branches = [r for r in all_records if str(r.get("bot_id")) == str(bot_token)]
+        
+        if not branches:
+            await query.edit_message_text(
+                "⚠️ لا توجد فروع مسجلة في الذاكرة حالياً.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data="manage_branches")]])
+            )
+            return
+
+        # بناء قائمة الأزرار باستخدام أسماء ومعرفات الفروع من الرام مباشرة
+        keyboard = [[InlineKeyboardButton(f"🏢 {b.get('اسم_الفرع')}", callback_data=f"view_br_{b.get('معرف_الفرع')}")] for b in branches]
+        keyboard.append([InlineKeyboardButton("🔙 عودة", callback_data="manage_branches")])
+        
+        await query.edit_message_text("📋 <b>قائمة الفروع الحالية :</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # عرض تفاصيل فرع محدد (بعد الضغط على اسمه من القائمة)
+    elif data.startswith("view_br_"):
+        branch_id = data.replace("view_br_", "")
+        
+        records = FACTORY_GLOBAL_CACHE.get("data", {}).get("إدارة_الفروع", [])
+        branch = next((b for b in records if str(b.get("معرف_الفرع")) == branch_id and str(b.get("bot_id")) == str(bot_token)), None)
+        
+        if branch:
+            text = (
+                f"🏢 <b>تفاصيل الفرع:</b>\n━━━━━━━━━━━━━━\n"
+                f"🆔 المعرف: <code>{branch.get('معرف_الفرع')}</code>\n"
+                f"🏢 الاسم: {branch.get('اسم_الفرع')}\n"
+                f"🌍 الدولة: {branch.get('الدولة')}\n"
+                f"👤 المدير: {branch.get('المدير_المسؤول')}\n"
+                f"💰 العملة: {branch.get('العملة')}\n"
+            )
+            keyboard = [
+                [InlineKeyboardButton("📝 تعديل الاسم", callback_data=f"edit_br_name_{branch_id}")],
+                [InlineKeyboardButton("🗑️ حذف الفرع", callback_data=f"conf_del_br_{branch_id}")],
+                [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="list_branches")]
+            ]
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # تأكيد الحذف
+    elif data.startswith("conf_del_br_"):
+        b_id = data.replace("conf_del_br_", "")
+        keyboard = [
+            [InlineKeyboardButton("✅ نعم، احذف نهائياً", callback_data=f"exec_del_br_{b_id}")],
+            [InlineKeyboardButton("❌ تراجع", callback_data=f"view_br_{b_id}")]
+        ]
+        await query.edit_message_text("⚠️ <b>تحذير:</b> هل أنت متأكد من حذف هذا الفرع؟ لا يمكن التراجع.", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # التنفيذ الفعلي للحذف
+    elif data.startswith("exec_del_br_"):
+        b_id = data.replace("exec_del_br_", "")
+        if delete_branch_db(bot_token, b_id):
+            await query.answer("🗑️ تم حذف الفرع بنجاح", show_alert=True)
+            await start_handler(update, context) # العودة للرئيسية
+        else:
+            await query.answer("❌ فشل الحذف")
+
+    # بدء تعديل الاسم
+    elif data.startswith("edit_br_name_"):
+        b_id = data.replace("edit_br_name_", "")
+        context.user_data['edit_br_id'] = b_id
+        context.user_data['action'] = 'awaiting_new_branch_name'
+        await query.edit_message_text("📝 أرسل الآن <b>الاسم الجديد</b> للفرع:")
+
+#>>>>>>>>>>>>>>>>
+#إعداد ضبط نقاط الإحالة 
+    elif data == "referral_points_settings":
+        await query.edit_message_text(
+            "أضبط نقاط الإحالة",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("ضبط نقاط الاحالة", callback_data="entry_points_settings")],
+                [InlineKeyboardButton("ضبط نقاط التسجيل", callback_data="registration_points_settings")],
+                [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+            ]), parse_mode="HTML"
+        )
+   #®®®®®®®®®®
+#عند الضغط على زر معلومات الدفع
+    elif data == "default_payment_information":
+
+        await set_default_payment_flow(update, context)
+#~~~~~~~~~~~~~~~~
+# عنج الضغط على رز درجة الواجبات 
+    elif data == "homework_grade":
+
+        await set_homework_grade_flow(update, context)
+
+#~~~~~~~~~~~~~~~~
+# عند الضغط على رز ضبط وحدة العملة
+    elif data == "currency_unit":
+
+        await set_currency_unit_flow(update, context)
+#~~~~~~~~~~~~~~~~
+# عند الضغط على رز ضبط نقاط الاحالة
+    elif data == "entry_points_settings":
+
+        await set_ref_points_join_flow(update, context)
+# عند الضغط على رز ضبط نقاط التسجيل 
+    elif data == "registration_points_settings":
+
+        await set_ref_points_purchase_flow(update, context)
+
+#~~~~~~~~~~~~~~~~
+# عند الضغط على رز الحد الأدنى للسحب الأرباح للمسوقين
+    elif data == "minimum_withdrawal_amount":
+        
+        await set_min_payout_flow(update, context)
+
+#~~~~~~~~~~~~~~~~
+# ضبط درجات النجاح الصغرى والكبرى
+    elif data == "minimum_passing_grade":
+        
+        await set_min_passing_grade_flow(update, context)
+
+    elif data == "greatest_success_grade":
+        
+        await set_max_passing_grade_flow(update, context)
+
+
+#~~~~~~~~~~~~~~~~
+# ضبط عمولات المسوقين
+    elif data == "percentage_marketers":
+        
+        await set_marketers_commission_flow(update, context)
+
+#~~~~~~~~~~~~~~~~
+#ضبط زر 📢 الإعلانات
+#~~~~~~~~~~~~~~~~
+
+#~~~~~~~~~~~~~~~~
+
+# --------------------------------------------------------------------------
+    # --- [ قسم إدارة الكنترول والاختبارات ] ---
+    
+    # 1. الدخول لغرفة الكنترول الرئيسية
+    # --- [ الخطوة الثانية: معالجة الدخول والعودة الذكية ] ---
+
+    # 1. إدارة الكنترول التعليمي (مدير، مدرب، موظف)
+    if data == "manage_control":
+        await manage_control_ui(update, context)
+        return
+
+    # 2. إدارة الاختبارات وبنك الأسئلة
+    elif data == "manage_quizzes":
+        await quiz_create_start_ui(update, context)
+        return
+
+    elif data == "manage_q_bank":
+        await q_bank_manager_ui(update, context)
+        return
+
+    # 3. معالجة عمليات بنك الأسئلة (إضافة/استعراض)
+    elif data == "add_q_manual":
+        await start_add_question_ui(update, context)
+        return
+
+    elif data == "browse_q_bank":
+        await browse_q_bank_ui(update, context)
+        return
+
+    # 4. ممرات العودة للوحات الفرعية
+    elif data == "get_employee_panel":
+        text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
+        await query.edit_message_text(text, reply_markup=get_employee_panel(), parse_mode="HTML")
+        return
+
+    elif data == "get_coach_panel":
+        text = "👨‍🏫 <b>غرفة الإدارة الأكاديمية (المدرب):</b>\nمرحباً بك! يمكنك إدارة مجموعاتك، متابعة طلابك، وتصحيح الواجبات من هنا."
+        await query.edit_message_text(text, reply_markup=get_coach_panel(), parse_mode="HTML")
+        return
+
+    elif data.startswith("q_gen_crs_"):
+        course_id = data.replace("q_gen_crs_", "")
+
+        await quiz_gen_select_groups_ui(update, context, course_id)
+
+    elif data.startswith("q_gen_grp_"):
+        parts = data.split("_")
+        g_id = parts[3]
+        course_id = parts[4]
+        
+        if g_id == "ALL":
+            context.user_data['temp_quiz']['target_groups'] = ["ALL"]
+        else:
+            if "ALL" in context.user_data['temp_quiz']['target_groups']:
+                context.user_data['temp_quiz']['target_groups'].remove("ALL")
+            
+            if g_id in context.user_data['temp_quiz']['target_groups']:
+                context.user_data['temp_quiz']['target_groups'].remove(g_id)
+            else:
+                context.user_data['temp_quiz']['target_groups'].append(g_id)
+        
+
+        await quiz_gen_select_groups_ui(update, context, course_id)
+
+    elif data == "q_gen_next_settings":
+        if not context.user_data.get('temp_quiz', {}).get('target_groups'):
+            await query.answer("⚠️ يرجى اختيار مجموعة واحدة على الأقل!", show_alert=True)
+            return
+        context.user_data['action'] = 'awaiting_quiz_title'
+        await query.edit_message_text("🏷 <b>الخطوة 3:</b> أرسل <b>عنواناً للاختبار</b> (مثلاً: اختبار نهاية الفصل الأول):",parse_mode="HTML")
+# --------------------------------------------------------------------------
+
+    # 2. الدخول لبنك الأسئلة
+    elif data == "manage_q_bank":
+
+        await q_bank_manager_ui(update, context)
+        #استيراد الأسئلة 
+    elif data == "import_q_excel":
+        import pandas as pd
+        import io
+        
+        # 1. تجهيز بيانات النموذج الإرشادي للأسئلة
+        q_sample = {
+            'نص السؤال': ['مثال: ما هو عاصمة اليمن؟'],
+            'A': ['صنعاء'],
+            'B': ['عدن'],
+            'C': ['تعز'],
+            'D': ['إب'],
+            'الإجابة الصحيحة': ['A'],
+            'الدرجة': [1],
+            'الصعوبة': ['متوسط'],
+            'معرف الدورة': ['أدخل هنا ID الدورة']
+        }
+        
+        # 2. إنشاء ملف Excel في الذاكرة (Buffer)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            pd.DataFrame(q_sample).to_excel(writer, index=False, sheet_name='الأسئلة')
+        output.seek(0)
+        
+        # 3. تحديث حالة البوت لانتظار الملف
+        context.user_data['action'] = 'awaiting_q_excel'
+        
+        caption = (
+            "📥 <b>نظام استيراد الأسئلة الذكي:</b>\n\n"
+            "1️⃣ قمت بإرفاق <b>نموذج Excel</b> جاهز لك.\n"
+            "2️⃣ يرجى تعبئة أسئلتك في ورقة <b>(الأسئلة)</b> بنفس الترتيب.\n"
+            "3️⃣ تأكد من كتابة حرف الإجابة الصحيحة (A, B, C, D) فقط.\n\n"
+            "⚠️ بعد الانتهاء، أرسل الملف هنا بصيغة <b>.xlsx</b> ليتم رفعه للبنك."
+        )
+
+        # إرسال الملف مع الشرح
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=output,
+            filename="نموذج_استيراد_الأسئلة.xlsx",
+            caption=caption,
+            parse_mode="HTML"
+        )
+
+    elif data == "browse_q_bank":
+
+        await browse_q_bank_ui(update, context)
+
+    elif data.startswith("view_q_det_"):
+        q_id = data.replace("view_q_det_", "")
+
+        await view_question_details_ui(update, context, q_id)
+
+    elif data.startswith("exec_del_q_"):
+        q_id = data.replace("exec_del_q_", "")
+
+        if delete_question_from_bank(bot_token, q_id):
+            await query.answer("🗑️ تم حذف السؤال من البنك بنجاح", show_alert=True)
+
+            await browse_q_bank_ui(update, context)
+        else:
+            await query.answer("❌ فشل حذف السؤال.")
+
+#ربط  اضافة السؤال اليدوي
+    elif data == "add_q_manual":
+
+        await start_add_question_ui(update, context)
+
+    elif data.startswith("sel_q_crs_"):
+        course_id = data.replace("sel_q_crs_", "")
+        # تخزين معرف الدورة لبدء تسلسل الأسئلة
+        context.user_data['temp_q'] = {'course_id': course_id}
+        context.user_data['action'] = 'awaiting_q_text'
+        await query.edit_message_text("✍️ <b>الخطوة 2:</b> أرسل الآن <b>نص السؤال</b> الذي تود إضافته:",parse_mode="HTML")
+     # معالجة اختيار الإجابة الصحيحة
+    elif data.startswith("set_q_ans_"):
+        ans = data.replace("set_q_ans_", "")
+        context.user_data['temp_q']['correct'] = ans
+        context.user_data['action'] = 'awaiting_q_grade'
+        await query.edit_message_text(f"✅ تم تحديد الإجابة الصحيحة: <b>({ans})</b>\n\n🎯 <b>الخطوة 8:</b> أرسل <b>درجة السؤال</b> (أرقام فقط، مثلاً: 5):", parse_mode="HTML")
+
+    # معالجة اختيار مستوى الصعوبة وعرض المراجعة النهائية
+    elif data.startswith("set_q_lv_"):
+        lv = data.replace("set_q_lv_", "")
+        context.user_data['temp_q']['level'] = lv
+        q = context.user_data['temp_q']
+        summary = (
+            f"📝 <b>مراجعة السؤال قبل الحفظ النهائي:</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"📚 الدورة: <code>{q['course_id']}</code>\n"
+            f"❓ السؤال: {q['text']}\n"
+            f"✅ الإجابة الصحيحة: {q['correct']}\n"
+            f"🎯 الدرجة: {q['grade']} | 📊 المستوى: {lv}\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"هل تريد تأكيد الحفظ في بنك الأسئلة؟"
+        )
+        keyboard = [
+            [InlineKeyboardButton("✅ نعم، احفظ الآن", callback_data="exec_save_question")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="manage_q_bank")]
+        ]
+        await query.edit_message_text(summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # التنفيذ الفعلي للحفظ في القاعدة
+    elif data == "exec_save_question":
+        import uuid
+        q_data = context.user_data.get('temp_q')
+        
+        if not q_data:
+            await query.answer("⚠️ حدث خطأ، فقدت البيانات المؤقتة.")
+            return
+
+        # توليد معرف فريد للسؤال
+        q_data['q_id'] = f"Q{str(uuid.uuid4().int)[:5]}"
+        q_data['creator_id'] = str(user_id)
+        
+        
+        if add_question_to_bank(bot_token, q_data):
+            await query.answer("", show_alert=True)
+            await q_bank_manager_ui(update, context)
+            context.user_data.pop('temp_q', None)
+        else:
+            await query.answer("❌ فشل الحفظ في القاعدة.")
+
+
+    elif data == "exec_create_quiz_final":
+        quiz_data = context.user_data.get('temp_quiz')
+        
+        # تحويل القائمة لنص مفصول بفاصلة ليتناسب مع العمود 5 في الشيت
+        quiz_data['target_groups_str'] = ",".join(quiz_data.get('target_groups', []))
+        quiz_data['coach_id'] = str(user_id)
+
+        
+        # الدالة الآن تعيد قيمتين (نجاح، رسالة)
+        success, result = create_auto_quiz(bot_token, quiz_data)
+        
+        if success:
+            await query.answer(f"🚀 تم إنشاء الاختبار (ID: {result}) بنجاح!", show_alert=True)
+            await manage_control_ui(update, context)
+            context.user_data.pop('temp_quiz', None)
+        else:
+            msg = "⚠️ عذراً: بنك الأسئلة لا يحتوي على عدد كافٍ من الأسئلة لهذه الدورة." if result == "نقص أسئلة" else f"❌ فشل: {result}"
+            await query.answer(msg, show_alert=True)
+
+
+
+    # 3. بدء تفعيل/إنشاء الاختبارات (اختيار الدورة)
+    elif data == "manage_tests":
+
+        await quiz_activation_start(update, context)
+
+    # 4. اختيار المجموعات المستهدفة للاختبار
+    elif data.startswith("act_q_crs_"):
+        course_id = data.replace("act_q_crs_", "")
+
+        await quiz_activation_groups(update, context, course_id)
+
+    # 5. عرض الاختبارات المتاحة للموظف (الأرشيف)
+    elif data == "manage_archiveaq":
+
+        await employee_quiz_view(update, context)
+
+    # 6. تبديل حالة ظهور الاختبار (TRUE/FALSE)
+    # معالج تبديل رؤية الاختبار (النسخة المعتمدة والمرنة)
+    elif data.startswith("q_toggle_vis_"):
+        quiz_id = data.replace("q_toggle_vis_", "")
+
+        
+        # 1. تغيير الحالة في القاعدة (TRUE <-> FALSE)
+        new_status = toggle_quiz_visibility(bot_token, quiz_id)
+        
+        # 2. إرسال تنبيه سريع للمستخدم بالحالة الجديدة
+        await query.answer(f"✅ تم تغيير الحالة إلى: {new_status}")
+        
+        # 3. تحديث واجهة الخيارات فوراً لإظهار الأيقونة المحدثة (عين أو قفل)
+
+        await quiz_options_ui(update, context, quiz_id)
+
+    # 7. إدارة صلاحيات الموظف (التأسيس الصامت + عرض اللوحة)
+    elif data.startswith("setup_p_perms_"):
+        person_id = data.replace("setup_p_perms_", "")
+        
+        
+        # التأكد من وجود سجل في ورقة الهيكل التنظيمي
+        ensure_permission_row_exists(bot_token, person_id)
+        
+        # جلب الصلاحيات وعرض لوحة التحكم (الصح والخطأ)
+        current_perms = get_employee_permissions(bot_token, person_id)
+        await query.edit_message_text(
+            f"🔐 <b>ضبط صلاحيات المستخدم ID:</b> <code>{person_id}</code>",
+            reply_markup=get_permissions_keyboard(bot_token, person_id, current_perms),
+            parse_mode="HTML"
+        )
+
+        
+        
+        
+        
+# --------------------------------------------------------------------------
+
+    elif data == "administrative_tasks":
+        await query.edit_message_text(
+            "أهلاً في إدارة المهام الإدارية، يمكنك إضافة المهام الفردية والجماعية إلى كافة الموظفين أو المدربين.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ إضافة مهمة فردية", callback_data="single_missions"), InlineKeyboardButton("➕ إضافة مهمة لمجموعة", callback_data="single_group")],
+                [InlineKeyboardButton("➕ إضافة مهمة لدورة", callback_data="single_course"), InlineKeyboardButton("➕ إضافة مهمة جماعية", callback_data="single_all")],
+                [InlineKeyboardButton("عرض جميع المهام", callback_data="single_show")],
+                [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+            ]), parse_mode="HTML"
+        )
+
+               
+# --------------------------------------------------------------------------
+# أضف هذه الحالات داخل contact_callback_handler في education_bot.py
+
+    # استدعاء واجهة المجموعات الرئيسية لدورة معينة
+    elif data.startswith("manage_group_"):
+        course_id = data.replace("manage_group_", "")
+
+        await manage_groups_main(update, context, course_id)
+
+    # بدء إضافة مجموعة جديدة
+    elif data.startswith("grp_add_start_"):
+        course_id = data.replace("grp_add_start_", "")
+
+        await start_add_group(update, context, course_id)
+
+    # اختيار المعلم أثناء الإضافة
+    elif data.startswith("sel_teacher_"):
+        parts = data.split("_")
+        teacher_id = parts[2]
+        # جلب الاسم من دالة جلب المدربين السابقة
+        ###$$$$$$############ تم حذف دالة get_all_coaches مو ملف sheets.py
+        coaches = get_all_coaches(bot_token)
+        teacher_name = next((c['name'] for c in coaches if str(c['id']) == str(teacher_id)), "مدرب")
+        
+
+        await confirm_group_save(update, context, teacher_id, teacher_name)
+
+    # التنفيذ الفعلي للحفظ
+    elif data == "exec_save_group":
+
+        group_data = context.user_data.get('temp_grp')
+        if save_group_to_db(bot_token, group_data):
+            await query.answer("✅ تم إنشاء المجموعة بنجاح", show_alert=True)
+            # العودة لواجهة المجموعات
+
+            await manage_groups_main(update, context, group_data['course_id'])
+            context.user_data.pop('temp_grp', None)
+        else:
+            await query.answer("❌ فشل الحفظ في قاعدة البيانات", show_alert=True)
+
+    # عرض خيارات مجموعة معينة (تعديل/حذف)
+    elif data.startswith("grp_show_"):
+        group_id = data.replace("grp_show_", "")
+
+        await group_options_ui(update, context, group_id)
+
+    # تأكيد الحذف
+    elif data.startswith("grp_confirm_del_"):
+        group_id = data.replace("grp_confirm_del_", "")
+
+        await confirm_delete_group_ui(update, context, group_id)
+
+    # التنفيذ الفعلي للحذف
+    elif data.startswith("grp_exec_del_"):
+        group_id = data.replace("grp_exec_del_", "")
+
+        if delete_group_by_id(bot_token, group_id):
+            await query.answer("🗑️ تم حذف المجموعة بنجاح", show_alert=True)
+            # العودة للقائمة (ستحتاج لتخزين course_id في context.user_data للعودة الصحيحة)
+            await query.edit_message_text("✅ تم الحذف. يرجى العودة للقائمة الرئيسية.")
+        else:
+            await query.answer("❌ فشل الحذف", show_alert=True)
+
+    # التعديلات (تغيير الحالة كمثال سريع)
+    elif data.startswith("grp_edit_status_"):
+        group_id = data.replace("grp_edit_status_", "")
+        
+        # تبديل الحالة بين نشطة ومغلقة
+        update_group_field(bot_token, group_id, "حالة_المجموعة", "مغلقة")
+        await query.answer("✅ تم تغيير حالة المجموعة إلى مغلقة")
+
+        await group_options_ui(update, context, group_id)
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+    # --- [ جزء استعراض الطلاب للدورات ] ---
+    elif data == "view_courses":
+        
+        categories = get_all_categories(bot_token)
+        if not categories:
+            await query.edit_message_text("⚠️ لا توجد أقسام تعليمية متاحة حالياً.")
+            return
+        
+        # عرض الأقسام كأزرار للطالب
+        keyboard = [[InlineKeyboardButton(f"📂 {cat['name']}", callback_data=f"std_cat_{cat['id']}")] for cat in categories]
+        keyboard.append([InlineKeyboardButton("🔙 عودة للقائمة الرئيسية", callback_data="back_to_student")])
+        await query.edit_message_text("🎓 <b>اختر القسم الذي تود استعراض دوراته:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data.startswith("std_cat_"):
+        cat_id = data.replace("std_cat_", "")
+       
+        courses = get_courses_by_category(bot_token, cat_id)
+        
+        if not courses:
+            await query.edit_message_text("⚠️ لا توجد دورات متاحة في هذا القسم حالياً.", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة للأقسام", callback_data="view_courses")]]))
+            return
+
+        keyboard = [[InlineKeyboardButton(f"📘 {crs['name']}", callback_data=f"std_crs_det_{crs['id']}")] for crs in courses]
+        keyboard.append([InlineKeyboardButton("🔙 عودة للأقسام", callback_data="view_courses")])
+        await query.edit_message_text("📚 <b>الدورات المتاحة في هذا القسم:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif data == "back_to_student":
+        await query.edit_message_text("مرحباً بك في القائمة الرئيسية:", reply_markup=get_student_menu())
+
+# --------------------------------------------------------------------------
+    if data.startswith("p_limit_crs_"):
+        parts = data.split("_")
+        emp_id = parts[3]
+        target_crs_id = parts[4]
+        
+        
+        # تحديث القائمة في القاعدة (إضافة/حذف ID الدورة)
+        toggle_scope_id(bot_token, emp_id, "الدورات_المسموحة", target_crs_id)
+        
+        # إعادة تحديث الواجهة لإظهار الصح والخطأ الجديد
+        await show_course_selector(query, context, emp_id)
+
+
+
+
+# --------------------------------------------------------------------------
+    # 1. عرض القائمة الرئيسية (للأوسمة)
+    elif data == "honors_achievements":
+        # بما أننا اتفقنا أن الملف نظيف، نستدعي المحرك فقط
+        await course_engine.show_student_honors(update, context)
+# دالة الأسئلة 
+    elif data == "add_question_to_bank":
+        await educational_manager.start_add_question_flow(update, context)
+
+    elif data == "public_channel_idd":
+        await course_engine.set_channel_id_flow(update, context, "public_channel_id")
+
+    elif data == "honors_channel_idd":
+        await course_engine.set_channel_id_flow(update, context, "honors_channel_id")
+
+
+
+#©©©©©©©©©©©©©©©©©©©
+# معالجة الأوسمة والإنجازات
+    elif data == "view_all_achievements":
+        await course_engine.view_all_achievements_admin(update, context)
+
+    elif data.startswith("view_medal_"):
+        record_id = data.replace("view_medal_", "")
+        await course_engine.view_medal_details(update, context, record_id)
+        
+    elif data == "grant_medal_start":
+        context.user_data['action'] = 'awaiting_medal_student_id'
+        await query.edit_message_text("🆔 يرجى إرسال <b>ID التيليجرام</b> للطالب المراد تكريمه:", parse_mode="HTML")
+
+    # 2. عرض تفاصيل إنجاز محدد للطالب (باستخدام معرف السجل)
+    elif data.startswith("st_medal_"):
+        record_id = data.replace("st_medal_", "")
+        await course_engine.view_single_achievement(update, context, record_id)
+
+
+
+
+
+
+#®®®®®®®®®®®®®®®®®®®
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# أضف هذا الجزء داخل دالة contact_callback_handler في ملف education_bot.py
+    elif data == "manage_personnel":
+        
+        people = get_all_personnel_list(bot_token)
+        
+        if not people:
+            await query.edit_message_text("⚠️ لا يوجد موظفون أو مدربون مسجلون حالياً.", 
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]]))
+            return
+
+        keyboard = []
+        for p in people:
+            # نضع الاسم والنوع على الزر، والـ ID مخفي في الـ callback_data
+            label = f"👤 {p['name']} ({p['type']})"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"manage_perms_{p['id']}")])
+        
+        # خيار إضافي في حال أردت إدخال ID غير موجود بالقائمة
+        keyboard.append([InlineKeyboardButton("🔍 إدخال ID يدوي", callback_data="ask_emp_id_perms")])
+        keyboard.append([InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")])
+        
+        await query.edit_message_text("👥 <b>اختر الموظف أو المدرب لضبط صلاحياته:</b>", 
+                                     reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # 2. عرض لوحة الصلاحيات (الصح ☑️ والخطأ ✖️) فور اختيار الاسم
+    elif data.startswith("manage_perms_"):
+        emp_id = data.replace("manage_perms_", "")
+        
+        
+        # جلب الصلاحيات الحالية لعرض حالة الأزرار
+        current_perms = get_employee_permissions(bot_token, emp_id)
+        
+        await query.edit_message_text(
+            f"🔐 <b>ضبط صلاحيات المستخدم ID:</b> <code>{emp_id}</code>\n\nاضغط على المهمة لتبديل الحالة:",
+            reply_markup=get_permissions_keyboard(bot_token, emp_id, current_perms),
+            parse_mode="HTML"
+        )
+
+    # 3. معالجة التبديل (Toggle) للصلاحيات الوظيفية
+    elif data.startswith("p_toggle_"):
+        parts = data.split("_")
+        emp_id = parts[2]
+        col_name = "_".join(parts[3:])
+        # استدعاء الدالة التي أضفتها أنت في نهاية الملف
+        await handle_permission_toggle(query, bot_token, emp_id, col_name)
+
+    # 4. فتح واجهة اختيار الدورات المسموحة
+    elif data.startswith("p_limit_crs_"):
+        parts = data.split("_")
+        emp_id = parts[3]
+        if len(parts) == 4: # فقط طلب فتح القائمة
+            await show_course_selector(query, context, emp_id)
+        else: # طلب تبديل دورة محددة
+            target_crs_id = parts[4]
+
+            toggle_scope_id(bot_token, emp_id, "الدورات_المسموحة", target_crs_id)
+            await show_course_selector(query, context, emp_id)
+
+
+    elif data == "view_courses_admin": # زر استعراض الدورات للموظف
+        
+        
+        perms = get_employee_permissions(bot_token, user_id)
+        allowed_str = perms.get("الدورات_المسموحة", "")
+        
+        # جلب كل الدورات وتصفيتها
+        all_courses = courses_sheet.get_all_records()
+        
+        if allowed_str:
+            allowed_list = [x.strip() for x in allowed_str.split(",") if x.strip()]
+            # تصفية: أظهر فقط الدورات التي تنتمي لهذا البوت وموجودة في قائمة المسموح
+            filtered = [c for c in all_courses if str(c['bot_id']) == str(bot_token) and str(c['معرف_الدورة']) in allowed_list]
+        else:
+            # إذا كان المالك (allowed_str فارغ غالباً)، اعرض الكل
+            filtered = [c for c in all_courses if str(c['bot_id']) == str(bot_token)]
+            
+# --------------------------------------------------------------------------
+
+    # معالج تصدير النسخة الاحتياطية بصيغة JSON
+
+#معلج النسخ الاحتياطي
+    elif data == "export_data_json":
+        
+        try:
+            # إشعار المستخدم ببدء العملية
+            await query.answer("🔄 جاري تحضير النسخة الاحتياطية المؤسسية V7...", show_alert=False)
+            
+            # استدعاء الدالة من داخل الكائن db_manager مع تمرير المعاملات المطلوبة
+            # المعاملات: البوت الحالي، معرف المستخدم، ومعرف البوت (اختياري)
+            await db_manager.create_backup_to_telegram(
+                shared_bot=context.bot, 
+                user_id=update.effective_user.id
+            )
+
+        except Exception as e:
+            print(f"❌ خطأ أثناء تنفيذ عملية التصدير المركزية: {e}")
+            await query.message.reply_text("⚠️ حدث خطأ فني أثناء تجميع النسخة الاحتياطية.")
+
+    # معالج استيراد البيانات (تفعيل حالة الانتظار)
+    elif data == "import_data_json":
+        # تفعيل حالة الانتظار لاستقبال المستند
+        context.user_data['action'] = 'awaiting_json_backup'
+        
+        text = (
+            "📥 <b>نظام الاستيراد الذكي (النسخة الآمنة):</b>\n"
+            "━━━━━━━━━━━━━━\n"
+            "⚠️ <b>تنبيهات هامة:</b>\n"
+            "1️⃣ يرجى رفع ملف الـ JSON المشفر الذي استخرجته سابقاً.\n"
+            "2️⃣ سيتم دمج البيانات مع الجداول الحالية ورفعها للسحاب آلياً.\n"
+            "3️⃣ قد تستغرق العملية ثوانٍ بناءً على حجم البيانات.\n\n"
+            "👇 <b>من فضلك أرسل الملف الآن:</b>"
+        )
+        await query.edit_message_text(text, parse_mode="HTML")
+
+
+# --------------------------------------------------------------------------
+    elif data == "close_panel":
+        await query.edit_message_text("🔒 تم إغلاق لوحة التحكم.")
+

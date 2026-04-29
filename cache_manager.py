@@ -12,7 +12,9 @@ import sqlite3
 import re
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
-
+from telegram.request import HTTPXRequest
+from telegram.error import Forbidden, BadRequest, TelegramError
+import hashlib
 
 from startbot import (
     # --- المتغيرات والثوابت والمعرفات ---
@@ -519,18 +521,6 @@ class DataManager:
         الالتزام الصارم: لا حذف، لا تعديل، لا تبسيط للمنطق الحالي.
         التحديث الإضافي: نظام الحراس (Guards) لمنع تسريب DB وتحسين الأداء (V7.1).
         """
-        import os
-        import asyncio
-        import hashlib
-        import logging
-        import json
-        import base64
-        from io import BytesIO
-        from datetime import datetime
-        from telegram import Bot
-        from telegram.request import HTTPXRequest
-        from telegram.error import Forbidden, BadRequest, TelegramError
-        
         # 1. إعدادات التتبع والتعريف (Engine Tag) - [V5/V6 Original]
         engine_version = "V5-Ultimate-Elite-Integrated"
         # [V7 Additive]: طبقة الهوية المزدوجة والإصدار المؤسسي
