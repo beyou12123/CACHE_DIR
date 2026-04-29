@@ -303,9 +303,13 @@ async def run_dynamic_bot(bot_token, bot_type, user_id):
         
         spec.loader.exec_module(module)
         importlib.reload(module) 
-
         # 3. بناء تطبيق البوت وتجهيزه
         new_app = ApplicationBuilder().token(bot_token).build()
+        
+        # --- [ الحل الجذري لمنع Conflict 409 ] ---
+        # حذف الويب هوك وتنظيف الطلبات المعلقة لهذا التوكن تحديداً قبل بدء الـ Polling
+        await new_app.bot.delete_webhook(drop_pending_updates=True)
+        await asyncio.sleep(1.5) # وقت أمان لضمان استقرار الجلسة الجديدة
         new_app.bot_data["owner_id"] = int(user_id)
 
         # 4. ربط المعالجات (Handlers)
