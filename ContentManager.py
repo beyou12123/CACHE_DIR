@@ -1,6 +1,7 @@
 # ContentManager.py
 import json
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from sheets import get_bot_config, update_content_setting
 from startbot import (
     # --- المتغيرات والثوابت والمعرفات ---
@@ -331,15 +332,65 @@ def get_auto_reply_manager_keyboard(bot_id):
     return InlineKeyboardMarkup(keyboard)
     
     
+    # --- [ القوائم الرئيسية للمنصة - أزرار واجهة المستخدم ] ---
+def get_student_menu():
+    keyboard = [
+        [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
+        [InlineKeyboardButton("👤 ملفي الدراسي", callback_data="my_profile"), 
+         InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
+        # --- الزر الجديد الذي طلبته ---
+        [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
+        [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
+         InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+#لوحة الأدمن 
+def get_admin_panel():
+    """قائمة الأزرار الرئيسية للوحة تحكم الإدارة - النسخة المطورة بضبط الـ AI"""
+    keyboard = [
+        [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
+         InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
+        [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
+        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("إعدادات المحتوى", callback_data="contentcanager")],
+        [InlineKeyboardButton("📥 تحميل نسخة احتياطية ", callback_data="export_data_json"),
+         InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
+
+        [InlineKeyboardButton("❌ إغلاق", callback_data="close_panel")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+#لوحة الموظفين 
+def get_employee_panel():
+    """لوحة الشؤون التعليمية للموظفين والمدربين بناءً على الصلاحيات"""
+    # تم إسناد النص لمتغير لاستخدامه في رسائل التعديل لاحقاً
+    text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
     
+    keyboard = [
+        [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"), 
+         InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
+        [InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
+         InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")],
+        [InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"), 
+         InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")],
+        [InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"), 
+         InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons")],
+        [InlineKeyboardButton("الكنترول", callback_data="manage_control")],
+        [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
     
     
     
 # ملف خاص بابازرار ولوحات المفاتيح
-# ui_keyboards.py
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-def get_coach_panel_keyboard(): # غيرنا الاسم قليلاً ليكون واضحاً أنه للأزرار فقط
+def get_coach_panel():
+    """لوحة التحكم الأكاديمية الخاصة بالمدربين"""
+    text = "👨‍🏫 <b>غرفة الإدارة الأكاديمية (المدرب):</b>\nمرحباً بك! يمكنك إدارة مجموعاتك، متابعة طلابك، وتصحيح الواجبات من هنا."
+    
     keyboard = [
         [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"), 
          InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
@@ -352,6 +403,9 @@ def get_coach_panel_keyboard(): # غيرنا الاسم قليلاً ليكون 
         [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="main_menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+
 
 def get_tech_settings_keyboard(m_status):
     """لوحة إعدادات الإدارة الأكاديمية والشؤون التعليمية"""

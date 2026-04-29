@@ -339,6 +339,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 #©©©©©©©©©©©©©©©©©©©
 #معالجات ازرار العودة
     elif data == "back_to_admin":
+    	from ui_keyboards import get_admin_panel
         text = "👋 مرحباً بك في لوحة التحكم الإدارية:\n\nيرجى اختيار القسم الذي ترغب في إدارته من الأزرار أدناه."
         await query.message.edit_text(
             text=text,

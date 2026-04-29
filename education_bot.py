@@ -235,7 +235,10 @@ from contact_callback import contact_callback_handler
 from contact_message import handle_contact_message
 
 from ContentManager import (
-     get_coach_panel_keyboard,
+     get_coach_panel,
+     get_student_menu, 
+     get_admin_panel, 
+     get_employee_panel,
      get_tech_settings_keyboard,
      content_management_handler,
      config_input_receiver, 
@@ -253,55 +256,6 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # --- [ القوائم الرئيسية للمنصة - أزرار واجهة المستخدم ] ---
-def get_student_menu():
-    keyboard = [
-        [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
-        [InlineKeyboardButton("👤 ملفي الدراسي", callback_data="my_profile"), 
-         InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
-        # --- الزر الجديد الذي طلبته ---
-        [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
-        [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
-         InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-#لوحة الأدمن 
-def get_admin_panel():
-    """قائمة الأزرار الرئيسية للوحة تحكم الإدارة - النسخة المطورة بضبط الـ AI"""
-    keyboard = [
-        [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
-         InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
-        [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
-        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("إعدادات المحتوى", callback_data="contentcanager")],
-        [InlineKeyboardButton("📥 تحميل نسخة احتياطية ", callback_data="export_data_json"),
-         InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
-
-        [InlineKeyboardButton("❌ إغلاق", callback_data="close_panel")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-#لوحة الموظفين 
-def get_employee_panel():
-    """لوحة الشؤون التعليمية للموظفين والمدربين بناءً على الصلاحيات"""
-    # تم إسناد النص لمتغير لاستخدامه في رسائل التعديل لاحقاً
-    text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
-    
-    keyboard = [
-        [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"), 
-         InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
-        [InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
-         InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")],
-        [InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"), 
-         InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")],
-        [InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"), 
-         InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons")],
-        [InlineKeyboardButton("الكنترول", callback_data="manage_control")],
-        [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
 
 #لوحة المدرب 
 
