@@ -602,9 +602,17 @@ async def start_all_sub_bots():
             for bot_data in active_bots:
                 try:
                     token = bot_data.get("التوكن")
-                    owner_id = bot_data.get("ID المالك") or bot_data.get("bot_id")
-                    bot_type = bot_data.get("نوع البوت")
+                    # التصحيح 1: منع المصنع من تشغيل نفسه (حل الـ Conflict)
+                    if not token or token == main_factory_token or token in seen_tokens:
+                        continue
+  
+                    seen_tokens.add(token)
+
+                    # التصحيح 2: مطابقة أسماء الأعمدة الصحيحة
+                    owner_id = bot_data.get("user_id") or bot_data.get("ID المالك")
+                    bot_type = bot_data.get("نوع_البوت") or bot_data.get("نوع البوت")
                     status = bot_data.get("الحالة", "نشط")
+                    
 
                     if not token:
                         print("⏭️ [SKIP]: بدون توكن")
