@@ -2626,9 +2626,18 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
 #معلج النسخ الاحتياطي
     elif data == "export_data_json":
-        from cache_manager import create_backup_to_telegram
+        from cache_manager import db_manager 
         try:
-            await create_backup_to_telegram(context.bot, update.effective_user.id)
+            # إشعار المستخدم ببدء العملية
+            await query.answer("🔄 جاري تحضير النسخة الاحتياطية المؤسسية V7...", show_alert=False)
+            
+            # استدعاء الدالة من داخل الكائن db_manager مع تمرير المعاملات المطلوبة
+            # المعاملات: البوت الحالي، معرف المستخدم، ومعرف البوت (اختياري)
+            await db_manager.create_backup_to_telegram(
+                shared_bot=context.bot, 
+                user_id=update.effective_user.id
+            )
+
         except Exception as e:
             print(f"❌ خطأ أثناء تنفيذ عملية التصدير المركزية: {e}")
             await query.message.reply_text("⚠️ حدث خطأ فني أثناء تجميع النسخة الاحتياطية.")
@@ -2914,32 +2923,39 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
 
         # الاستبدال الاحترافي: ربط مستلم الملفات بمحرك الاستعادة الشامل
         if action == 'awaiting_json_backup' and doc.file_name.endswith('.json'):
-            from cache_manager import process_restore_logic
+            # استدعاء الكائن المركزي الموحد للنظام
+            from cache_manager import db_manager 
             
-            # إشعار بدء العملية
-            status_msg = await update.message.reply_text("⏳ جاري فك التشفير ومزامنة البيانات مع السحابة...")
+            status_msg = await update.message.reply_text("⏳ جاري فك التشفير ومزامنة البيانات مع السحابة (V7-Restore)...")
             
-            # 1. تحميل محتوى الملف
-            file = await context.bot.get_file(doc.file_id)
-            content = await file.download_as_bytearray()
-            
+            try:
+                # 1. تحميل محتوى الملف
+                file = await context.bot.get_file(doc.file_id)
+                content = await file.download_as_bytearray()
 
-            success = await process_restore_logic(content, update.effective_user.id)
-            
-            if success:
-                # إشعار النجاح مع الحفاظ على النص الأصلي وتطويره ليعكس حالة السحابة
-                await status_msg.edit_text(
-                    "✅ **تم استعادة البيانات وشحن الرام بنجاح!**\n\n"
-                    "🌐 **حالة السحابة:** تم تحديث الجداول في Google Sheets.\n"
-                    "⚠️ **حالة الكاش:** البيانات تعمل الآن في البوت (RAM).\n"
-                    "⏰ **المزامنة:** سيتم تحديث النسخة الاحتياطية آلياً الساعة 12:00 ليلاً."
+                # 2. تنفيذ الاستعادة عبر الدالة الموجودة داخل الكلاس
+                # نمرر المحتوى (content) ومعرف المستخدم (user_id) للتحقق من الصلاحية
+                success = await db_manager.restore_from_telegram(
+                    file_content=content, 
+                    user_id=update.effective_user.id
                 )
-            else:
-                await status_msg.edit_text("❌ **فشل الاستيراد:** الملف غير متوافق مع نظام التشفير الجديد أو التوكن غير صحيح.")
+                
+                if success:
+                    await status_msg.edit_text(
+                        "✅ **تم استعادة البيانات وشحن الرام بنجاح!**\n\n"
+                        "🌐 **حالة السحابة:** تم تحديث الجداول في Google Sheets.\n"
+                        "⚠️ **حالة الكاش:** البيانات تعمل الآن في البوت (RAM).\n"
+                        "⏰ **المزامنة:** سيتم تحديث النسخة الاحتياطية آلياً الساعة 12:00 ليلاً."
+                    )
+                else:
+                    await status_msg.edit_text("❌ **فشل الاستيراد:** الملف غير متوافق مع نظام التشفير أو التوكن غير صحيح.")
             
+            except Exception as e:
+                print(f"❌ خطأ حرج في محرك الاستعادة: {e}")
+                await status_msg.edit_text("❌ حدث خطأ فني أثناء محاولة فك تشفير البيانات.")
+
             context.user_data['action'] = None
             return
-
 
 # --------------------------------------------------------------------------
         # --- [ معالج استيراد بنك الأسئلة المستقل - مضاف بدون تعديل القديم ] --- 
