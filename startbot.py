@@ -674,8 +674,25 @@ async def start_all_sub_bots():
     
 async def boot_all_bots():
     from sheets import get_all_active_bots
+    from startbot import run_dynamic_bot
+    import asyncio
+    
     active_bots = get_all_active_bots()
     print(f"🔄 جاري تحضير إقلاع {len(active_bots)} بوت تابعة للمصنع...")
+    
+    for bot in active_bots:
+        token = bot.get('التوكن')
+        if token == TOKEN: continue
+        bot_type = bot.get('نوع_البوت')
+        owner_id = bot.get('user_id')
+        
+        if token and bot_type:
+            # التعديل الجذري: تشغيل كل بوت في مهمة منفصلة مع ضمان تنظيف الجلسة
+            print(f"🚀 [BOOT]: محاولة إقلاع البوت {token[:10]}...")
+            asyncio.create_task(run_dynamic_bot(token, bot_type, owner_id))
+            # فترة أمان لمنع ضغط الطلبات على سيرفرات تليجرام
+            await asyncio.sleep(2) 
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """إلغاء عملية إنشاء البوت وتنظيف الذاكرة المؤقتة"""

@@ -1196,7 +1196,7 @@ def check_excel_export_permission(bot_token, all_bots):
 
 factory_token = os.getenv("BOT_TOKEN")
 # إنشاء كائن db_manager الوحيد الذي سيعتمد عليه كامل النظام
-db_manager = DataManager(factory_token) if factory_token else DataManager(os.getenv("BOT_TOKEN"))
+db_manager = DataManager(factory_token)
 
 
 # إشعار النظام ببدء العمل

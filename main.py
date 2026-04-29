@@ -2138,7 +2138,11 @@ if __name__ == "__main__":
                     print("⚠️ [RESTORE]: فشلت الاستعادة (قد لا توجد نسخة مثبتة). سيتم بدء قاعدة جديدة.")
 
             # --- [ الخطوة 2: القتل الإجباري ] ---
+            temp_bot = Bot(token=token)
+            await temp_bot.delete_webhook(drop_pending_updates=True)
+            await temp_bot.close()
             await force_kill_old_sessions(token)
+            await asyncio.sleep(2)
 
             # --- [ الخطوة 3: الإقلاع الفعلي للمصنع ] ---
             print("🚀 [LAUNCH]: انطلاق المحرك الرئيسي للمصنع الآن...")
