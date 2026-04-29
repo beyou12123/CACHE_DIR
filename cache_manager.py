@@ -599,15 +599,20 @@ class DataManager:
                 "dual_identity_active": True if bot_id else False
             }
 
-            # 6. محرك الإرسال (DB -> القناة) - [V5 Core Logic - Unchanged]
+            # 6. محرك الإرسال الذكي (نظام الهوية المزدوجة - V7 Enterprise)
             sent_msg = None
             file_name = f"Factory_Backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db"
+            
+            # تحديد الوجهة: إذا كان المستدعي هو المالك (user_id) نرسل له، وإلا نرسل لقناة المصنع
+            target_chat_id = user_id if user_id else BACKUP_CHANNEL_ID
+            
+            # تخصيص الوصف حسب الوجهة
+            source_tag = "OWNER-REQUEST" if user_id else "SYSTEM-AUTO"
             caption = (
-                f"🛡️ <b>Enterprise Backup (V7 Dual-ID)</b>\n\n"
+                f"🛡️ <b>Enterprise Backup (V7-{source_tag})</b>\n\n"
                 f"📅 التاريخ: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>\n"
                 f"🔐 بصمة الأمن: <code>{file_hash[:16]}</code>\n"
-                f"🧠 المحرك: <code>{backup_version}</code>\n"
-                f"🚀 الحالة: <b>استعادة تلقائية مفعلة ✅</b>"
+                f"🚀 الحالة: <b>نسخة موثقة ✅</b>"
             )
 
             for attempt in range(3):
@@ -615,7 +620,7 @@ class DataManager:
                     with open(DB_PATH, "rb") as db_file:
                         sent_msg = await asyncio.wait_for(
                             bot.send_document(
-                                chat_id=BACKUP_CHANNEL_ID,
+                                chat_id=target_chat_id, # الوجهة الديناميكية
                                 document=db_file,
                                 filename=file_name,
                                 caption=caption,
@@ -626,17 +631,25 @@ class DataManager:
                             timeout=120
                         )
                     if sent_msg: 
-                        execution_flags["db_backup_done"] = True # تحديث الـ Flag
+                        execution_flags["db_backup_done"] = True
                         break
 
                 except (Forbidden, BadRequest) as fatal_e:
-                    current_logger.error(f"🚫 [{process_id}]: خطأ غير قابل للإصلاح: {fatal_e}")
+                    # إذا كان الخطأ أن البوت ليس في القناة والمستدعي هو نظام آلي، لا تقتل البرنامج
+                    if "chat not found" in str(fatal_e) and not user_id:
+                        current_logger.warning(f"⚠️ [{process_id}]: القناة غير موجودة، سيتم تخطي الإرسال للقناة.")
+                        break
                     raise fatal_e 
 
                 except Exception as send_err:
                     err_str = str(send_err).lower()
-                    if "chat not found" in err_str or "bot was blocked" in err_str:
+                    if "chat not found" in err_str:
+                        # إذا فشل البوت الفرعي في الإرسال للقناة، حاول إرسالها للمستخدم (user_id) كخطة بديلة
+                        if user_id:
+                            target_chat_id = user_id 
+                            continue 
                         raise send_err
+                    
                     wait_time = 2 ** attempt
                     if attempt == 2: raise send_err
                     print(f"🔄 [{process_id}]: محاولة {attempt + 1} فشلت. إعادة في {wait_time}s...")
@@ -783,6 +796,9 @@ class DataManager:
                 try:
                     await local_bot.close()
                 except: pass
+ #~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~
+               
 # الاستعادة 
     async def restore_from_telegram(self, manual_file_id=None, user_id=None, bot_id=None):
         """
