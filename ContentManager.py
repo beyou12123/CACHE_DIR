@@ -511,6 +511,29 @@ def get_owner_dashboard_keyboard(user_id, developer_id, m_status):
 
     return InlineKeyboardMarkup(keyboard)
 
+#الدالة المساعدة نظام التتبع زر العودة 
+async def smart_navigate(update, context, target_panel_func, panel_name):
+    """
+    دالة ذكية: تفتح اللوحة الجديدة وتخزن اللوحة الحالية كـ 'نقطة عودة'.
+    """
+    query = update.callback_query
+    # تخزين اسم اللوحة الحالية قبل الانتقال للجديدة
+    # نستخدم History بسيط (قائمة) ليدعم العودة المتعددة
+    if 'nav_history' not in context.user_data:
+        context.user_data['nav_history'] = []
+    
+    # إذا كانت اللوحة الحالية مختلفة عن الأخيرة، سجلها
+    current_panel = context.user_data.get('current_panel')
+    if current_panel and current_panel != panel_name:
+        context.user_data['nav_history'].append(current_panel)
+    
+    context.user_data['current_panel'] = panel_name
+    
+    # فتح اللوحة المطلوبة
+    await query.edit_message_text(
+        text="جاري التحميل...",
+        reply_markup=target_panel_func()
+    )
 
 
 
