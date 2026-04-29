@@ -336,6 +336,24 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
     elif data == "main_menu":
         await start_handler(update, context)
 #>>>>>>>>>>>>>>>>
+#©©©©©©©©©©©©©©©©©©©
+#معالجات ازرار العودة
+    elif data == "back_to_admin":
+        text = "👋 مرحباً بك في لوحة التحكم الإدارية:\n\nيرجى اختيار القسم الذي ترغب في إدارته من الأزرار أدناه."
+        await query.message.edit_text(
+            text=text,
+            reply_markup=get_admin_panel(),
+            parse_mode="HTML"
+        )
+
+    	
+
+
+
+
+#©©©©©©©©©©©©©©©©©©©
+
+
     # معالج اربح معنا (تم ربطه بـ elif لضمان الاستجابة)
     elif data == "referral_system":
         # ملاحظة: تم إزالة query.answer() المكررة هنا لأنها تم استدعاؤها في بداية الدالة
