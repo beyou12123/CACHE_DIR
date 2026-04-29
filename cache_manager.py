@@ -1243,6 +1243,42 @@ class DataManager:
         except Exception as e:
             print(f"❌ خطأ أثناء تصفير القاعدة: {e}")
             return False
+#دالة حذف بوت
+    async def delete_bot_permanently(self, bot_token):
+        """
+        محرك الحذف النهائي V7.2 - إزالة البوت من المصنع تماماً.
+        المهام: الحذف من SQLite، تحديث الكاش العالمي، إيقاف المزامنة.
+        """
+        import logging
+        current_logger = logging.getLogger("FACTORY_DELETE")
+        
+        try:
+            # 1. الحذف من قاعدة البيانات المحلية (SQLite)
+            # نستخدم التوكن كمعرف فريد أساسي للحذف
+            query = "DELETE FROM البوتات_المصنوعة WHERE التوكن = ?"
+            self.cursor.execute(query, (bot_token,))
+            self.conn.commit()
+            
+            # 2. تحديث الكاش العالمي (FACTORY_GLOBAL_CACHE) لضمان عدم الإقلاع مجدداً
+            if 'FACTORY_GLOBAL_CACHE' in globals():
+                all_bots = globals()['FACTORY_GLOBAL_CACHE'].get('all_bots', [])
+                # تصفية القائمة لاستبعاد البوت المحذوف
+                new_bot_list = [b for b in all_bots if str(b.get('التوكن')) != str(bot_token)]
+                globals()['FACTORY_GLOBAL_CACHE']['all_bots'] = new_bot_list
+                
+                # إزالة بيانات المزامنة الخاصة بالبوت من الكاش إن وجدت
+                if 'bot_sync_versions' in globals()['FACTORY_GLOBAL_CACHE']:
+                    globals()['FACTORY_GLOBAL_CACHE']['bot_sync_versions'].pop(bot_token, None)
+
+            current_logger.info(f"🗑️ [DELETE]: تم حذف البوت {bot_token[:15]}... من النظام نهائياً.")
+            
+            # 3. محاولة إرسال إشارة إيقاف للمهمة المشغلة (اختياري حسب منطق startbot)
+            # يمكن إضافة منطق هنا لإغلاق جلسة البوت البرمجية فوراً
+            
+            return True
+        except Exception as e:
+            current_logger.error(f"❌ [DELETE ERROR]: فشل حذف البوت: {e}")
+            return False
 
 
 #~~~~~~~~~~~~~~~~

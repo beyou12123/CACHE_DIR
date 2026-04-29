@@ -516,6 +516,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("❌ فشلت العملية. راجع السجلات.")
 
+    elif data.startswith("confirm_delete_bot_"):
+        target_token = data.replace("confirm_delete_bot_", "")
+     
+        success = await db_manager.delete_bot_permanently(target_token)
+        
+        if success:
+            await query.edit_message_text("✅ تم حذف البوت وإزالته من سجلات المصنع بنجاح.")
+        else:
+            await query.answer("⚠️ حدث خطأ أثناء محاولة الحذف من القاعدة.")
 
 
     elif data in ["restart_factory", "run_pull_sync_manual"]:
