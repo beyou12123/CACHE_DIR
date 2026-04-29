@@ -639,18 +639,40 @@ async def start_all_sub_bots():
                         continue
 
                     target_func = globals().get('run_dynamic_bot')
-
                     if target_func:
-                        async def safe_run():
+                        # [سجل]: التحضير لإطلاق المهمة
+                        logger.info(f"⚙️ [PRE-LAUNCH]: جاري تجهيز مهمة منفصلة للبوت {token[:10]}...")
+
+                        # تثبيت القيم (t, bt, oid) لكل مهمة بشكل مستقل لمنع التكرار (Closure Fix)
+                        async def safe_run(t=token, bt=bot_type, oid=owner_id):
                             try:
-                                await target_func(token, bot_type, owner_id)
+                                logger.info(f"📡 [EXEC]: استدعاء محرك التشغيل الديناميكي للتوكن {t[:10]}...")
+                                await target_func(t, bt, oid)
+                                logger.info(f"✨ [DONE]: اكتملت عملية تشغيل المحرك للبوت {t[:10]}")
                             except Exception as e:
-                                logger.error(f"[CRASH] {token[:10]}: {e}")
+                                logger.error(f"❌ [CRASH] فشل ذريع في تشغيل البوت {t[:10]}: {e}")
+                                # طباعة الخطأ كامل في السجلات لتسهيل التشخيص
+                                import traceback
+                                logger.error(traceback.format_exc())
 
+                        # إطلاق المهمة في الخلفية
                         asyncio.create_task(safe_run())
-
-                        results["started"] += 1
+                        
+                        # [سجل]: تأكيد خروج المهمة للذاكرة
                         print(f"✅ [STARTED]: {token[:15]}")
+                        logger.info(f"🚀 [ASYNC]: تم دفع المهمة {token[:10]} إلى حلقة الأحداث (Event Loop).")
+
+                        # تحديث الإحصائيات
+                        results["started"] += 1
+                        
+                        # سطر إضافي ضروري لمنع ضغط الطلبات (Flood Control) لضمان استقرار جلسات تليجرام
+                        logger.info(f"⏳ [COOLDOWN]: انتظار 1.5 ثانية قبل معالجة البوت التالي...")
+                        await asyncio.sleep(1.5) 
+                    else:
+                        logger.error(f"🚨 [FAIL]: الدالة run_dynamic_bot غير معرفة في النطاق العالمي!")
+
+
+
 
                         if owner_id:
                             await queue.put((token, str(owner_id)))
