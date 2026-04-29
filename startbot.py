@@ -228,6 +228,16 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------------------------------
 async def run_dynamic_bot(bot_token, bot_type, user_id):
     """الحل الجذري: قتل الجلسات القديمة، ربط الملف البرمجي، وتشغيل المحرك الجديد"""
+        # --- [ القفل الذكي: منع التشغيل المكرر نهائياً ] ---
+    if 'ACTIVE_RUNTIME_BOTS' not in globals():
+        globals()['ACTIVE_RUNTIME_BOTS'] = {}
+        
+    if bot_token in ACTIVE_RUNTIME_BOTS:
+        print(f"⚠️ [SKIP]: البوت {bot_token[:10]} يعمل بالفعل في الذاكرة.")
+        return # اخرج فوراً ولا تكمل التشغيل
+    # ------------------------------------------------
+    
+    
     try:
         from sheets import meta_sheet
         import importlib
