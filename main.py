@@ -12,7 +12,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
 from apscheduler.schedulers.background import BackgroundScheduler
 from sheets import sync_ad_campaign_results, connect_to_google
-from ui_keyboards import get_owner_dashboard_keyboard
+
 # استيراد الأدوات الأساسية من مكتبة تليجرام
 from telegram import (
     Update, 
@@ -34,6 +34,11 @@ from telegram.ext import (
     CallbackQueryHandler, 
     ConversationHandler,
     ChatMemberHandler
+)
+
+from ContentManager import (
+     get_owner_dashboard_keyboard
+     
 )
 
 from startbot import (

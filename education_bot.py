@@ -10,13 +10,10 @@ import uuid
 import json
 import secrets
 import importlib
-from contact_callback import contact_callback_handler
-from contact_message import handle_contact_message
-from ui_keyboards import get_coach_panel_keyboard, get_tech_settings_keyboard
 import importlib.util
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
-from ContentManager import content_management_handler, config_input_receiver, get_main_config_keyboard, auto_reply_engine
+
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
 # محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
 try:
@@ -233,6 +230,17 @@ from cache_manager import (
     export_bot_data_to_excel,
     fetch_full_factory_data,
     check_excel_permission_from_cache
+)
+from contact_callback import contact_callback_handler
+from contact_message import handle_contact_message
+
+from ContentManager import (
+     get_coach_panel_keyboard,
+     get_tech_settings_keyboard,
+     content_management_handler,
+     config_input_receiver, 
+     get_main_config_keyboard, 
+     auto_reply_engine
 )
 # --- [ ذاكرة المحادثات المؤقتة للطلاب ] ---
 user_messages = {} 
