@@ -89,6 +89,7 @@ from startbot import (
     receive_token,
     cancel
 )
+
 from sheets import (
     get_bot_config, 
     add_log_entry, 
@@ -1600,13 +1601,10 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
         
         # 3. استدعاء الأزرار من الملف الخارجي وتمرير حالة الصيانة لها
-        reply_markup = ui_keyboards.get_tech_settings_keyboard(m_status)
+        reply_markup = get_tech_settings_keyboard(m_status)
         
         # 4. التحديث
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-
-
-
 
 
 #>>>>>>>>>>>>>>>

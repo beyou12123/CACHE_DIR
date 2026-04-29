@@ -605,7 +605,8 @@ async def run_bot(token, owner_id):
     
     # [System/Stats]: حصر النمط في الوظائف الإحصائية وتصدير البيانات والنسخ الاحتياطي
     # أضفنا النمط "backup_to_channel" و "restore_from_channel" لضمان عمل V7.2
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache|export_data_json|backup_to_channel|restore_from_channel|download_cache_files)$"))
+    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache|export_data_json|backup_to_channel|restore_from_channel|download_cache_files|tech_settings)$"))
+
 
     # [ContactHandler]: سجل المعالج الخاص بأزرار التواصل وأزرار المنصة الأخرى
     # تم وضع هذا المعالج هنا لضمان استلامه لأي إشارة تبدأ بـ contact_ أو أي أزرار عامة متبقية
@@ -634,9 +635,6 @@ async def run_bot(token, owner_id):
     # يجب حذف الـ Webhook وإسقاط التحديثات القديمة لضمان استجابة المحرك فوراً
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.updater.start_polling(drop_pending_updates=True)
-
-
-
 
 
 # --------------------------------------------------------------------------

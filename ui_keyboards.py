@@ -16,8 +16,6 @@ def get_coach_panel_keyboard(): # غيرنا الاسم قليلاً ليكون 
     ]
     return InlineKeyboardMarkup(keyboard)
 
-
-
 def get_tech_settings_keyboard(m_status):
     """لوحة إعدادات الإدارة الأكاديمية والشؤون التعليمية"""
     keyboard = [
