@@ -89,9 +89,6 @@ from startbot import (
     receive_token,
     cancel
 )
-from sheets import 
-from sheets import 
-
 from sheets import (
     get_bot_config, 
     add_log_entry, 
