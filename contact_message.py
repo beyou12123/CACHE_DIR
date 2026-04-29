@@ -14,7 +14,20 @@ from ui_keyboards import get_coach_panel_keyboard, get_tech_settings_keyboard
 import importlib.util
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
-from ContentManager import content_management_handler, config_input_receiver, get_main_config_keyboard, auto_reply_engine
+
+from ContentManager import (
+    get_coach_panel,
+    get_student_menu,
+    get_admin_panel,
+    get_employee_panel,
+    get_tech_settings,
+    content_management_handler,
+    config_input_receiver,
+    get_main_config,
+    smart_navigate,
+    auto_reply_engine
+)
+
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
 # محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
 try:
