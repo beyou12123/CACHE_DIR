@@ -598,7 +598,7 @@ async def start_all_sub_bots():
             # التشغيل الرئيسي
             # =========================
             print("🚀 [LAUNCH]: بدء تشغيل البوتات...")
-
+            main_factory_token = os.getenv("BOT_TOKEN")
             for bot_data in active_bots:
                 try:
                     token = bot_data.get("التوكن")
