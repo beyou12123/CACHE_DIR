@@ -12,7 +12,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
 from apscheduler.schedulers.background import BackgroundScheduler
 from sheets import sync_ad_campaign_results, connect_to_google
-
+from ui_keyboards import get_owner_dashboard_keyboard
 # استيراد الأدوات الأساسية من مكتبة تليجرام
 from telegram import (
     Update, 
@@ -330,65 +330,42 @@ def start_scheduler():
     # --- [ إعداد لوحة المفاتيح بناءً على الصلاحيات ] ---
 async def owner_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لوحة تحكم المطور (المالك) - متوافقة مع الأزرار الشفافة"""
+
     user_id = update.effective_user.id
-    # التحقق من الصلاحية: يجب أن يكون المستخدم ضمن قائمة الإداريين أو المطور
+
+    # التحقق من الصلاحية
     if user_id not in ALL_ADMINS:
         return
-    # 1. أزرار متاحة لجميع الإداريين والمطور
-    keyboard = [
-        [InlineKeyboardButton("📊 إحصائيات البوتات", callback_data="stats_all")],
-        [InlineKeyboardButton("📢 إذاعة للمشتركين", callback_data="broadcast_owners")],
-        [InlineKeyboardButton("📥 تحميل نسخة", callback_data="download_cache_files")]
-    ]
-    # 2. أزرار حصرية للمطور فقط (DEVELOPER_ID) - الحفاظ على كافة الوظائف والمفاتيح
-    if user_id == DEVELOPER_ID:
-        config = get_bot_config(TOKEN)
-        m_status = "🔴 (نشط)" if str(config.get("maintenance_mode", "FALSE")).upper() == "TRUE" else "🟢 (متوقف)"    	
-        keyboard.extend([
-            [InlineKeyboardButton("─── المحرك الهجين (SQLite) ───", callback_data="none")],
-            [
-                InlineKeyboardButton("📤 نسخة احتياطية للقناة", callback_data="backup_to_channel"),
-                InlineKeyboardButton("🔄 استعادة من القناة", callback_data="restore_from_channel")
-            ],
-            
-            [InlineKeyboardButton("─── عمليات النظام الحساسة ───", callback_data="none")],
-            [InlineKeyboardButton("💳 إدارة الاشتراكات والترقيات", callback_data="manage_coaches")], 
-            [
-                InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
-            ],
-            [InlineKeyboardButton("⚙️ تهيئة الجداول", callback_data="run_setup_db_now")],
-            [
-                InlineKeyboardButton("📤 رفع نسخة", callback_data="start_restore_request"),
-                InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_sync_shet")
-            ],
-            [
-                InlineKeyboardButton("🔄 تحديث السيرفر", callback_data="restart_factory"), 
-                InlineKeyboardButton("♻️ إعادة تشغيل", callback_data="reboot_system")
-            ],
-            [InlineKeyboardButton("👨‍💼 قسم الأدمن", callback_data="admin_section")], 
-            [InlineKeyboardButton("⚠️ تصفير النظام بالكامل", callback_data="confirm_hard_reset")]
-        ])
 
-    # 3. زر العودة الدائم
-    keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="back_to_main")])
+    # جلب حالة الصيانة (تبقى هنا لأنها "منطق وليس UI")
+    config = get_bot_config(TOKEN)
+    m_status = "🔴 (نشط)" if str(config.get("maintenance_mode", "FALSE")).upper() == "TRUE" else "🟢 (متوقف)"
+
+    # بناء الكيبورد من ملف خارجي
+    keyboard = get_owner_dashboard_keyboard(
+        user_id=user_id,
+        developer_id=DEVELOPER_ID,
+        m_status=m_status
+    )
 
     text = "🛠 **لوحة تحكم المطور والعمليات المركزية**\nمرحباً بك، اختر الإجراء المطلوب:"
-    
-    # التعامل مع الضغط من زر شفاف (Callback) أو أمر نصي
+
+    # التعامل مع callback أو message
     if update.callback_query:
         try:
             await update.callback_query.answer()
             await update.callback_query.edit_message_text(
-                text, 
-                reply_markup=InlineKeyboardMarkup(keyboard),
+                text,
+                reply_markup=keyboard,
                 parse_mode="Markdown"
             )
         except Exception as e:
             print(f"⚠️ خطأ في تحديث لوحة التحكم: {e}")
+
     else:
         await update.message.reply_text(
-            text, 
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            text,
+            reply_markup=keyboard,
             parse_mode="Markdown"
         )
 #~~~~~~~~~~~~~~~~

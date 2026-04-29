@@ -7,6 +7,7 @@ import uuid
 import json
 import secrets
 import importlib
+import ui_keyboards
 import importlib.util
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
@@ -289,22 +290,23 @@ def get_employee_panel():
 
 
 #لوحة المدرب 
-def get_coach_panel():
-    """لوحة التحكم الأكاديمية الخاصة بالمدربين"""
+
+# هذه هي دالتك الأصلية بعد التعديل
+async def get_coach_panel(update, context): # استخدم نفس الاسم الموجود في كودك
+    query = update.callback_query
+    if query: await query.answer()
+
+    # نص الرسالة يبقى هنا لأنه "محتوى" وليس "واجهة"
     text = "👨‍🏫 <b>غرفة الإدارة الأكاديمية (المدرب):</b>\nمرحباً بك! يمكنك إدارة مجموعاتك، متابعة طلابك، وتصحيح الواجبات من هنا."
     
-    keyboard = [
-        [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"), 
-         InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
-        [InlineKeyboardButton("📅 جدول المحاضرات", callback_data="schedules_lectures"), 
-         InlineKeyboardButton("📖 المكتبة التعليمية", callback_data="manage_library")],
-        [InlineKeyboardButton("📑 تصحيح الواجبات", callback_data="hw_view_submissions"), 
-         InlineKeyboardButton("📝 بنك الأسئلة", callback_data="manage_q_bank")],
-        [InlineKeyboardButton("🏆 الأوسمة والتقييمات", callback_data="honors_achievements"), 
-         InlineKeyboardButton("🎮 غرفة الكنترول", callback_data="manage_control")],
-        [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="main_menu")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
+    # بدلاً من كتابة المصفوفة الطويلة هنا.. نستدعيها بكلمة واحدة
+    reply_markup = ui_keyboards.get_coach_panel()
+    
+    if query:
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode='HTML')
+
 
 # --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
 # --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
@@ -1832,71 +1834,25 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         ]), parse_mode="HTML")
 #>>>>>>>>>>>>>>>>
     # --- [ لوحة المفاتيح الذكية للآدمن ] ---
+    # --- [ لوحة المفاتيح الذكية للآدمن ] ---
     elif data == "tech_settings":
+        # 1. جلب البيانات اللازمة
         config = get_bot_config(bot_token)
         m_status = "🔴 (نشط)" if str(config.get("maintenance_mode", "FALSE")).upper() == "TRUE" else "🟢 (متوقف)"    	
-        keyboard = [
-            [
-                InlineKeyboardButton("📝 كليشة الترحيب", callback_data="manage_welcome_texts"),
-                InlineKeyboardButton("🔄 المزامنة", callback_data="manual_cache_sync")
-            ],
-            [
-                InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
-            ],
-            [
-                InlineKeyboardButton("إدارة الفروع", callback_data="manage_branches"),
-                InlineKeyboardButton("الإدارة المالية", callback_data="manage_financial"),
-                InlineKeyboardButton("الكنترول", callback_data="manage_control")
-            ],
-            [
-               InlineKeyboardButton("📊  استيراد Excel", callback_data="excel_import_start"),
-               InlineKeyboardButton("📊  تصدير Excel", callback_data="excel_export_start")
-            ],
-            [InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")], 
-            [
-                InlineKeyboardButton("👨‍🏫 الصلاحيات", callback_data="manage_personnel"),
-                InlineKeyboardButton("تكويد الكادر", callback_data="manage_coaches"), 
-                InlineKeyboardButton("المهام الإدارية", callback_data="administrative_tasks")
-            ],
-            [
-                InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"),
-                InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"),
-                InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")
-            ],
-            [
-                InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"),
-                InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
-                InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")
-            ],
-            [
-                InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons"),
-                InlineKeyboardButton("📢 الإعلانات", callback_data="manage_ads"),
-                InlineKeyboardButton("أكواد الخصم", callback_data="discount_codes")
-            ],
-            [
-                InlineKeyboardButton("ضبط نقاط الدخول", callback_data="referral_points_settings"), 
-                InlineKeyboardButton("ضبط وحدة العملة", callback_data="currency_unit")
-            ],
-            [
-                InlineKeyboardButton(f"ضبط درجة النجاح", callback_data="passing_grade"),            
-                InlineKeyboardButton("ضبط درجة الواجبات", callback_data="homework_grade")
-            ],
-            [
-                InlineKeyboardButton("ضبط مبلغ السحب", callback_data="minimum_withdrawal_amount"),
-                InlineKeyboardButton("معلومات الدفع الافتراضية", callback_data="default_payment_information"),
+        
+        # 2. نص الرسالة
+        text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
+        
+        # 3. استدعاء الأزرار من الملف الخارجي وتمرير حالة الصيانة لها
+        reply_markup = ui_keyboards.get_tech_settings_keyboard(m_status)
+        
+        # 4. التحديث
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
-            ],
-            [
-                InlineKeyboardButton("القناة الرسمية", callback_data="public_channel_idd"),
-                InlineKeyboardButton("قناة الأوسمة والإنجازات", callback_data="honors_channel_idd"),
 
-            ],  
-            [InlineKeyboardButton("ضبط عمولة المسوقين %", callback_data="percentage_marketers")],                                                
-            [InlineKeyboardButton("🔙 عودة", callback_data="back_to_admin")]
-        ]
 
-        await query.edit_message_text("👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف.", 
-                                      reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
 #>>>>>>>>>>>>>>>
     # --- [ إضافة معالج الإكسل الناقص ] ---
     elif data == "excel_export_start":
