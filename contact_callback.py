@@ -13,12 +13,15 @@ import importlib.util
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 from ContentManager import (
-     get_coach_panel_keyboard,
-     get_tech_settings_keyboard,
-     content_management_handler,
-     config_input_receiver, 
-     get_main_config_keyboard, 
-     auto_reply_engine
+    get_coach_panel,
+    get_student_menu,
+    get_admin_panel,
+    get_employee_panel,
+    get_tech_settings,
+    content_management_handler,
+    config_input_receiver,
+    get_main_config,
+    auto_reply_engine
 )
 
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
@@ -339,21 +342,39 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 #©©©©©©©©©©©©©©©©©©©
 #معالجات ازرار العودة
 
-    elif data == "back_to_admin":
-        # تأكد أن هذا السطر وما تحته يبدأ بمسافات وليس Tabs
-        text = "👋 مرحباً بك في لوحة التحكم الإدارية:\n\nيرجى اختيار القسم الذي ترغب في إدارته من الأزرار أدناه."
-        await query.message.edit_text(
-            text=text,
-            reply_markup=get_admin_panel(),
-            parse_mode="HTML"
-        )
-    	
+    elif data == "smart_back":
+        history = context.user_data.get('nav_history', [])
+    
+        if not history:
+            # إذا فرغ التاريخ، نعود للوحة الرئيسية (لوحة الطالب أو الأدمن حسب الشخص)
+            if user_id in ALL_ADMINS:
+                await query.edit_message_text("🔙 عودة للوحة الإدارة:", reply_markup=get_admin_panel())
+            else:
+                await query.edit_message_text("🔙 القائمة الرئيسية:", reply_markup=get_student_menu())
+            return
 
+        # سحب آخر لوحة من التاريخ
+        last_panel = history.pop()
+    
+        # خريطة الربط بين الأسماء والدوال
+        panels_map = {
+            "admin_panel": get_admin_panel,
+            "student_menu": get_student_menu,
+            "tech_settings": lambda: get_tech_settings("🟢"), 
+            "employee_panel": get_employee_panel,
+            "employee_panel": get_employee_panel,
+            "coach_panel": get_coach_panel
+        }
+    
+        target_func = panels_map.get(last_panel, get_student_menu)
+        await query.edit_message_text("🔙 تم الرجوع:", reply_markup=target_func())
+
+
+    
 
 
 
 #©©©©©©©©©©©©©©©©©©©
-
 
     # معالج اربح معنا (تم ربطه بـ elif لضمان الاستجابة)
     elif data == "referral_system":
@@ -1091,7 +1112,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         
         await query.message.edit_text(
             text=instructions, 
-            reply_markup=get_main_config_keyboard(),
+            reply_markup=get_main_config(),
             parse_mode="Markdown"
         )
 
@@ -1627,7 +1648,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         text = "👨‍🏫 <b>إدارة الشؤون التعليمية :</b>\nيمكنك إضافة مدربين جدد دورات جديدة او اقسام او مجموعات أو استعراض القائمة الحالية للحذف."
         
         # 3. استدعاء الأزرار من الملف الخارجي وتمرير حالة الصيانة لها
-        reply_markup = get_tech_settings_keyboard(m_status)
+        reply_markup = get_tech_settings(m_status)
         
         # 4. التحديث
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")

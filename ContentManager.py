@@ -71,7 +71,7 @@ MAP = {
     
 }
 
-def get_main_config_keyboard():
+def get_main_config():
     """
     توليد لوحة التحكم الرئيسية بتنسيق (2 في الصف و 3 في الصف للأزرار الصغيرة)
     بدون حذف أي زر أو تغيير التوزيع المعتمد.
@@ -178,7 +178,7 @@ async def content_management_handler(update, context):
     if data == "back_to_config_main":
         await query.message.edit_text(
             "⚙️ **لوحة التحكم بإعدادات المحتوى**\n\nإختر القسم الذي تود إدارته من الأزرار أدناه:",
-            reply_markup=get_main_config_keyboard(),
+            reply_markup=get_main_config(),
             parse_mode="Markdown"
         )
         return
@@ -407,7 +407,7 @@ def get_coach_panel():
 
 
 
-def get_tech_settings_keyboard(m_status):
+def get_tech_settings(m_status):
     """لوحة إعدادات الإدارة الأكاديمية والشؤون التعليمية"""
     keyboard = [
         [

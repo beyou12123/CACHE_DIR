@@ -235,16 +235,19 @@ from contact_callback import contact_callback_handler
 from contact_message import handle_contact_message
 
 from ContentManager import (
-     get_coach_panel,
-     get_student_menu, 
-     get_admin_panel, 
-     get_employee_panel,
-     get_tech_settings_keyboard,
-     content_management_handler,
-     config_input_receiver, 
-     get_main_config_keyboard, 
-     auto_reply_engine
+    get_coach_panel,
+    get_student_menu,
+    get_admin_panel,
+    get_employee_panel,
+    get_tech_settings,
+    content_management_handler,
+    config_input_receiver,
+    get_main_config,
+    auto_reply_engine
 )
+
+
+
 # --- [ ذاكرة المحادثات المؤقتة للطلاب ] ---
 user_messages = {} 
 
@@ -258,22 +261,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # --- [ القوائم الرئيسية للمنصة - أزرار واجهة المستخدم ] ---
 
 #لوحة المدرب 
-
-# هذه هي دالتك الأصلية بعد التعديل
-async def get_coach_panel(update, context): # استخدم نفس الاسم الموجود في كودك
-    query = update.callback_query
-    if query: await query.answer()
-
-    # نص الرسالة يبقى هنا لأنه "محتوى" وليس "واجهة"
-    text = "👨‍🏫 <b>غرفة الإدارة الأكاديمية (المدرب):</b>\nمرحباً بك! يمكنك إدارة مجموعاتك، متابعة طلابك، وتصحيح الواجبات من هنا."
-    
-    # بدلاً من كتابة المصفوفة الطويلة هنا.. نستدعيها بكلمة واحدة
-    reply_markup = ui_keyboards.get_coach_panel()
-    
-    if query:
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode='HTML')
-    else:
-        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode='HTML')
 
 
 # --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
