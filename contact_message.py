@@ -22,7 +22,6 @@ from ContentManager import (
     get_employee_panel,
     get_tech_settings,
     content_management_handler,
-    config_input_receiver,
     get_main_config,
     smart_navigate,
     auto_reply_engine

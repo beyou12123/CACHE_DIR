@@ -20,7 +20,6 @@ from ContentManager import (
     get_employee_panel,
     get_tech_settings,
     content_management_handler,
-    config_input_receiver,
     get_main_config,
     smart_navigate,
     auto_reply_engine
@@ -252,10 +251,9 @@ from set_org import (
     show_payment_panel,
     trigger_edit_ai,
     trigger_edit_payment,
+    org_input_handler,
     trigger_add_org_handler 
 )
-
-# في أعلى ملف contact_callback.py
 
 
 # --------------------------------------------------------------------------

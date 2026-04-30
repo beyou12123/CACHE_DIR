@@ -243,13 +243,20 @@ from ContentManager import (
     get_employee_panel,
     get_tech_settings,
     content_management_handler,
-    config_input_receiver,
     get_main_config,
     smart_navigate,
     auto_reply_engine
 )
 
-
+from set_org import (
+    show_org_name_panel, 
+    show_ai_prompt_panel, 
+    show_payment_panel,
+    trigger_edit_ai,
+    trigger_edit_payment,
+    org_input_handler,
+    trigger_add_org_handler 
+)
 
 # --- [ ذاكرة المحادثات المؤقتة للطلاب ] ---
 user_messages = {} 
@@ -554,34 +561,96 @@ async def activation_monitor(context: ContextTypes.DEFAULT_TYPE):
             print(f"⚠️ فشل إرسال إشعار أو مكافأة للطالب {student['user_id']}: {e}")
 
 # --------------------------------------------------------------------------
+# ==========================================================================
+
+
+async def config_input_receiver(update, context):
+    """
+    مستقبل المدخلات النصية المطور
+    """
+    user_data = context.user_data
+    
+    action = user_data.get('action') 
+    
+    # --- [ الإضافة الجديدة: نظام توجيه محرك المؤسسة ] ---
+    if action in ['waiting_for_org_name', 'waiting_for_ai_prompt', 'waiting_for_payment_info']:
+        return await org_input_handler(update, context)
+
+    text = update.message.text
+    # جلب توكن البوت المستهدف أو استخدام التوكن الحالي (ضمان تحويله لنص)
+    target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
+
+    # [PATCH]: معالجة حالة استقبال اسم المؤسسة (عند الإقلاع الأول)
+    # ملاحظة: تم الإبقاء عليها كما هي لضمان عدم حذف أي وظيفة سابقة (Backward Compatibility)
+    if user_data.get('action') == 'awaiting_institution_name':
+        # 1. ضمان وجود صف للبوت في قاعدة البيانات قبل التحديث (INSERT if not exists)
+        from sheets import ensure_bot_sync_row, update_content_setting
+        ensure_bot_sync_row(target_bot_id)
+        
+        # 2. استدعاء دالة التحديث للعمود رقم 20 (اسم_المؤسسة)
+        success = update_content_setting(target_bot_id, "اسم_المؤسسة", text)
+        
+        if success:
+            user_data.pop('action', None)
+            await update.message.reply_text(
+                f"✅ تم بنجاح ضبط اسم المنصة التعليمية: **{text}**\n"
+                f"تم إنشاء سجل البوت وتحديث البيانات بنجاح."
+            )
+        else:
+            await update.message.reply_text("❌ عذراً دكتور، فشل الحفظ في القاعدة. تأكد من وجود جدول 'إعدادات_المحتوى'.")
+        return
+
+    # [ORIGINAL CODE]: معالجة الإعدادات الأخرى من القائمة (مع إضافة منطق التحقق من الصف)
+    if 'waiting_for_config' in user_data:
+        col_name = user_data['waiting_for_config']
+        label = user_data['config_label']
+        new_value = text
+        target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
+
+        # ضمان وجود الصف قبل التحديث لمنع فشل الـ UPDATE
+        from sheets import ensure_bot_sync_row, update_content_setting
+        ensure_bot_sync_row(target_bot_id)
+
+        # استدعاء دالة التحديث المعتمدة
+        success = update_content_setting(target_bot_id, col_name, new_value)
+
+        if success:
+            await update.message.reply_text(
+                f"✅ تم حفظ وتحديث **{label}** بنجاح!\n"
+                f"تمت المزامنة مع قاعدة البيانات السحابية والمحلية."
+            )
+        else:
+            await update.message.reply_text("❌ حدث خطأ أثناء محاولة الحفظ، يرجى المحاولة لاحقاً.")
+        
+        user_data.pop('waiting_for_config', None)
+        user_data.pop('config_label', None)
 
 # --------------------------------------------------------------------------
 
 
 # --- [ محرك التشغيل المتوافق مع المصنع ] ---
-
 async def run_bot(token, owner_id):
     """هذه الدالة هي التي يستدعيها ملف main.py لتشغيل البوت ديناميكياً"""
+    # تصحيح: تحويل owner_id إلى int لضمان عمل الفلتر filters.Chat(owner_id)
+    owner_id = int(owner_id) 
+    
     application = ApplicationBuilder().token(token).build()
     
     # 1. إضافة المعالجات (Handlers)
-    # 1. إضافة المعالجات (Handlers) - الترتيب هنا حاسم جداً
     application.add_handler(CommandHandler("start", start_handler))
 
     # --- [أولاً: أزرار إعدادات المؤسسة والهوية المضافة حديثاً] ---
     application.add_handler(CallbackQueryHandler(show_org_name_panel, pattern="^set_org_name$"))
+
     application.add_handler(CallbackQueryHandler(trigger_add_org_handler, pattern="^org_add$"))
     application.add_handler(CallbackQueryHandler(show_ai_prompt_panel, pattern="^set_ai_prompt$"))
     application.add_handler(CallbackQueryHandler(trigger_edit_ai, pattern="^trigger_edit_ai$"))
     application.add_handler(CallbackQueryHandler(show_payment_panel, pattern="^set_payment$"))
     application.add_handler(CallbackQueryHandler(trigger_edit_payment, pattern="^trigger_edit_payment$"))
-    
-    
-    
 
     # ==================================================================
     # 🛡️ [إضافة ذكية بدون تعديل]: Guard Handler لمنع تعارض add_
-    # هذا الهاندلر يلتقط trigger_add_org قبل أي Regex عام
+    # تم تغيير الترتيب ليكون قبل الـ Regex العام لضمان الفاعلية
     # ==================================================================
     async def _guard_trigger_add_org(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -590,10 +659,10 @@ async def run_bot(token, owner_id):
             # إعادة توجيه صريحة للدالة الأصلية
             return await trigger_add_org_handler(update, context)
 
+    # وضع الـ Guard في موضع الأولوية
     application.add_handler(
         CallbackQueryHandler(_guard_trigger_add_org, pattern="^org_add$")
     )
-
     # ==================================================================
 
     # --- [ثانياً: المعالجات الإدارية العامة] ---
@@ -605,13 +674,10 @@ async def run_bot(token, owner_id):
     application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache|export_data_json|backup_to_channel|restore_from_channel|download_cache_files|tech_settings)$"))
 
     # [ContactHandler]: أزرار التواصل وأزرار المنصة الشاملة
-    # ملاحظة: هذا النمط واسع لذا يوضع بعد الأنماط المحددة
     application.add_handler(CallbackQueryHandler(contact_callback_handler, pattern="^(contact_.*|schedules_lectures|discount_codes|add_discount_start|manage_group|manage_courses|manage_library|hw_view_submissions|manage_q_bank|honors_achievements|manage_control|main_menu)$"))
     
 
     # --- [ثالثاً: معالجات الرسائل النصية] ---
-
-    # [ConfigHandler]: معالج رسائل المطور فقط (الإعدادات وتغيير النصوص)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
 
     # [StudentAI]: رسائل الطلاب
@@ -620,7 +686,8 @@ async def run_bot(token, owner_id):
     
     # 2. إعداد مراقب التفعيل
     job_queue = application.job_queue
-    job_queue.run_repeating(activation_monitor, interval=60, first=10)
+    if job_queue: # إضافة تحقق أمان لضمان عدم انهيار البوت
+        job_queue.run_repeating(activation_monitor, interval=60, first=10)
     
     # 3. بدء تشغيل المحرك
     await application.initialize()
@@ -628,11 +695,8 @@ async def run_bot(token, owner_id):
     
     # --- [حل مشكلة Conflict وفشل الحفظ] ---
     await application.bot.delete_webhook(drop_pending_updates=True)
+    # إذا كنت تستخدم create_task في الملف الرئيسي، استمر باستخدام start_polling هنا بحذر
     await application.updater.start_polling(drop_pending_updates=True)
-# --------------------------------------------------------------------------
-
-    
-
 
 
 
