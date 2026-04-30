@@ -2,6 +2,7 @@ import os
 import json
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+from datetime import datetime
 # استيراد محرك قاعدة البيانات والكاش
 from cache_manager import db_manager, FACTORY_GLOBAL_CACHE, save_cache_to_disk
 
@@ -48,9 +49,6 @@ CONTENT_CONFIG_COLS = [
 "إعدادات_الدفع", "إصدار_التحديث", "حالة_المزامنة", "وقت_التعديل"
 ]
 
-        # المنطق الذي سنتبعه في set_org.py ليكون مطابقاً لنظامك 100%
-
-
 # 1. تحديث الرام مباشرة
 sheet_name = "إعدادات_المحتوى"
 records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
@@ -65,14 +63,9 @@ for record in records:
 if not found:
     records.append(update_payload)
 
-# 2. مزامنة التغيير مع القرص الفيزيائي (كما هو في دالتك save_cache_to_disk)
+# 2. مزامنة التغيير مع القرص الفيزيائي
 save_cache_to_disk()
 
-
-
-# --- 1. دالة التحقق الارتدادي (Back-Check System) ---
-# --- 1. دالة التحقق الارتدادي (Back-Check System) ---
-# تم تحديثها لتعمل مع نظام الكاش المركزي لضمان السرعة والتطابق
 
 async def check_required_configs(bot_id):
     """
@@ -85,7 +78,6 @@ async def check_required_configs(bot_id):
     records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
     
     # البحث عن السجل الخاص بالبوت باستخدام bot_id
-    # تم تحويل bot_id إلى string لضمان مطابقة المفاتيح في الكاش
     config = next((r for r in records if str(r.get("bot_id")) == str(bot_id)), {})
     
     # 1. الفحص الارتدادي لاسم المؤسسة
@@ -150,61 +142,69 @@ async def org_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     مستقبل المدخلات النصية: يقوم بتحديث البيانات في الكاش (RAM) 
     ثم استدعاء الحفظ الفيزيائي (Disk) لضمان المطابقة الكاملة.
     """
-    from cache_manager import FACTORY_GLOBAL_CACHE, save_cache_to_disk
+
     
     user_data = context.user_data
     action = user_data.get('action')
     bot_id = context.bot.id
-    txt = update.message.text.strip()
+    text_received = update.message.text.strip()
 
-    # --- [ 1. معالجة حالة اسم المؤسسة ] ---
+    # قائمة الأعمدة الـ 39 لضمان التصفير الذكي وعدم فقدان أي مفتاح
+    
+
+    # تحديد الحقل المطلوب تحديثه بناءً على الحالة
+    update_payload = {}
     if action == 'waiting_for_org_name':
+        update_payload = {"اسم_المؤسسة": text_received}
+    elif action == 'waiting_for_ai_prompt':
+        update_payload = {"تعليمات_AI": text_received}
+    elif action == 'waiting_for_payment_info':
+        update_payload = {"إعدادات_الدفع": text_received}
+
+    if update_payload:
         sheet_name = "إعدادات_المحتوى"
         records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
         
-        # البحث عن سجل البوت الحالي
+        # البحث عن السجل وتحديثه (منطق الرام الذي أكدت عليه)
         target_record = next((r for r in records if str(r.get("bot_id")) == str(bot_id)), None)
         
-        # تجهيز البيانات الجديدة (تحديث القيمة المحددة)
-        new_data = {"bot_id": str(bot_id), "اسم_المؤسسة": txt}
-        
         if target_record:
-            # تحديث السجل الموجود مع الحفاظ على قيمه السابقة
-            target_record.update(new_data)
+            target_record.update(update_payload)
+            target_record["وقت_التعديل"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         else:
-            # إنشاء سجل جديد بالكامل وتصفير الأعمدة الأخرى بـ 0
-            target_record = new_data
+            # إذا لم يوجد سجل، ننشئ واحد جديد ونطبق التصفير الذكي لكافة الأعمدة
+            target_record = {"bot_id": str(bot_id)}
+            target_record.update(update_payload)
+            for col in CONTENT_CONFIG_COLS:
+                if col not in target_record:
+                    target_record[col] = "0"
             records.append(target_record)
-        
-        # تطبيق بروتوكول التصفير الذكي (Smart Zeroing)
-        # أي عمود من الـ 39 عمود غير موجود أو فارغ يتم وضع "0" فيه
-        from set_org import CONTENT_CONFIG_COLS # استدعاء القائمة التي عرفناها
-        for col in CONTENT_CONFIG_COLS:
-            if col not in target_record or str(target_record[col]).strip() == "":
-                target_record[col] = "0"
 
-        # تحديث الرام (RAM)
+        # تحديث الرام النهائية
         FACTORY_GLOBAL_CACHE["data"][sheet_name] = records
         
-        # الحفظ الفيزيائي على القرص (Disk) لضمان المزامنة
+        # المزامنة مع القرص (Disk) - الاستدعاء الصحيح بدون بارامترات
         save_cache_to_disk()
-        
+
+        # تنظيف الحالة وإرسال رد النجاح للمستخدم
         user_data['action'] = None
         
-        # رسالة النجاح والتوجيه للذكاء الاصطناعي
-        text = (
-            f"✅ **تم حفظ اسم المؤسسة بنجاح:**\n"
-            f"🏢 `{txt}`\n\n"
-            f"💡 **هل تود إضافة أو تحديث دليل الذكاء الاصطناعي الآن؟**"
-        )
-        kb = [[InlineKeyboardButton("✅ نعم", callback_data="set_ai_prompt"), 
-               InlineKeyboardButton("❌ لاحقاً", callback_data="set_org_name")]]
-        
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        # منطق رسائل النجاح (حسب نوع الحالة)
+        if "اسم_المؤسسة" in update_payload:
+            msg = f"✅ تم حفظ اسم المؤسسة: `{text_received}`\nهل ننتقل لضبط AI؟"
+            kb = [[InlineKeyboardButton("🧠 ضبط AI", callback_data="set_ai_prompt"), InlineKeyboardButton("🔙 عودة", callback_data="set_org_name")]]
+        elif "تعليمات_AI" in update_payload:
+            msg = "✅ تم حفظ دليل AI بنجاح.\nهل ننتقل لضبط بيانات الدفع؟"
+            kb = [[InlineKeyboardButton("💳 ضبط الدفع", callback_data="set_payment"), InlineKeyboardButton("🔙 عودة", callback_data="set_org_name")]]
+        else:
+            msg = "✅ تم حفظ بيانات الدفع بنجاح."
+            kb = [[InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="back_to_main_config")]]
+
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # --- 5. دالة عرض لوحة تعليمات الذكاء الاصطناعي ---
 async def show_ai_prompt_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from cache_manager import FACTORY_GLOBAL_CACHE
+
     query = update.callback_query
     bot_id = context.bot.id
     
