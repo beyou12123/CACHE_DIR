@@ -49,30 +49,61 @@ CONTENT_CONFIG_COLS = [
 "إعدادات_الدفع", "إصدار_التحديث", "حالة_المزامنة", "وقت_التعديل"
 ]
 
-# 1. تحديث الرام مباشرة
-sheet_name = "إعدادات_المحتوى"
-records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
+async def org_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    المعالج النصي لإدخالات المالك (الاسم، التعليمات، الدفع) 
+    مع دمج منطق تحديث الرام والقرص والفحص الارتدادي.
+    """
+    
+    user_data = context.user_data
+    action = user_data.get('action')
+    bot_id = context.bot.id
+    text_received = update.message.text.strip()
 
-# البحث عن السجل وتحديثه أو إضافته
-found = False
-for record in records:
-    if str(record.get("bot_id")) == str(bot_id):
-        record.update(update_payload)
-        found = True
-        break
-if not found:
-    records.append(update_payload)
+    # تحديد الحمولة بناءً على الإجراء الحالي
+    update_payload = {}
+    if action == 'waiting_for_org_name':
+        update_payload = {"اسم_المؤسسة": text_received}
+    elif action == 'waiting_for_ai_prompt':
+        update_payload = {"تعليمات_AI": text_received}
+    elif action == 'waiting_for_payment_info':
+        update_payload = {"إعدادات_الدفع": text_received}
 
-# 2. مزامنة التغيير مع القرص الفيزيائي
-save_cache_to_disk()
+    if update_payload:
+        # 1. تحديث الرام مباشرة
+        sheet_name = "إعدادات_المحتوى"
+        records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
 
+        # البحث عن السجل وتحديثه أو إضافته
+        found = False
+        for record in records:
+            if str(record.get("bot_id")) == str(bot_id):
+                record.update(update_payload)
+                found = True
+                break
+        if not found:
+            records.append(update_payload)
+
+        # 2. مزامنة التغيير مع القرص الفيزيائي
+        save_cache_to_disk()
+        # --- [ نهاية منطق التحديث ] ---
+
+        # تصفير الأكشن بعد الحفظ
+        context.user_data['action'] = None
+        
+        # [التحقق الارتدادي الختامي باستخدام الدالة التي طلبت دمجها]
+        missing_after = await check_required_configs(bot_id)
+        
+        if missing_after == "ALL_SET":
+            await update.message.reply_text("✅ تم حفظ البيانات واكتملت كافة الإعدادات بنجاح.")
+        else:
+            await update.message.reply_text(f"✅ تم الحفظ. الحالة الحالية: {missing_after}")
 
 async def check_required_configs(bot_id):
     """
     تقوم بفحص النواقص في الإعدادات الأساسية وترجع أول نقص تجده.
     تعتمد على FACTORY_GLOBAL_CACHE لضمان مطابقة بيانات الرام.
     """
-    
     # الوصول لجدول إعدادات_المحتوى من الكاش
     sheet_name = "إعدادات_المحتوى"
     records = FACTORY_GLOBAL_CACHE["data"].get(sheet_name, [])
@@ -94,7 +125,6 @@ async def check_required_configs(bot_id):
     
     # في حال اكتملت كافة البيانات الأساسية
     return "ALL_SET"
-
 
 # --- 2. دالة عرض لوحة اسم المؤسسة ---
 async def show_org_name_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
