@@ -565,7 +565,7 @@ async def run_bot(token, owner_id):
     application = ApplicationBuilder().token(token).build()
     
     # 1. إضافة المعالجات (Handlers)
-        # 1. إضافة المعالجات (Handlers) - الترتيب هنا حاسم جداً
+    # 1. إضافة المعالجات (Handlers) - الترتيب هنا حاسم جداً
     application.add_handler(CommandHandler("start", start_handler))
 
     # --- [أولاً: أزرار إعدادات المؤسسة والهوية المضافة حديثاً] ---
@@ -575,6 +575,23 @@ async def run_bot(token, owner_id):
     application.add_handler(CallbackQueryHandler(trigger_edit_ai, pattern="^trigger_edit_ai$"))
     application.add_handler(CallbackQueryHandler(show_payment_panel, pattern="^set_payment$"))
     application.add_handler(CallbackQueryHandler(trigger_edit_payment, pattern="^trigger_edit_payment$"))
+
+    # ==================================================================
+    # 🛡️ [إضافة ذكية بدون تعديل]: Guard Handler لمنع تعارض add_
+    # هذا الهاندلر يلتقط trigger_add_org قبل أي Regex عام
+    # ==================================================================
+    async def _guard_trigger_add_org(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        if query:
+            await query.answer()
+            # إعادة توجيه صريحة للدالة الأصلية
+            return await trigger_add_org_handler(update, context)
+
+    application.add_handler(
+        CallbackQueryHandler(_guard_trigger_add_org, pattern="^trigger_add_org$")
+    )
+
+    # ==================================================================
 
     # --- [ثانياً: المعالجات الإدارية العامة] ---
     
@@ -592,15 +609,13 @@ async def run_bot(token, owner_id):
     # --- [ثالثاً: معالجات الرسائل النصية] ---
 
     # [ConfigHandler]: معالج رسائل المطور فقط (الإعدادات وتغيير النصوص)
-    # يستخدم فلتر Chat(owner_id) لضمان خصوصية الإعدادات
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
 
-    # [StudentAI]: رسائل الطلاب (تشغيل الذكاء الاصطناعي والرد التلقائي)
+    # [StudentAI]: رسائل الطلاب
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
 
     
-    # 2. إعداد مراقب التفعيل (يُوضع هنا بعد تعريف الـ application)
-    # سيقوم بفحص القاعدة كل 60 ثانية وإرسال رسائل للطلاب المفعلين
+    # 2. إعداد مراقب التفعيل
     job_queue = application.job_queue
     job_queue.run_repeating(activation_monitor, interval=60, first=10)
     
@@ -608,12 +623,9 @@ async def run_bot(token, owner_id):
     await application.initialize()
     await application.start()
     
-    # --- [ التعديل الجذري لحل مشكلة Conflict وفشل الحفظ ] ---
-    # يجب حذف الـ Webhook وإسقاط التحديثات القديمة لضمان استجابة المحرك فوراً
+    # --- [حل مشكلة Conflict وفشل الحفظ] ---
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.updater.start_polling(drop_pending_updates=True)
-
-
 # --------------------------------------------------------------------------
 
     
