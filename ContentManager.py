@@ -216,8 +216,12 @@ async def config_input_receiver(update, context):
     تم التصحيح لضمان (التعديل إن وجد صف، أو الإضافة إن لم يوجد) لضمان عدم فشل الحفظ.
     """
     user_data = context.user_data
-        # --- [ الإضافة الجديدة: نظام توجيه محرك المؤسسة ] ---
+    
+    # --- [ الإضافة الجديدة: نظام توجيه محرك المؤسسة ] ---
+    # هذا الجزء هو المسؤول عن الربط مع المحرك المطور في set_org.py
     action = user_data.get('action')
+    
+    # تصحيح جذري: إضافة التحقق من الحالات الثلاث لضمان عدم تعليق البوت
     if action in ['waiting_for_org_name', 'waiting_for_ai_prompt', 'waiting_for_payment_info']:
         from set_org import org_input_handler
         return await org_input_handler(update, context)
@@ -228,6 +232,7 @@ async def config_input_receiver(update, context):
     target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
 
     # [PATCH]: معالجة حالة استقبال اسم المؤسسة (عند الإقلاع الأول)
+    # ملاحظة: تم الإبقاء عليها كما هي لضمان عدم حذف أي وظيفة سابقة (Backward Compatibility)
     if user_data.get('action') == 'awaiting_institution_name':
         # 1. ضمان وجود صف للبوت في قاعدة البيانات قبل التحديث (INSERT if not exists)
         from sheets import ensure_bot_sync_row, update_content_setting
