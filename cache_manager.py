@@ -1112,16 +1112,18 @@ class DataManager:
     def sync_schema(self, spreadsheet=None):
         """
         المحرك الموحد (Unified Schema Engine):
-        يقوم بمطابقة SQLite مع Google Sheets بناءً على get_sheets_structure.
-        - ينشئ الجداول الناقصة.
-        - يعدل ترتيب الأعمدة، يحذف الزائد، ويضيف الناقص في SQLite.
+        - الخطوة 1: مزامنة الهيكل (SQLite & Google Sheets).
+        - الخطوة 2: مطابقة البيانات (كاش ↔ SQLite) لإضافة المفقود في الطرفين.
+        - الخطوة 3: رفع البيانات من الكاش إلى جوجل شيت مع حماية الـ IP.
         """
         from sheets import get_sheets_structure, ensure_sheet_schema, connect_to_google
+        from cache_manager import FACTORY_GLOBAL_CACHE
         import time 
+        import asyncio
         
         try:
             sheets_structure = get_sheets_structure()
-            print(f"⏳ [SYNC LOG]: بدء المزامنة الهيكلية لـ {len(sheets_structure)} جدولاً...")
+            print(f"⏳ [SYNC LOG]: بدء المزامنة الشاملة لـ {len(sheets_structure)} جدولاً...")
             
             if spreadsheet is None:
                 spreadsheet = connect_to_google()
@@ -1131,53 +1133,92 @@ class DataManager:
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
                 cols = sheet_def.get("cols", [])
-                time.sleep(2.2)             
-                
-                # أولاً: مزامنة Google Sheets
+                match_key = cols[0]
+                time.sleep(1.2) # تهدئة للـ API
+
+                # --- [ أولاً: مزامنة الهيكل (Google Sheets) ] ---
                 if spreadsheet:
                     if name not in existing_ws:
                         worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
                     else:
                         worksheet = existing_ws[name]
-                    # استدعاء الدالة المصححة بالأسفل لمزامنة الأعمدة (حذف/إضافة/ترتيب)
                     ensure_sheet_schema(worksheet, cols)
-                
-                # ثانياً: مزامنة SQLite (الحل الجذري للترتيب والعدد)
-                # فحص هل الجدول موجود؟
+
+                # --- [ ثانياً: مزامنة الهيكل (SQLite) ] ---
                 self.cursor.execute(f"PRAGMA table_info('{name}')")
                 existing_cols_info = self.cursor.fetchall()
                 
                 if not existing_cols_info:
-                    # إنشاء جدول جديد إذا لم يكن موجوداً
                     columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
-                    create_table_query = f"CREATE TABLE IF NOT EXISTS '{name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'synced', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                    # تم تغيير الافتراضي لـ pending لضمان عمل المزامنة الحركية
+                    create_table_query = f"CREATE TABLE IF NOT EXISTS '{name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
                     self.cursor.execute(create_table_query)
                 else:
-                    # فحص مطابقة الأعمدة (بدون الأعمدة التقنية الـ 3)
                     existing_names = [info[1] for info in existing_cols_info if info[1] not in ['local_id', 'sync_status', 'last_updated']]
-                    
                     if existing_names != cols:
                         print(f"⚙️ [MIGRATION]: إعادة هيكلة الجدول '{name}' للمطابقة...")
-                        # 1. إنشاء جدول مؤقت بالهيكل الصحيح
                         temp_name = f"{name}_temp"
                         columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
-                        self.cursor.execute(f"CREATE TABLE '{temp_name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'synced', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-                        
-                        # 2. نقل البيانات للأعمدة المشتركة فقط
+                        self.cursor.execute(f"CREATE TABLE '{temp_name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
                         common_cols = [c for c in cols if c in existing_names]
                         if common_cols:
                             cols_str = ", ".join([f"'{c}'" for c in common_cols])
                             self.cursor.execute(f"INSERT INTO '{temp_name}' ({cols_str}) SELECT {cols_str} FROM '{name}'")
-                        
-                        # 3. حذف القديم وتسمية الجديد
                         self.cursor.execute(f"DROP TABLE '{name}'")
                         self.cursor.execute(f"ALTER TABLE '{temp_name}' RENAME TO '{name}'")
-            
+
+                # --- [ ثالثاً: مطابقة البيانات الحركية (كاش ↔ SQLite) ] ---
+                print(f"🔄 [DATA SYNC]: مطابقة بيانات {name} (كاش ↔ SQLite)...")
+                self.cursor.execute(f"SELECT * FROM '{name}'")
+                db_rows = [dict(row) for row in self.cursor.fetchall()]
+                db_dict = {str(r.get(match_key)): r for r in db_rows if r.get(match_key)}
+                
+                cache_rows = FACTORY_GLOBAL_CACHE["data"].get(name, [])
+                cache_dict = {str(r.get(match_key)): r for r in cache_rows if r.get(match_key)}
+
+                # 1. من الكاش إلى SQLite (المفقود محلياً)
+                for key, c_row in cache_dict.items():
+                    if key not in db_dict:
+                        placeholders = ", ".join(["?" for _ in cols])
+                        vals = [str(c_row.get(c, "0")) for c in cols]
+                        self.cursor.execute(f"INSERT INTO '{name}' ({', '.join([f'\"{x}\"' for x in cols])}, sync_status) VALUES ({placeholders}, 'pending')", vals)
+                
+                # 2. من SQLite إلى الكاش (المفقود في الرام)
+                for key, d_row in db_dict.items():
+                    if key not in cache_dict:
+                        clean_row = {c: d_row.get(c, "0") for c in cols}
+                        FACTORY_GLOBAL_CACHE["data"][name].append(clean_row)
+
+                # --- [ رابعاً: المزامنة مع جوجل شيت (مع حظر الآي بي) ] ---
+                if spreadsheet:
+                    print(f"☁️ [CLOUD]: رفع تحديثات {name} إلى السحابة...")
+                    try:
+                        worksheet = spreadsheet.worksheet(name)
+                        google_records = worksheet.get_all_records()
+                        google_dict = {str(row.get(match_key)): {"idx": i+2, "data": row} for i, row in enumerate(google_records) if row.get(match_key)}
+                        
+                        for c_row in FACTORY_GLOBAL_CACHE["data"][name]:
+                            key_val = str(c_row.get(match_key))
+                            row_vals = [str(c_row.get(h, "0")) for h in cols]
+                            
+                            if key_val in google_dict:
+                                if list(google_dict[key_val]["data"].values()) != row_vals:
+                                    worksheet.update(f"A{google_dict[key_val]['idx']}", [row_vals])
+                                    time.sleep(1.9) # حظر الآي بي
+                            else:
+                                worksheet.append_row(row_vals, value_input_option='USER_ENTERED')
+                                time.sleep(1.5) # حظر الآي بي
+                    except Exception as e:
+                        print(f"⚠️ [CLOUD WARNING]: حظر أو خطأ في {name}: {e}")
+
             self.conn.commit()
-            print(f"✅ [SYNC LOG]: اكتملت المزامنة الصارمة (إضافة/حذف/ترتيب) بنجاح.")
+            print(f"✅ [SYNC LOG]: اكتملت المزامنة الصارمة والحركية بنجاح.")
             
         except Exception as e:
+            from logger_config import logger # تأكد من المسار
             logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
+
+
 
 
     async def push_to_google_sheets(self, spreadsheet):
