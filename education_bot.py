@@ -27,7 +27,6 @@ if api_key:
     print("✅ تم سحب المفتاح بنجاح من إعدادات المنصة")
  
 
-
  # ضروري لعمليات استيراد وتصدير الإكسل
    # محرك معالجة ملفات xlsx
 # --- [ 3. مكتبات تليجرام بوت (النسخة الحديثة) ] ---
@@ -566,28 +565,37 @@ async def run_bot(token, owner_id):
     application = ApplicationBuilder().token(token).build()
     
     # 1. إضافة المعالجات (Handlers)
+        # 1. إضافة المعالجات (Handlers) - الترتيب هنا حاسم جداً
     application.add_handler(CommandHandler("start", start_handler))
 
+    # --- [أولاً: أزرار إعدادات المؤسسة والهوية المضافة حديثاً] ---
+    application.add_handler(CallbackQueryHandler(show_org_name_panel, pattern="^set_org_name$"))
+    application.add_handler(CallbackQueryHandler(trigger_add_org_handler, pattern="^trigger_add_org$"))
+    application.add_handler(CallbackQueryHandler(show_ai_prompt_panel, pattern="^set_ai_prompt$"))
+    application.add_handler(CallbackQueryHandler(trigger_edit_ai, pattern="^trigger_edit_ai$"))
+    application.add_handler(CallbackQueryHandler(show_payment_panel, pattern="^set_payment$"))
+    application.add_handler(CallbackQueryHandler(trigger_edit_payment, pattern="^trigger_edit_payment$"))
+
+    # --- [ثانياً: المعالجات الإدارية العامة] ---
+    
     # [ContentManager]: معالج إدارة المحتوى (دروس، مكتبة، أقسام)
-    # ملاحظة: النمط يغطي كافة عمليات الإدارة والعودة للأقسام التعليمية
     application.add_handler(CallbackQueryHandler(content_management_handler, pattern="^(view_|manage_|add_|edit_|del_|back_to_edu_).*$"))
     
-    # [System/Stats]: حصر النمط في الوظائف الإحصائية وتصدير البيانات والنسخ الاحتياطي
-    # أضفنا النمط "backup_to_channel" و "restore_from_channel" لضمان عمل V7.2
+    # [System/Stats]: الوظائف الإحصائية والنسخ الاحتياطي V7.2
     application.add_handler(CallbackQueryHandler(button_callback, pattern="^(stats|refresh_cache|export_data_json|backup_to_channel|restore_from_channel|download_cache_files|tech_settings)$"))
 
-
-    # [ContactHandler]: سجل المعالج الخاص بأزرار التواصل وأزرار المنصة الأخرى
-    # تم وضع هذا المعالج هنا لضمان استلامه لأي إشارة تبدأ بـ contact_ أو أي أزرار عامة متبقية
+    # [ContactHandler]: أزرار التواصل وأزرار المنصة الشاملة
+    # ملاحظة: هذا النمط واسع لذا يوضع بعد الأنماط المحددة
     application.add_handler(CallbackQueryHandler(contact_callback_handler, pattern="^(contact_.*|schedules_lectures|discount_codes|add_discount_start|manage_group|manage_courses|manage_library|hw_view_submissions|manage_q_bank|honors_achievements|manage_control|main_menu)$"))
     
 
+    # --- [ثالثاً: معالجات الرسائل النصية] ---
+
     # [ConfigHandler]: معالج رسائل المطور فقط (الإعدادات وتغيير النصوص)
-    # يستخدم فلتر Chat(owner_id) لضمان عدم تداخل رسائل المطور مع محرك الذكاء الاصطناعي
+    # يستخدم فلتر Chat(owner_id) لضمان خصوصية الإعدادات
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
 
-    # [StudentAI]: تسجيل مستلم الرسائل للطلاب فقط (استثناء المالك)
-    # هذا المعالج يمرر الرسالة لملف contact_message.py لتشغيل الذكاء الاصطناعي والرد التلقائي
+    # [StudentAI]: رسائل الطلاب (تشغيل الذكاء الاصطناعي والرد التلقائي)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
 
     
@@ -607,4 +615,9 @@ async def run_bot(token, owner_id):
 
 
 # --------------------------------------------------------------------------
+
+    
+
+
+
 
