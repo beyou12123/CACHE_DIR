@@ -400,17 +400,62 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # حفظ المستخدم في قاعدة البيانات
     save_user(user.id, user.username, inviter_id, bot_token=bot_token)
+    # --- [ 3. تسجيل المستخدم وإشعار المالك ] ---
+    is_new_user = save_user(user.id, user.username, inviter_id, bot_token=context.bot.token)
 
-    # --- [ 6. محرك اختيار الكليشة الذكي حسب الوقت ] ---
+    if is_new_user:
+        # حساب إجمالي مستخدمي البوت الحالي من الكاش العالمي (RAM)
+        try:
+            # جلب قائمة المستخدمين من الكاش
+            all_users = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
+            
+            # فلترة القائمة لحساب من ينتمون لهذا البوت فقط
+            total_users = sum(1 for u in all_users if str(u.get("bot_id")) == str(context.bot.token))
+        except Exception as e:
+            logging.error(f"⚠️ خطأ في حساب الإحصائيات من الكاش: {e}")
+            total_users = "جاري التحديث.."
+
+        # إرسال إشعار للمالك عن عضو جديد
+        try:
+            notification_text = (
+                f"<b>تم دخول شخص جديد إلى المصنع الخاص بك</b> 👾\n"
+                f"            -----------------------\n"
+                f"• <b>معلومات العضو الجديد:</b>\n\n"
+                f"• <b>الاسم:</b> {user.full_name}\n"
+                f"• <b>المعرف:</b> @{user.username if user.username else 'لا يوجد'}\n"
+                f"• <b>الآيدي:</b> <code>{user.id}</code>\n"
+                f"            -----------------------\n"
+                f"• <b>إجمالي مستخدمي البوت:</b> {total_users} مستخدم"
+            )
+            
+            # إرسال الرسالة لآيدي المالك (المحول مسبقاً لـ int)
+            await context.bot.send_message(
+                chat_id=bot_owner_id, 
+                text=notification_text, 
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logging.error(f"⚠️ فشل إرسال إشعار العضو الجديد للمالك: {e}")
+
+    # محرك اختيار الكليشة الذكي (مع معالجة القيمة "0")
     hour = datetime.now().hour
+    
+    # دالة داخلية للتأكد من جلب نص حقيقي أو استخدام الافتراضي
+    def fetch_valid_msg(key, fallback):
+        val = config.get(key)
+        # إذا كان الحقل فارغاً أو يحتوي على "0" استخدم النص الافتراضي
+        if not val or str(val).strip() in ["0", "None", ""]:
+            return fallback
+        return val
+
     if 5 <= hour < 12:
-        msg = config.get("welcome_morning", "صباح العلم والهمة.. أي مهارة سنبني اليوم؟")
+        msg = fetch_valid_msg("welcome_morning", "صباح العلم والهمة.. أي مهارة سنبني اليوم؟")
     elif 12 <= hour < 17:
-        msg = config.get("welcome_noon", "طاب يومك.. الاستمرارية هي سر النجاح، لنكمل التعلم.")
+        msg = fetch_valid_msg("welcome_noon", "طاب يومك.. الاستمرارية هي سر النجاح، لنكمل التعلم.")
     elif 17 <= hour < 22:
-        msg = config.get("welcome_evening", "مساء الفكر المستنير.. حان وقت الحصاد المعرفي.")
+        msg = fetch_valid_msg("welcome_evening", "مساء الفكر المستنير.. حان وقت الحصاد المعرفي.")
     else:
-        msg = config.get("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
+        msg = fetch_valid_msg("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
 
     # --- [ 7. فرز الرتب والواجهات ] ---
     # المالك

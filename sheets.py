@@ -832,27 +832,23 @@ def update_content_setting(bot_id, column_name, new_value):
         print(f"❌ خطأ تحديث إعدادات محلي في 'إعدادات_المحتوى': {e}")
     return False
 
-
 def get_bot_config(bot_id):
-    """
-    جلب تكوين البوت من القاعدة المحلية (استجابة في ميلي ثانية):
-    - تحافظ على إرجاع قاموس (Dict) بنفس المفاتيح الأصلية.
-    - تم التعديل للعمل مع العمود العربي 'bot_id'.
-    """
+    """جلب الإعدادات من الكاش العالمي مباشرة (RAM)"""
     try:
-        # جلب الصف بالكامل بناءً على توكن البوت أو المعرف
-        # التعديل: استخدام المسمى العربي المعتمد "bot_id" في جدول إعدادات_المحتوى
-        db_manager.cursor.execute('SELECT * FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (str(bot_id),))
-        row = db_manager.cursor.fetchone()
+        # الوصول للكاش الذي يتم تحديثه تلقائياً
+        records = FACTORY_GLOBAL_CACHE["data"].get("إعدادات_المحتوى", [])
         
-        if row:
-            # تحويل الصف إلى قاموس مع الحفاظ على أسماء الأعمدة (Headers)
-            # هذا يضمن أن المفاتيح ستكون بالأسماء العربية الجديدة (مثل "الرسالة الترحيبية" بدلاً من column_2)
-            return dict(row)
+        # البحث عن سجل البوت باستخدام bot_id
+        # نستخدم str() لضمان المطابقة سواء كان المعرف رقم أو نص
+        config = next((r for r in records if str(r.get("bot_id")) == str(bot_id)), {})
+        
+        return config
     except Exception as e:
-        # الحفاظ على نص تسجيل الخطأ الأصلي
-        print(f"❌ خطأ جلب تكوين من المحلي (إعدادات_المحتوى): {e}")
+        logger.error(f"❌ خطأ جلب تكوين من الكاش: {e}")
     return {}
+
+
+
 
 def add_log_entry(bot_id, log_type, message):
     """
