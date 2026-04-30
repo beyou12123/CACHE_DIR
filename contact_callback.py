@@ -428,30 +428,30 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
     # --- [ قسم إعدادات المؤسسة والمحتوى الأساسي ] ---
     
-    # 1. لوحة اسم المؤسسة (تعمل مع الزر: "🏢 اسم المؤسسة")
+    # 1. لوحة عرض اسم المؤسسة
     elif data == "set_org_name":
         await show_org_name_panel(update, context)
     
-    # 2. بدء إضافة/تعديل الاسم (تعمل مع إشارة الزر الداخلي: "trigger_add_org")
+    # 2. الأكشن الفعلي لبدء إدخال الاسم (تم تصحيح اسم الدالة لـ _handler)
     elif data == "trigger_add_org":
-        # تعديل: استدعاء الدالة بالاسم الصحيح المكتوب في ملف set_org.py
         await trigger_add_org_handler(update, context)
 
-    # 3. لوحة تعليمات الذكاء الاصطناعي (تعمل مع الزر: "⚙️ تعليمات AI")
+    # 3. لوحة عرض تعليمات الذكاء الاصطناعي
     elif data == "set_ai_prompt":
         await show_ai_prompt_panel(update, context)
         
-    # 4. بدء تعديل دليل الـ AI (تعمل مع إشارة الزر الداخلي: "trigger_edit_ai")
+    # 4. الأكشن الفعلي لبدء تعديل دليل الـ AI
     elif data == "trigger_edit_ai":
         await trigger_edit_ai(update, context)
 
-    # 5. لوحة معلومات الدفع (تعمل مع الزر: "💳 معلومات الدفع")
+    # 5. لوحة عرض معلومات الدفع
     elif data == "set_payment":
         await show_payment_panel(update, context)
         
-    # 6. بدء تعديل بيانات الدفع (تعمل مع إشارة الزر الداخلي: "trigger_edit_payment")
+    # 6. الأكشن الفعلي لبدء تعديل بيانات الدفع
     elif data == "trigger_edit_payment":
         await trigger_edit_payment(update, context)
+        #7 لوحة الإعدادات 
 
 #>>>>>>>>>>>>>>>>
     # اعتماد صرف الأرباح - (المرحلة 1: طلب صورة الإيصال)
