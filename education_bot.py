@@ -578,10 +578,10 @@ async def run_bot(token, owner_id):
 
     # --- [أولاً: أزرار إعدادات المؤسسة والهوية المضافة حديثاً] ---
     application.add_handler(CallbackQueryHandler(show_org_name_panel, pattern="^set_org_name$"))
-
+    
     application.add_handler(CallbackQueryHandler(trigger_add_org_handler, pattern="^org_add$"))
     application.add_handler(CallbackQueryHandler(show_ai_prompt_panel, pattern="^set_ai_prompt$"))
-    application.add_handler(CallbackQueryHandler(trigger_edit_ai, pattern="^trigger_edit_ai$"))
+    application.add_handler(CallbackQueryHandler(_guard_trigger_edit_ai, pattern="^trigger_edit_ai$"))
     application.add_handler(CallbackQueryHandler(show_payment_panel, pattern="^set_payment$"))
     application.add_handler(CallbackQueryHandler(trigger_edit_payment, pattern="^trigger_edit_payment$"))
 
