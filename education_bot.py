@@ -17,7 +17,7 @@ from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 from google import genai
 from google.genai import types
 from contact_message import handle_contact_message
-
+logger = logging.getLogger(__name__)
 # جلب المفتاح من Variables المنصة
 api_key = os.getenv("GEMINI_API_KEY")
 
@@ -25,7 +25,6 @@ if api_key:
     # الطريقة الصحيحة للمكتبة الجديدة google-genai
     client = genai.Client(api_key=api_key)
     print("✅ تم سحب المفتاح بنجاح من إعدادات المنصة")
- 
 
  # ضروري لعمليات استيراد وتصدير الإكسل
    # محرك معالجة ملفات xlsx
@@ -446,7 +445,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(final_text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception as e:
         logger.error(f"❌ خطأ في الإرسال النهائي لـ start_handler: {e}")
-
 
 
 
