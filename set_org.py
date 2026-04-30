@@ -159,7 +159,7 @@ async def show_org_name_panel(update: Update, context: ContextTypes.DEFAULT_TYPE
         text = f"🏢 **اسم المؤسسة الحالي:**\n\n`{org_name}`\n\nيمكنك التعديل أو العودة للوحة الإعدادات."
         keyboard = [
             [InlineKeyboardButton("🔄 تحديث وتعديل الاسم", callback_data="trigger_add_org")],
-            [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main_config")]
+            [InlineKeyboardButton("🔙 رجوع", callback_data="contentcanager")]
         ]
 
     # إضافة زر إغلاق دائم لضمان التحكم
@@ -254,7 +254,7 @@ async def org_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg = "✅ تم حفظ بيانات الدفع بنجاح."
                 if missing_after == "ALL_SET":
                     msg += "\n🎉 **رائع!** اكتملت كافة إعدادات الهوية والذكاء الاصطناعي والدفع."
-                    kb = [[InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="back_to_main_config")]]
+                    kb = [[InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="contentcanager")]]
                 else:
                     msg += f"\n⚠️ تنبيه: لا تزال هناك نواقص: {missing_after}"
                     kb = [[InlineKeyboardButton("🔙 عودة لإكمال الإعدادات", callback_data="set_org_name")]]
@@ -280,6 +280,9 @@ async def show_ai_prompt_panel(update: Update, context: ContextTypes.DEFAULT_TYP
     config = next((r for r in records if str(r.get("bot_id")) == str(bot_id)), {})
     
     ai_prompt = config.get("تعليمات_AI")
+# التصحيح: يجب التأكد أن القيمة ليست "0" لأن نظامك يصفر الأعمدة بـ "0" عند الإنشاء
+    if ai_prompt == "0" or not ai_prompt:
+    ai_prompt = None
 
     # التحقق الارتدادي (يعمل الآن من الرام لحظياً)
     if not config.get("اسم_المؤسسة") or str(config.get("اسم_المؤسسة")) == "0":
