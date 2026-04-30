@@ -433,7 +433,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         await show_org_name_panel(update, context)
     
     # 2. الأكشن الفعلي لبدء إدخال الاسم (تم تصحيح اسم الدالة لـ _handler)
-    elif data == "trigger_add_org":
+    elif data == "org_add":
         await trigger_add_org_handler(update, context)
 
     # 3. لوحة عرض تعليمات الذكاء الاصطناعي

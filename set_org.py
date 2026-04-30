@@ -152,7 +152,7 @@ async def show_org_name_panel(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not org_name or str(org_name).strip() == "0":
         text = "⚠️ **تنبيه:** لم يتم ضبط اسم المؤسسة بعد.\n\nيرجى إضافة اسم المؤسسة التعليمية أولاً ليتمكن البوت من تعريف نفسه للطلاب."
         keyboard = [
-            [InlineKeyboardButton("➕ إضافة اسم المؤسسة", callback_data="trigger_add_org")]
+            [InlineKeyboardButton("➕ إضافة اسم المؤسسة", callback_data="org_add")]
         ]
     else:
         # وضع الاسم بين علامتي ` ` لتمكين النسخ باللمس
