@@ -14,32 +14,18 @@ import importlib.util
 import set_org
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
-# بدلاً من import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
-# --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
+# جلب المفتاح من Variables المنصة
+api_key = os.getenv("GEMINI_API_KEY")
 
-try:
-    # الاستيراد الرسمي للمكتبة الجديدة (google-genai)
-    from google import genai
-    from google.genai import types
-    
-    # فحص المفتاح من ملف .env
-    api_key = os.getenv("GEMINI_API_KEY")
-    
-    if api_key:
-        # إنشاء العميل مرة واحدة فقط في بداية الملف
-        client = genai.Client(api_key=api_key)
-        AI_ENABLED = True
-    else:
-        client = None
-        AI_ENABLED = False
-        print("⚠️ تنبيه: لم يتم العثور على GEMINI_API_KEY في ملف .env")
-
-except (ImportError, ModuleNotFoundError) as e:
-    client = None
-    AI_ENABLED = False
-    print(f"⚠️ تنبيه: مكتبة google-genai غير مثبتة أو هناك خطأ في التحميل: {e}")
+if api_key:
+    # الطريقة الصحيحة للمكتبة الجديدة google-genai
+    client = genai.Client(api_key=api_key)
+    print("✅ تم سحب المفتاح بنجاح من إعدادات المنصة")
+ 
 
 
  # ضروري لعمليات استيراد وتصدير الإكسل
@@ -270,16 +256,23 @@ from ContentManager import (
 user_messages = {} 
 
 
-# إعداد المفتاح الذي حصلت عليه
-client = genai.Client(api_key="AIzaSyCkpHbxvjZNqN_PT8O1yXUAIG-dMAGZj2Y")
-model = genai.GenerativeModel('gemini-1.5-flash')
-# إعداد السجلات (Logging) لمراقبة أداء البوت وتتبع الأخطاء
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
 
 # --- [ القوائم الرئيسية للمنصة - أزرار واجهة المستخدم ] ---
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-from google import genai
-from google.genai import types
+# 2. جلب المفتاح من المنصة (Variables) وليس كتابته يدوياً
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
+if GEMINI_KEY:
+    # الطريقة الصحيحة للمكتبة الجديدة
+    client = genai.Client(api_key=GEMINI_KEY)
+    # ملاحظة: في النسخة الجديدة لا نحتاج لتعريف model كمتغير مستقل هنا 
+    # بل نستخدم العميل مباشرة عند الحاجة لتوليد النص
+    logging.info("✅ تم تهيئة عميل Gemini الجديد بنجاح")
+else:
+    client = None
+    logging.warning("⚠️ GEMINI_API_KEY غير موجود في إعدادات المنصة")
 
 # النظام الجديد: إنشاء عميل (Client)
 
