@@ -277,6 +277,52 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         print(f"⚠️ Error getting config: {e}")
         bot_owner_id = 0 
+        
+    if user.id == bot_owner_id:
+
+        # --- [أ] توجيه محرك الهوية والمؤسسة (set_org) ---
+        if action in ['waiting_for_org_name', 'waiting_for_ai_prompt', 'waiting_for_payment_info']:
+            from set_org import org_input_handler
+            return await org_input_handler(update, context)
+
+        # --- [ب] معالجة حالة استقبال اسم المؤسسة (Legacy Patch) ---
+        if action == 'awaiting_institution_name':
+            from sheets import ensure_bot_sync_row, update_content_setting
+            target_bot_id = str(bot_token)
+            ensure_bot_sync_row(target_bot_id)
+            
+            success = update_content_setting(target_bot_id, "اسم_المؤسسة", text)
+            if success:
+                user_data.pop('action', None)
+                await update.message.reply_text(
+                    f"✅ تم بنجاح ضبط اسم المنصة التعليمية: **{text}**\n"
+                    f"تم إنشاء سجل البوت وتحديث البيانات بنجاح.", parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ فشل الحفظ في القاعدة. تأكد من وجود جدول 'إعدادات_المحتوى'.")
+            return
+
+        # --- [ج] معالجة الإعدادات العامة (الـ 39 عموداً) ---
+        if 'waiting_for_config' in user_data:
+            col_name = user_data['waiting_for_config']
+            label = user_data['config_label']
+            target_bot_id = str(bot_token)
+
+            from sheets import ensure_bot_sync_row, update_content_setting
+            ensure_bot_sync_row(target_bot_id)
+
+            success = update_content_setting(target_bot_id, col_name, text)
+            if success:
+                await update.message.reply_text(
+                    f"✅ تم حفظ وتحديث **{label}** بنجاح!\n"
+                    f"تمت المزامنة مع قاعدة البيانات السحابية والمحلية.", parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ حدث خطأ أثناء محاولة الحفظ.")
+            
+            user_data.pop('waiting_for_config', None)
+            user_data.pop('config_label', None)
+            return
 
     # 🛑 [حماية المسار]: إذا كان المستخدم في أي مرحلة تسجيل، نعالج النص هنا ثم نخرج بـ return فوراً
     registration_actions = [

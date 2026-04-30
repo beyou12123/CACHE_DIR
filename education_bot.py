@@ -16,7 +16,7 @@ from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 from google import genai
 from google.genai import types
-
+from contact_message import handle_contact_message
 
 # جلب المفتاح من Variables المنصة
 api_key = os.getenv("GEMINI_API_KEY")
@@ -562,69 +562,6 @@ async def activation_monitor(context: ContextTypes.DEFAULT_TYPE):
 
 # --------------------------------------------------------------------------
 # ==========================================================================
-
-
-async def config_input_receiver(update, context):
-    """
-    مستقبل المدخلات النصية المطور
-    """
-    user_data = context.user_data
-    
-    action = user_data.get('action') 
-    
-    # --- [ الإضافة الجديدة: نظام توجيه محرك المؤسسة ] ---
-    if action in ['waiting_for_org_name', 'waiting_for_ai_prompt', 'waiting_for_payment_info']:
-        return await org_input_handler(update, context)
-
-    text = update.message.text
-    # جلب توكن البوت المستهدف أو استخدام التوكن الحالي (ضمان تحويله لنص)
-    target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
-
-    # [PATCH]: معالجة حالة استقبال اسم المؤسسة (عند الإقلاع الأول)
-    # ملاحظة: تم الإبقاء عليها كما هي لضمان عدم حذف أي وظيفة سابقة (Backward Compatibility)
-    if user_data.get('action') == 'awaiting_institution_name':
-        # 1. ضمان وجود صف للبوت في قاعدة البيانات قبل التحديث (INSERT if not exists)
-        from sheets import ensure_bot_sync_row, update_content_setting
-        ensure_bot_sync_row(target_bot_id)
-        
-        # 2. استدعاء دالة التحديث للعمود رقم 20 (اسم_المؤسسة)
-        success = update_content_setting(target_bot_id, "اسم_المؤسسة", text)
-        
-        if success:
-            user_data.pop('action', None)
-            await update.message.reply_text(
-                f"✅ تم بنجاح ضبط اسم المنصة التعليمية: **{text}**\n"
-                f"تم إنشاء سجل البوت وتحديث البيانات بنجاح."
-            )
-        else:
-            await update.message.reply_text("❌ عذراً دكتور، فشل الحفظ في القاعدة. تأكد من وجود جدول 'إعدادات_المحتوى'.")
-        return
-
-    # [ORIGINAL CODE]: معالجة الإعدادات الأخرى من القائمة (مع إضافة منطق التحقق من الصف)
-    if 'waiting_for_config' in user_data:
-        col_name = user_data['waiting_for_config']
-        label = user_data['config_label']
-        new_value = text
-        target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
-
-        # ضمان وجود الصف قبل التحديث لمنع فشل الـ UPDATE
-        from sheets import ensure_bot_sync_row, update_content_setting
-        ensure_bot_sync_row(target_bot_id)
-
-        # استدعاء دالة التحديث المعتمدة
-        success = update_content_setting(target_bot_id, col_name, new_value)
-
-        if success:
-            await update.message.reply_text(
-                f"✅ تم حفظ وتحديث **{label}** بنجاح!\n"
-                f"تمت المزامنة مع قاعدة البيانات السحابية والمحلية."
-            )
-        else:
-            await update.message.reply_text("❌ حدث خطأ أثناء محاولة الحفظ، يرجى المحاولة لاحقاً.")
-        
-        user_data.pop('waiting_for_config', None)
-        user_data.pop('config_label', None)
-
 # --------------------------------------------------------------------------
 
 
@@ -678,7 +615,7 @@ async def run_bot(token, owner_id):
     
 
     # --- [ثالثاً: معالجات الرسائل النصية] ---
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(int(owner_id)), config_input_receiver))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(int(owner_id)), handle_contact_message))
     
     # [StudentAI]: رسائل الطلاب
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
