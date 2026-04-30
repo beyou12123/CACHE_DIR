@@ -316,21 +316,28 @@ async def trigger_edit_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
     # استخدام النص الكامل المخزن في المتغير الثابت في أعلى الملف
-    from set_org import AI_GUIDE_FULL_TEXT 
+async def trigger_edit_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    # 1. الرد الفوري لإيقاف حالة التحميل في الزر
+    await query.answer()
     
+    # الوصول المباشر للمتغير العالمي دون استيراد ذاتي
+    global AI_GUIDE_FULL_TEXT
+    
+    # 2. استخدام HTML لضمان معالجة النصوص العربية والرموز بدون أخطاء Parsing
     guide_msg = (
-        f"{AI_GUIDE_FULL_TEXT}\n\n"
-        "🛑 **الآن:** يرجى إرسال تعليمات الضبط الجديدة (أو نسخ الدليل أعلاه وتعديله) لردها للبوت:"
+        f"<code>{AI_GUIDE_FULL_TEXT}</code>\n\n"
+        "<b>🛑 الآن:</b> يرجى إرسال تعليمات الضبط الجديدة (أو نسخ الدليل أعلاه وتعديله) لردها للبوت:"
     )
     
     await query.message.reply_text(
         text=guide_msg,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚫 إلغاء", callback_data="show_ai_panel")]]),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     
     context.user_data['action'] = 'waiting_for_ai_prompt'
-    await query.answer()
+
 
 # --- 8. دالة عرض لوحة معلومات الدفع ---
 async def show_payment_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
