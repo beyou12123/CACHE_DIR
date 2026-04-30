@@ -244,6 +244,15 @@ from cache_manager import (
     check_excel_permission_from_cache
 )
 
+# --- [ استيراد محرك إعدادات المؤسسة الجديد ] ---
+from set_org import (
+    show_org_name_panel, 
+    show_ai_prompt_panel, 
+    show_payment_panel,
+    trigger_add_org,
+    trigger_edit_ai,
+    trigger_edit_payment
+)
 
 # --------------------------------------------------------------------------
 # --- [ معالج ضغطات الأزرار (Callback Query Handler) ] ---
@@ -269,19 +278,13 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         
     # 2. فتح لوحة إدارة أكواد الخصم الرئيسية
     elif data == "discount_codes":
-
         await show_discount_codes_logic(update, context)
-
     # 3. زر "إضافة كود جديد" (هذا الزر كان مفقوداً في ملفك)
     elif data == "add_discount_start":
-
         await add_discount_start(update, context)
-
-    # 4. معالجة خطوات التحقق من الدورة والاستمرار
     # التعديل المطلوب لضمان الاستجابة وعدم التجمد:
     elif data.startswith("d_ch_"): # استخدمنا d_ch_ بدلاً من dsc_check_
         course_id = data.replace("d_ch_", "")
-
         await process_dsc_check(update, context, course_id)
     #>>>>>>>>>>>>>>>>    
 # داخل contact_callback_handler (عند اختيار "أريدها لي"):
@@ -295,54 +298,41 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         context.user_data['reg_flow']['gender'] = gender
         context.user_data['reg_flow']['step'] = 'awaiting_country'
         await query.message.reply_text("🌍 يرجى إرسال <b>اسم البلد</b> الحالي:")
-
     elif data == "confirm_reg_final":
         await course_engine.finalize_and_save(update, context)
 #>>>>>>>>>>>>>>>>*
 #©©©©©©©©©©
 # المناداة لدالة معلومات تهيئة البوت 
     elif data == "system_setup_information":
-
         await show_system_setup_information(update, context)
-
-
     elif data == "dsc_continue":
-
         await process_dsc_ask_desc(update, context)
-
     # 5. عرض وإدارة الأكواد للمالك
     elif data == "list_all_discounts":
-        
         await list_all_discounts_ui(update, context)
-
     # 6. عرض تفاصيل كود محدد
     elif data.startswith("view_disc_"):
         disc_id = data.replace("view_disc_", "")
-
         await view_discount_details_ui(update, context, disc_id)
 #>>>>>>>>>>>>>>>>
     # 7. معالج حذف الكود
     elif data.startswith("confirm_del_disc_"):
         disc_id = data.replace("confirm_del_disc_", "")
-
         sheet = ss.worksheet("أكواد_الخصم")
         try:
             cell = sheet.find(disc_id, in_column=3)
             if cell:
                 sheet.delete_rows(cell.row)
                 await query.answer("✅ تم حذف كود الخصم بنجاح!", show_alert=True)
-
                 await list_all_discounts_ui(update, context)
         except:
             await query.answer("❌ فشل الحذف.", show_alert=True)
-
     # 8. زر العودة للقائمة الرئيسية (تم تصحيح الشرط هنا لضمان تسلسل elif)
     elif data == "main_menu":
         await start_handler(update, context)
 #>>>>>>>>>>>>>>>>
 #©©©©©©©©©©©©©©©©©©©
 #معالجات ازرار العودة
-
     elif data == "smart_back":
         history = context.user_data.get('nav_history', [])
     
@@ -353,10 +343,8 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
             else:
                 await query.edit_message_text("🔙 القائمة الرئيسية:", reply_markup=get_student_menu())
             return
-
         # سحب آخر لوحة من التاريخ
         last_panel = history.pop()
-    
         # خريطة الربط بين الأسماء والدوال
         panels_map = {
             "admin_panel": get_admin_panel,
@@ -369,12 +357,6 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
     
         target_func = panels_map.get(last_panel, get_student_menu)
         await query.edit_message_text("🔙 تم الرجوع:", reply_markup=target_func())
-
-
-    
-
-
-
 #©©©©©©©©©©©©©©©©©©©
 
     # معالج اربح معنا (تم ربطه بـ elif لضمان الاستجابة)
@@ -382,14 +364,11 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         # ملاحظة: تم إزالة query.answer() المكررة هنا لأنها تم استدعاؤها في بداية الدالة
         user_id = query.from_user.id
         bot_token = context.bot.token
-        
         # جلب يوزر البوت ديناميكياً لتوليد الرابط
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username
         referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-        
         # جلب إحصائيات الإحالة والرصيد من ملف sheets
-
         stats = get_user_referral_stats(bot_token, user_id)
         
         text = (
@@ -446,6 +425,31 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
         )
         await query.edit_message_text(text, parse_mode="HTML")
 
+    # --- [ قسم إعدادات المؤسسة والمحتوى الأساسي ] ---
+    
+    # 1. لوحة اسم المؤسسة
+    elif data == "set_org_name":
+        await show_org_name_panel(update, context)
+    
+    # 2. بدء إضافة/تعديل الاسم
+    elif data == "trigger_add_org":
+        await trigger_add_org(update, context)
+
+    # 3. لوحة تعليمات الذكاء الاصطناعي
+    elif data == "set_ai_prompt":
+        await show_ai_prompt_panel(update, context)
+        
+    # 4. بدء تعديل دليل الـ AI
+    elif data == "trigger_edit_ai":
+        await trigger_edit_ai(update, context)
+
+    # 5. لوحة معلومات الدفع
+    elif data == "set_payment":
+        await show_payment_panel(update, context)
+        
+    # 6. بدء تعديل بيانات الدفع
+    elif data == "trigger_edit_payment":
+        await trigger_edit_payment(update, context)
 
 
 #>>>>>>>>>>>>>>>>

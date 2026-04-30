@@ -215,6 +215,13 @@ async def config_input_receiver(update, context):
     تم التصحيح لضمان (التعديل إن وجد صف، أو الإضافة إن لم يوجد) لضمان عدم فشل الحفظ.
     """
     user_data = context.user_data
+        # --- [ الإضافة الجديدة: نظام توجيه محرك المؤسسة ] ---
+    action = user_data.get('action')
+    if action in ['waiting_for_org_name', 'waiting_for_ai_prompt', 'waiting_for_payment_info']:
+        from set_org import org_input_handler
+        return await org_input_handler(update, context)
+    # ------------------------------------------------
+
     text = update.message.text
     # جلب توكن البوت المستهدف أو استخدام التوكن الحالي (ضمان تحويله لنص)
     target_bot_id = str(user_data.get('target_bot_id') or context.bot.token)
@@ -353,7 +360,7 @@ def get_admin_panel():
         [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
          InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
         [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
-        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("إعدادات المحتوى", callback_data="contentcanager")],
+        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("ضبط الهوية", callback_data="contentcanager")],
         [InlineKeyboardButton("📥 تحميل نسخة احتياطية ", callback_data="export_data_json"),
          InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
 

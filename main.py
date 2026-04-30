@@ -150,7 +150,7 @@ def get_types_menu_inline(user_id):
             descriptions = {r['key']: r['value'] for r in records if str(r['key']).startswith('desc_')}
     except: pass
 
-    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'startbot.py', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'ui_keyboards.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py', 'contact_message.py', 'contact_callback.py']
+    exclude_files = ['main.py', 'sheets.py','downloader_bot', 'ai_bot', 'set_org.py', 'startbot.py', 'transcriber_bot', 'cache_manager.py', 'contact_bot.py', 'education_bot.py', 'protection_bot.py', 'store_bot.py', 'ui_keyboards.py', 'runner.py', 'course_engine.py', 'educational_manager.py', 'ContentManager.py', 'SubscriptionManager.py', 'contact_message.py', 'contact_callback.py']
     
     dynamic_buttons = []
     for file in os.listdir('.'):
