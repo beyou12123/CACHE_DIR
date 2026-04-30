@@ -724,30 +724,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-
-
-
     # --- [ معالج زر بدء المزامنة اليدوية ] ---
     elif data == "run_push_sync_manual":
-        # --- [ إضافة جديدة: حماية الإدارة ] ---
+        # 1. حماية الإدارة
         if user_id not in ALL_ADMINS:
             await deny_access(query)
             return
 
-        # إرسال رسالة أولية للمستخدم
-        msg = await query.edit_message_text("🔄 جاري بدء مزامنة المصنع مع السحابة... يرجى الانتظار")
+        # 2. إشعار البدء
+        await query.edit_message_text("⚙️ جاري تشغيل المحرك الموحد للمزامنة...\n(مطابقة الرام + الهاردسك + السحاب)\n\nيرجى الانتظار، قد يستغرق الأمر ثوانٍ...")
         
         try:
-            # استدعاء دالة المزامنة الذكية التي صممناها في cache_manager
-            from cache_manager import sync_factory_to_sheets_smart
-
-            # تشغيل المزامنة
-            await sync_factory_to_sheets_smart()
+            # استدعاء الدالة المطورة من داخل كلاس قاعدة البيانات (db_manager)
+            from cache_manager import db_manager
             
-            # تحديث الرسالة بعد النجاح
-            await query.edit_message_text("✅ اكتملت المزامنة اليدوية بنجاح وتم تحديث كافة البيانات.")
+            # ملاحظة: بما أن دالة sync_schema داخل الكلاس ليست async 
+            # سنقوم بتشغيلها مباشرة، وهي ستقوم بالطباعة في Terminal السيرفر
+            db_manager.sync_schema()
+            
+            # 3. إرسال تأكيد النجاح النهائي
+            await query.edit_message_text(
+                "✅ <b>اكتملت الملحمة بنجاح!</b>\n\n"
+                "• تم مطابقة الكاش مع SQLite.\n"
+                "• تم رفع كافة النواقص إلى Google Sheets.\n"
+                "• تم تأمين البيانات في 3 مستويات.",
+                parse_mode="HTML"
+            )
         except Exception as e:
-            await query.edit_message_text(f"❌ فشلت المزامنة اليدوية: {str(e)}")
+            import logging
+            logging.error(f"❌ خطأ مزامنة يدوية: {e}")
+            await query.edit_message_text(f"❌ فشلت المزامنة: {str(e)}")
+
         
     elif data == "open_admin_panel" or data == "open_admin_dashboard":
         # --- [ إضافة جديدة: حماية الإدارة ] ---
@@ -2075,7 +2082,7 @@ async def main_factory_launcher():
             [InlineKeyboardButton("📥 سحب البيانات من جوجل شيت", callback_data="pull_google_data")],
             [InlineKeyboardButton("🔄 استعادة آخر نسخة احتياطية", callback_data="restore_last_backup")],
             [InlineKeyboardButton("⚙️ تهيئة الجداول (محلي فقط)", callback_data="init_tables_only")],
-            [InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_manual_sync")]
+            [InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_sync_shet")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
