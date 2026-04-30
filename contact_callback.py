@@ -250,7 +250,7 @@ from set_org import (
     show_org_name_panel, 
     show_ai_prompt_panel, 
     show_payment_panel,
-    trigger_add_org,
+    
     trigger_edit_ai,
     trigger_edit_payment
 )
