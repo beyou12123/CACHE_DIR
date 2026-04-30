@@ -1119,6 +1119,7 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
     
     # جلب إعدادات البوت أولاً لتعريف bot_owner_id قبل استخدامه في الشرط
 
+    # جلب إعدادات البوت والمالك
     config = get_bot_config(bot_token)
     bot_owner_id = int(config.get("admin_ids", 0))
 
@@ -1135,20 +1136,17 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(response)
                 return
 
-        # 2. إدارة ذاكرة المحادثة وجلب البيانات من القاعدة
-        global user_messages
-        if user.id not in user_messages:
-            user_messages[user.id] = []
+        # 2. إدارة ذاكرة المحادثة (تم استبدال global بـ context.user_data لضمان فصل البوتات)
+        if 'chat_history' not in context.user_data:
+            context.user_data['chat_history'] = []
 
         # جلب قاعدة المعرفة من القاعدة
-       
         courses_knowledge = get_courses_knowledge_base(bot_token)
         
         # إضافة رسالة الطالب للذاكرة
-        user_messages[user.id].append({"role": "user", "content": text})
+        context.user_data['chat_history'].append({"role": "user", "content": text})
         
-        # --- [ الجزء الديناميكي الجديد: جلب الهوية من القاعدة ] ---
-        
+        # --- [ الجزء الديناميكي الجديد: جلب الهوية من القاعدة/الكاش ] ---
         ai_info = get_ai_setup(bot_token)
         platform = ai_info.get('اسم_المؤسسة', 'منصة الادارة التعليمية') if ai_info else "منصة الادارة التعليمية"
         rules = ai_info.get('تعليمات_AI', 'أجب بذكاء ولباقة واستخدم الرموز التعبيرية 🎓') if ai_info else "أجب بذكاء ولباقة"
@@ -1159,13 +1157,13 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
                 "role": "system", 
                 "content": f"أنت المساعد الذكي الرسمي لـ {platform}. {rules}. إليك معلومات الدورات المتاحة حالياً:\n{courses_knowledge}"
             }
-        ] + user_messages[user.id][-6:] # دمج الذاكرة لضمان استمرارية الحوار
+        ] + context.user_data['chat_history'][-6:] # دمج الذاكرة (آخر 6 رسائل)
 
         await update.message.reply_chat_action("typing")
 
         try:
-            # استخدام g4f بشكل مباشر مع المزود التلقائي لضمان الاستقرار
-            import g4f
+            # استخدام g4f بشكل مباشر مع المزود التلقائي كما طلبت
+            
             response = await g4f.ChatCompletion.create_async(
                 model=g4f.models.default,
                 messages=messages_to_send,
@@ -1173,17 +1171,16 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
 
             if response and len(response) > 0:
                 # إضافة رد البوت للذاكرة وإرساله
-                user_messages[user.id].append({"role": "assistant", "content": response})
+                context.user_data['chat_history'].append({"role": "assistant", "content": response})
                 await update.message.reply_text(response)
                 return
             else:
                 raise Exception("Empty g4f Response")
             
-        except Exception as e: # تصحيح الحرف الصغير هنا
+        except Exception as e: 
             # الخطة البديلة: إرسال تنبيه للادارة في حال فشل المحرك
             print(f"❌ AI Error: {e}")
             
-            # تم نقل جلب الإعدادات للأعلى لضمان توافر bot_owner_id
             info = f"📩 <b>استفسار طالب (فشل الـ AI):</b>\nالاسم: {user.full_name}\nالرسالة: {text}\nالخطأ: {str(e)}"
             
             try:

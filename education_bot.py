@@ -14,11 +14,15 @@ import importlib.util
 import set_org
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
+# بدلاً من import google.generativeai as genai
+
 
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
 # محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
 try:
     import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     AI_ENABLED = True
 except (ImportError, ModuleNotFoundError):
     genai = None  # أضف هذا السطر لتعريف المتغير كـ None ومنع خطأ NameError
@@ -255,12 +259,21 @@ user_messages = {}
 
 
 # إعداد المفتاح الذي حصلت عليه
-genai.configure(api_key="AIzaSyCkpHbxvjZNqN_PT8O1yXUAIG-dMAGZj2Y")
+client = genai.Client(api_key="AIzaSyCkpHbxvjZNqN_PT8O1yXUAIG-dMAGZj2Y")
 model = genai.GenerativeModel('gemini-1.5-flash')
 # إعداد السجلات (Logging) لمراقبة أداء البوت وتتبع الأخطاء
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # --- [ القوائم الرئيسية للمنصة - أزرار واجهة المستخدم ] ---
+
+from google import genai
+from google.genai import types
+
+# النظام الجديد: إنشاء عميل (Client)
+
+
+# استدعاء الموديل (بشكل محدث)
+
 
 #لوحة المدرب 
 

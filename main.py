@@ -1856,7 +1856,12 @@ broadcast_handler = ConversationHandler(
         ],
     },
     fallbacks=[CallbackQueryHandler(cancel_broadcast, pattern="^cancel_broadcast$")],
+    per_message=True  # حل التحذير لضمان دقة استجابة الأزرار
 )
+
+
+
+
 
 # --------------------------------------------------------------------------
 async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

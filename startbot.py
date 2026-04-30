@@ -745,11 +745,19 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     return ConversationHandler.END
 
+
 create_bot_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_create_bot, pattern="^start_manufacture$"), MessageHandler(filters.Regex("^➕ إنشاء بوت$"), start_create_bot)],
+    entry_points=[
+        CallbackQueryHandler(start_create_bot, pattern="^start_manufacture$"), 
+        MessageHandler(filters.Regex("^➕ إنشاء بوت$"), start_create_bot)
+    ],
     states={
         CHOOSING_TYPE: [CallbackQueryHandler(select_type, pattern="^set_type_")],
         GETTING_TOKEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_token)],
     },
-    fallbacks=[CallbackQueryHandler(cancel, pattern="^cancel_action$"), CommandHandler('cancel', cancel)],
+    fallbacks=[
+        CallbackQueryHandler(cancel, pattern="^cancel_action$"), 
+        CommandHandler('cancel', cancel)
+    ],
+    per_message=True  # <--- هذا هو الإضافة السحرية التي ستحل التحذير
 )

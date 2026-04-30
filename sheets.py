@@ -12,7 +12,8 @@ from cache_manager import (
     db_manager, 
     get_bot_data_from_cache, 
     smart_sync_check, 
-    update_global_version, 
+    update_global_version,
+    FACTORY_GLOBAL_CACHE, 
     ensure_bot_sync_row
 )
 
@@ -892,10 +893,10 @@ def check_connection():
                 return True
             else:
                 # محاولة إعادة الاتصال التلقائي (الالتزام بمنطقك)
-                from sheets import connect_to_google
+
                 return connect_to_google()
         except:
-            from sheets import connect_to_google
+
             return connect_to_google()
             
     except Exception as e:
@@ -1798,41 +1799,57 @@ def add_new_coach_advanced(bot_token, coach_id, name, specialty, phone, branch_i
 # دالة جلب إعدادات الذكاء الاصطناعي (تم توحيد المسمى لـ setup)
 def get_ai_setup(bot_token):
     """
-    جلب إعدادات الهوية والذكاء:
-    - الحفاظ الكامل على اسم الورقة الصارم "الذكاء_الإصطناعي".
-    - البحث محلياً في SQLite أولاً لضمان استجابة الذكاء الاصطناعي الفورية.
-    - الحفاظ على منطق تنظيف التوكن (strip) للمقارنة الدقيقة.
+    جلب إعدادات الهوية والذكاء والدفع من الهيكل الجديد:
+    - الأولوية لـ FACTORY_GLOBAL_CACHE (الرام) لسرعة البرق.
+    - التركيز على استخراج: اسم_المؤسسة، تعليمات_AI، إعدادات_الدفع.
+    - الحفاظ على منطق تنظيف التوكن (strip) ومنطق Fallback لجوجل شيت.
     """
+    clean_token = str(bot_token).strip()
+    
     try:
-        # 1. البحث في المحرك المحلي (SQLite) - لضمان عدم تأخر ردود الذكاء الاصطناعي
+        # 0. المرحلة الأولى: البحث في الكاش العالمي (RAM) - الأسرع على الإطلاق
+        if 'content_settings' in FACTORY_GLOBAL_CACHE:
+            # البحث عن البوت داخل قائمة الإعدادات المخزنة في الكاش
+            cached_data = next((item for item in FACTORY_GLOBAL_CACHE['content_settings'] 
+                              if str(item.get('bot_id', '')).strip() == clean_token), None)
+            if cached_data:
+                print(f"⚡ [كاش] تم جلب إعدادات الهوية والدفع للبوت: {clean_token[:10]}...")
+                return cached_data
+
+        # 1. المرحلة الثانية: البحث في المحرك المحلي (SQLite) - في حال عدم وجوده بالرام
         try:
-            # التعديل: استخدام المسمى العربي "bot_id" بدلاً من column_1 لضمان التوافق مع الهيكل الجديد
-            # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
-            query = 'SELECT * FROM "الذكاء_الإصطناعي" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(query, (str(bot_token).strip(),))
+            # تم التغيير لجدول "إعدادات_المحتوى" مع الحفاظ على الاقتباسات المزدوجة للأسماء العربية
+            query = 'SELECT * FROM "إعدادات_المحتوى" WHERE "bot_id" = ?'
+            db_manager.cursor.execute(query, (clean_token,))
             row_local = db_manager.cursor.fetchone()
             
             if row_local:
-                # تحويل الصف المحلي إلى قاموس (Dict) ليطابق مخرجات get_all_records()
-                # مع الحفاظ على كافة المفاتيح الأصلية (مثل: اسم_البوت، تخصص_البوت، التعليمات_البرمجية، إلخ)
                 res_local = dict(row_local)
-                print(f"🤖 [محلي] تم جلب إعدادات الذكاء الاصطناعي للبوت: {bot_token[:10]}...")
+                
+                # تحديث الكاش فوراً لضمان السرعة في المرة القادمة
+                if 'content_settings' not in FACTORY_GLOBAL_CACHE:
+                    FACTORY_GLOBAL_CACHE['content_settings'] = []
+                FACTORY_GLOBAL_CACHE['content_settings'].append(res_local)
+                
+                print(f"🤖 [محلي] تم جلب إعدادات (إعدادات_المحتوى) للبوت: {clean_token[:10]}...")
                 return res_local
         except Exception as local_e:
-            print(f"⚠️ تنبيه: فشل الجلب المحلي للإعدادات، محاولة الجلب من جوجل: {local_e}")
+            print(f"⚠️ تنبيه: فشل الجلب المحلي من إعدادات_المحتوى، محاولة الجلب من جوجل: {local_e}")
 
-        # 2. الجلب من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
-        # التأكد من الاتصال بجوجل قبل جلب الورقة
+        # 2. المرحلة الثالثة: الجلب من Google Sheets (الالتزام الصارم بمنطقك الأصلي 100%)
         if 'ss' not in globals() or ss is None: 
-            from sheets import connect_to_google
+
             connect_to_google()
             
-        sheet = ss.worksheet("الذكاء_الإصطناعي")
+        # التغيير للورقة الجديدة "إعدادات_المحتوى"
+        sheet = ss.worksheet("إعدادات_المحتوى")
         records = sheet.get_all_records()
         
         for r in records:
-            # تنظيف التوكن من أي مسافات زائدة (نفس منطقك الصارم) والمقارنة بمفتاح 'bot_id'
-            if str(r.get('bot_id', '')).strip() == str(bot_token).strip():
+            if str(r.get('bot_id', '')).strip() == clean_token:
+                # حفظ في SQLite وفي الكاش لضمان الاستجابة الفورية لاحقاً
+                # (هنا يمكن إضافة دالة تحديث القاعدة المحلية إذا لزم الأمر)
+                print(f"☁️ [جوجل] تم جلب إعدادات الهوية من ورقة إعدادات_المحتوى للبوت: {clean_token[:10]}...")
                 return r
                 
         return None
@@ -3419,7 +3436,7 @@ def reset_entire_database():
 
         # 2. جلب قائمة الأوراق من Google Sheets (الالتزام بالمنطق الأصلي)
         if 'ss' not in globals() or ss is None: 
-            from sheets import connect_to_google
+
             connect_to_google()
             
         old_sheets = ss.worksheets()
