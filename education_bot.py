@@ -678,8 +678,8 @@ async def run_bot(token, owner_id):
     
 
     # --- [ثالثاً: معالجات الرسائل النصية] ---
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(owner_id), config_input_receiver))
-
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Chat(int(owner_id)), config_input_receiver))
+    
     # [StudentAI]: رسائل الطلاب
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Chat(owner_id), handle_contact_message))
 

@@ -138,7 +138,7 @@ async def show_org_name_panel(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     
     query = update.callback_query
-    bot_id = context.bot.id
+    bot_id = str(context.bot.id)
     
     # جلب السجل الخاص بالبوت من الكاش المركزي (إعدادات_المحتوى)
     sheet_name = "إعدادات_المحتوى"
@@ -182,7 +182,7 @@ async def org_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user_data = context.user_data
     action = user_data.get('action')
-    bot_id = context.bot.id
+    bot_id = str(context.bot.id)
     text_received = update.message.text.strip()
     sheet_name = "إعدادات_المحتوى"
 
@@ -273,7 +273,7 @@ async def org_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_ai_prompt_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
-    bot_id = context.bot.id
+    bot_id = str(context.bot.id)
     
     # 1. جلب البيانات من الكاش العالمي (الرام) مباشرة
     records = FACTORY_GLOBAL_CACHE["data"].get("إعدادات_المحتوى", [])
@@ -336,7 +336,7 @@ async def trigger_edit_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_payment_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
-    bot_id = context.bot.id
+    bot_id = str(context.bot.id)
     
     # جلب البيانات من الرام مباشرة
     records = FACTORY_GLOBAL_CACHE["data"].get("إعدادات_المحتوى", [])
