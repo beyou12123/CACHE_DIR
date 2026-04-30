@@ -18,16 +18,28 @@ from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 
 
 # --- [ 2. مكتبات معالجة البيانات والذكاء الاصطناعي ] ---
-# محرك الذكاء الاصطناعي من جوجل (مع نظام حماية ضد الفشل)
+
 try:
-    import google.generativeai as genai
+    # الاستيراد الرسمي للمكتبة الجديدة (google-genai)
     from google import genai
     from google.genai import types
-    AI_ENABLED = True
-except (ImportError, ModuleNotFoundError):
-    genai = None  # أضف هذا السطر لتعريف المتغير كـ None ومنع خطأ NameError
+    
+    # فحص المفتاح من ملف .env
+    api_key = os.getenv("GEMINI_API_KEY")
+    
+    if api_key:
+        # إنشاء العميل مرة واحدة فقط في بداية الملف
+        client = genai.Client(api_key=api_key)
+        AI_ENABLED = True
+    else:
+        client = None
+        AI_ENABLED = False
+        print("⚠️ تنبيه: لم يتم العثور على GEMINI_API_KEY في ملف .env")
+
+except (ImportError, ModuleNotFoundError) as e:
+    client = None
     AI_ENABLED = False
-    print("⚠️ تنبيه: مكتبة google-generativeai غير مثبتة في البيئة الحالية.")
+    print(f"⚠️ تنبيه: مكتبة google-genai غير مثبتة أو هناك خطأ في التحميل: {e}")
 
 
  # ضروري لعمليات استيراد وتصدير الإكسل

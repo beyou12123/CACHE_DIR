@@ -1,8 +1,11 @@
 python-telegram-bot
 gspread
 oauth2client
-google-generativeai
+google-genai
+python-dotenv
 g4f>=0.3.5.7
+httpx
+requests
 pandas
 openpyxl
 yt-dlp>=2025.3.31
