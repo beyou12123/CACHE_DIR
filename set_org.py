@@ -282,7 +282,7 @@ async def show_ai_prompt_panel(update: Update, context: ContextTypes.DEFAULT_TYP
     ai_prompt = config.get("تعليمات_AI")
 # التصحيح: يجب التأكد أن القيمة ليست "0" لأن نظامك يصفر الأعمدة بـ "0" عند الإنشاء
     if ai_prompt == "0" or not ai_prompt:
-    ai_prompt = None
+        ai_prompt = None
 
     # التحقق الارتدادي (يعمل الآن من الرام لحظياً)
     if not config.get("اسم_المؤسسة") or str(config.get("اسم_المؤسسة")) == "0":
