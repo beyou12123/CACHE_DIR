@@ -1140,7 +1140,7 @@ class DataManager:
                 match_key = cols[0] # العمود الأول هو مفتاح المطابقة الصارم
                 
                 # --- [ الخطوة الحركية الأولى: تهدئة الـ API قبل معالجة الجدول ] ---
-                time.sleep(1.2) 
+                time.sleep(1.8) 
 
                 # --- [ أولاً: مزامنة الهيكل (Google Sheets) ] ---
                 if spreadsheet:
@@ -1235,12 +1235,12 @@ class DataManager:
                                 if list(google_dict[key_val]["data"].values()) != row_vals:
                                     worksheet.update(f"A{google_dict[key_val]['idx']}", [row_vals])
                                     updated_cloud += 1
-                                    time.sleep(1.9) # حماية مكثفة من حظر جوجل (100 ثانية / 60 طلب)
+                                    time.sleep(2.2) # حماية مكثفة من حظر جوجل (100 ثانية / 60 طلب)
                             else:
                                 # إضافة سطر جديد إذا لم يكن موجوداً
                                 worksheet.append_row(row_vals, value_input_option='USER_ENTERED')
                                 added_cloud += 1
-                                time.sleep(1.5) # حماية الآي بي
+                                time.sleep(1.9) # حماية الآي بي
                         
                         if added_cloud > 0 or updated_cloud > 0:
                             print(f"   ✅ {name}: تم إضافة {added_cloud} وتحديث {updated_cloud} في السحاب.")
