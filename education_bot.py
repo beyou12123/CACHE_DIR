@@ -279,143 +279,182 @@ else:
     client = None
     logging.warning("⚠️ GEMINI_API_KEY غير موجود في إعدادات المنصة")
 
-# النظام الجديد: إنشاء عميل (Client)
-
-
-# استدعاء الموديل (بشكل محدث)
-
-
-#لوحة المدرب 
-
-# --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
 # --- [ المعالجات الأساسية - أمر البداية المطوّر ] ---
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     معالجة أمر /start برسائل ترحيبية ذكية ودعم نظام الإحالة والأدوار:
     (مالك، موظف، مدرب، طالب)
     """
+
+    # =========================================================
+    # [ 0 ] تجهيز المتغيرات الأساسية
+    # =========================================================
     user = update.effective_user
     bot_token = context.bot.token
     query = update.callback_query
-    
-    # 1. جلب الإعدادات والتحقق من الهوية
+    message = update.message or (query.message if query else None)
+
+    # حماية ai_config من None
+    def ensure_dict(val):
+        return val if isinstance(val, dict) else {}
+
+    # دالة إرسال آمنة (توحد كل الإرسال)
+    async def safe_send(text, reply_markup=None, use_edit=False):
+        try:
+            if query and use_edit:
+                await query.answer()
+                await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
+            else:
+                await message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
+        except Exception:
+            try:
+                await message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"❌ Send Fallback Failed: {e}")
+
+    # =========================================================
+    # [ 1 ] جلب الإعدادات
+    # =========================================================
     config = get_bot_config(bot_token)
-    # التأكد من تحويل المعرف إلى int للمقارنة الصحيحة
+
     try:
         bot_owner_id = int(config.get("admin_ids", 0))
     except (ValueError, TypeError):
         bot_owner_id = 0
-        
-    ai_config = get_ai_setup(bot_token)
-    
-    # --- [ تصحيح جلب الاسم: التحقق المزدوج ] ---
-    # إذا كان المستخدم هو المالك، نتأكد أن اسم المؤسسة موجود فعلياً
+
+    ai_config = ensure_dict(get_ai_setup(bot_token))
+
+    # =========================================================
+    # [ 2 ] تصحيح اسم المؤسسة (Double Validation)
+    # =========================================================
+    def is_empty(val):
+        return not val or str(val).strip() in ["0", "None", ""]
+
     if user.id == bot_owner_id:
-        # فحص الكاش أولاً، وإذا كان فارغاً نفحص قاعدة البيانات المحلية
-        if not ai_config or not ai_config.get('اسم_المؤسسة') or str(ai_config.get('اسم_المؤسسة')) in ["0", "None", ""]:
+        if is_empty(ai_config.get('اسم_المؤسسة')):
             try:
-                # البحث المباشر في جدول إعدادات_المحتوى (العمود الخاص باسم المؤسسة)
-                db_manager.cursor.execute('SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (str(bot_token),))
+                db_manager.cursor.execute(
+                    'SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?',
+                    (str(bot_token),)
+                )
                 db_row = db_manager.cursor.fetchone()
-                
+
                 if db_row and db_row[0] not in [None, "0", "", "None"]:
-                    if not ai_config: ai_config = {}
                     ai_config['اسم_المؤسسة'] = db_row[0]
-                    
-                    # تحديث الكاش العالمي لضمان السرعة في المرات القادمة
-                    if bot_token not in FACTORY_GLOBAL_CACHE["data"]: 
+
+                    if bot_token not in FACTORY_GLOBAL_CACHE["data"]:
                         FACTORY_GLOBAL_CACHE["data"][bot_token] = {}
+
                     FACTORY_GLOBAL_CACHE["data"][bot_token]['اسم_المؤسسة'] = db_row[0]
+
             except Exception as e:
                 logging.error(f"⚠️ خطأ في فحص اسم المؤسسة من القاعدة المحلية: {e}")
 
-    # --- [ 2. فحص إعدادات المالك (التهيئة الأولى) ] ---
+    # =========================================================
+    # [ 3 ] التهيئة الأولى للمالك
+    # =========================================================
     if user.id == bot_owner_id:
-        if not ai_config or not ai_config.get('اسم_المؤسسة') or str(ai_config.get('اسم_المؤسسة')) in ["0", "None", ""]:
+        if is_empty(ai_config.get('اسم_المؤسسة')):
             context.user_data['action'] = 'awaiting_institution_name'
+
             text = (
                 "👋 <b>أهلاً بك يا دكتور!</b>\n\n"
                 "قبل البدء، يرجى إرسال <b>اسم المنصة التعليمية</b> الخاصة بك:\n"
                 "مثال: أكاديمية النخبة، مركز التدريب التقني..."
             )
-            if query:
-                await query.answer()
-                await query.edit_message_text(text, parse_mode="HTML")
-            else:
-                await update.message.reply_text(text, parse_mode="HTML")
+
+            await safe_send(text, use_edit=True)
             return
 
-    # --- [ 3. معالجة روابط انضمام الكوادر (مدرب/موظف) ] ---
-    if context.args and context.args[0].startswith("reg_"):
-        reg_token = context.args[0].replace("reg_", "")
+    # =========================================================
+    # [ 4 ] تحليل args مرة واحدة (Optimization)
+    # =========================================================
+    arg = context.args[0] if context.args and isinstance(context.args[0], str) else ""
+
+    # =========================================================
+    # [ 5 ] تسجيل الكوادر (reg_)
+    # =========================================================
+    if arg.startswith("reg_"):
+        reg_token = arg.replace("reg_", "")
         temp_tokens = FACTORY_GLOBAL_CACHE.get("temp_registration_tokens", {})
-        
+
         if reg_token in temp_tokens:
             role = temp_tokens[reg_token]
-            # حذف التوكن بعد الاستخدام لضمان الخصوصية
             del FACTORY_GLOBAL_CACHE["temp_registration_tokens"][reg_token]
-            
+
             context.user_data['reg_role'] = role
             context.user_data['action'] = 'awaiting_reg_full_name'
-            
+
             role_text = "كادرنا التعليمي (مدرب)" if role == "coach" else "كادرنا الإداري (موظف)"
-            await update.message.reply_text(
+
+            await safe_send(
                 f"👋 <b>أهلاً بك!</b> نتشرف بانضمامك إلى {role_text}.\n\n"
                 f"يرجى إرسال <b>اسمك الثلاثي</b> باللغة العربية لاعتماد حسابك:"
-            , parse_mode="HTML")
+            )
             return
         else:
-            await update.message.reply_text("⚠️ معذرة، هذا الرابط غير صالح أو انتهت صلاحيته.")
+            await safe_send("⚠️ معذرة، هذا الرابط غير صالح أو انتهت صلاحيته.")
             return
 
-    # --- [ 4. معالجة روابط الهدايا ] ---
-    if context.args and context.args[0].startswith("gift_"):
-        gift_code = context.args[0].replace("gift_", "")
+    # =========================================================
+    # [ 6 ] روابط الهدايا (gift_)
+    # =========================================================
+    if arg.startswith("gift_"):
+        gift_code = arg.replace("gift_", "")
+
         try:
-            from sheets import ss # تأكد من استيراد كائن الـ Spreadsheet
+            from sheets import ss
             sheet_coupons = ss.worksheet("الكوبونات")
             coupon = sheet_coupons.find(gift_code, in_column=3)
-            
+
             if coupon:
                 coupon_data = sheet_coupons.row_values(coupon.row)
-                # فحص حالة الكوبون (العمود 8 برقم الصف 7)
+
                 if len(coupon_data) >= 8 and coupon_data[7] == "نشط":
-                    # جلب معرف الدورة (العمود 11 برقم الصف 10)
                     course_id = coupon_data[10].replace("دورة_", "")
                     context.user_data['reg_flow'] = {'gift_code': gift_code}
-                    await course_engine.start_registration_flow(update, context, course_id, payment_method="Gift")
+
+                    await course_engine.start_registration_flow(
+                        update, context, course_id, payment_method="Gift"
+                    )
                     return
-            await update.message.reply_text("⚠️ معذرة، هذا الرابط تم استخدامه مسبقاً أو غير موجود.")
+
+            await safe_send("⚠️ معذرة، هذا الرابط تم استخدامه مسبقاً أو غير موجود.")
+
         except Exception as e:
             logger.error(f"Gift Link Error: {e}")
-            await update.message.reply_text("⚠️ حدث خطأ أثناء معالجة رابط الهدية.")
+            await safe_send("⚠️ حدث خطأ أثناء معالجة رابط الهدية.")
+
         return
 
-    # --- [ 5. نظام الإحالة وتسجيل المستخدم ] ---
+    # =========================================================
+    # [ 7 ] نظام الإحالة
+    # =========================================================
     inviter_id = None
-    if context.args and context.args[0].startswith("ref_"):
-        potential_inviter = context.args[0].replace("ref_", "")
+    if arg.startswith("ref_"):
+        potential_inviter = arg.replace("ref_", "")
         if str(potential_inviter) != str(user.id):
             inviter_id = potential_inviter
 
-    # حفظ المستخدم في قاعدة البيانات
+    # =========================================================
+    # [ 8 ] تسجيل المستخدم (بدون تغيير السلوك)
+    # =========================================================
     save_user(user.id, user.username, inviter_id, bot_token=bot_token)
-    # --- [ 3. تسجيل المستخدم وإشعار المالك ] ---
     is_new_user = save_user(user.id, user.username, inviter_id, bot_token=context.bot.token)
 
+    # =========================================================
+    # [ 9 ] إشعار المالك
+    # =========================================================
     if is_new_user:
-        # حساب إجمالي مستخدمي البوت الحالي من الكاش العالمي (RAM)
         try:
-            # جلب قائمة المستخدمين من الكاش
             all_users = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
-            
-            # فلترة القائمة لحساب من ينتمون لهذا البوت فقط
-            total_users = sum(1 for u in all_users if str(u.get("bot_id")) == str(context.bot.token))
+            total_users = sum(
+                1 for u in all_users if str(u.get("bot_id")) == str(context.bot.token)
+            )
         except Exception as e:
             logging.error(f"⚠️ خطأ في حساب الإحصائيات من الكاش: {e}")
             total_users = "جاري التحديث.."
 
-        # إرسال إشعار للمالك عن عضو جديد
         try:
             notification_text = (
                 f"<b>تم دخول شخص جديد إلى المصنع الخاص بك</b> 👾\n"
@@ -427,23 +466,23 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"            -----------------------\n"
                 f"• <b>إجمالي مستخدمي البوت:</b> {total_users} مستخدم"
             )
-            
-            # إرسال الرسالة لآيدي المالك (المحول مسبقاً لـ int)
+
             await context.bot.send_message(
-                chat_id=bot_owner_id, 
-                text=notification_text, 
+                chat_id=bot_owner_id,
+                text=notification_text,
                 parse_mode="HTML"
             )
+
         except Exception as e:
             logging.error(f"⚠️ فشل إرسال إشعار العضو الجديد للمالك: {e}")
 
-    # محرك اختيار الكليشة الذكي (مع معالجة القيمة "0")
+    # =========================================================
+    # [ 10 ] اختيار رسالة الترحيب
+    # =========================================================
     hour = datetime.now().hour
-    
-    # دالة داخلية للتأكد من جلب نص حقيقي أو استخدام الافتراضي
+
     def fetch_valid_msg(key, fallback):
         val = config.get(key)
-        # إذا كان الحقل فارغاً أو يحتوي على "0" استخدم النص الافتراضي
         if not val or str(val).strip() in ["0", "None", ""]:
             return fallback
         return val
@@ -457,8 +496,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg = fetch_valid_msg("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
 
-    # --- [ 7. فرز الرتب والواجهات ] ---
-    # المالك
+    # =========================================================
+    # [ 11 ] تحديد الدور
+    # =========================================================
     if user.id == bot_owner_id:
         final_text = (
             f"<b>مرحباً بك يا دكتور {user.first_name} في مركز قيادة منصتك</b> 🎓\n\n"
@@ -467,14 +507,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply_markup = get_admin_panel()
 
-    # الموظف أو المدرب
     elif (check_user_permission(bot_token, user.id, "الصلاحيات") == True) or \
          (check_user_permission(bot_token, user.id, "صلاحية_الأقسام") == True):
-        
+
         employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
-        user_row = next((row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)), None)
-        
-        # التحقق إذا كان الموظف برتبة "مدرب"
+        user_row = next(
+            (row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)),
+            None
+        )
+
         if user_row and len(user_row) >= 42 and str(user_row[41]).strip() == "مدرب":
             final_text = (
                 f"<b>مرحباً بك يا كابتن {user.first_name} في غرفتك الأكاديمية</b> 👨‍🏫\n\n"
@@ -489,25 +530,17 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"لديك صلاحيات الإدارة المعتمدة، يمكنك البدء من الأزرار أدناه:"
             )
             reply_markup = get_employee_panel()
-    
-    # الطالب أو الزائر
+
     else:
-        # إضافة اسم المؤسسة للترحيب إذا وجد
         org_name = ai_config.get('اسم_المؤسسة', 'منصتنا التعليمية')
         final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓"
         reply_markup = get_student_menu()
 
-    # --- [ 8. التنفيذ النهائي للإرسال ] ---
-    try:
-        if query:
-            await query.answer()
-            await query.edit_message_text(final_text, reply_markup=reply_markup, parse_mode="HTML")
-        else:
-            await update.message.reply_text(final_text, reply_markup=reply_markup, parse_mode="HTML")
-    except Exception as e:
-        logger.error(f"❌ Critical Error in start_handler: {e}")
-
-
+    # =========================================================
+    # [ 12 ] الإرسال النهائي
+    # =========================================================
+    await safe_send(final_text, reply_markup=reply_markup, use_edit=True)
+    
 # --------------------------------------------------------------------------
 # دالة توليد لوحة الصلاحيات (التي أرسلتها أنت)
 def get_permissions_keyboard(bot_token, employee_id, current_perms):
