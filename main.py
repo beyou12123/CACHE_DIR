@@ -497,9 +497,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text("⏳ جاري تشفير قاعدة البيانات وإرسالها للقناة...")
         try:
-            # استدعاء الدالة التي صممناها في كلاس DataManager
-            await db_manager.create_backup_to_telegram()
+            # 1. استيراد الكائن db_manager ليكون متاحاً في هذا النطاق (Scope)
+            from cache_manager import db_manager
+            
+            # 2. استدعاء الدالة مع تمرير المعاملات اللازمة (context.bot أو الـ bot الحالي)
+            # الدالة تتطلب (shared_bot, user_id) لتعمل بنظام "الهوية المزدوجة"
+            await db_manager.create_backup_to_telegram(shared_bot=query.get_bot(), user_id=user_id)
+            
             await query.edit_message_text("✅ تم إرسال النسخة الاحتياطية المشفرة إلى القناة بنجاح! 🛡️")
+
         except Exception as e:
             await query.edit_message_text(f"❌ فشل الإرسال: {str(e)}")
 
