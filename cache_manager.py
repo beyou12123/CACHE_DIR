@@ -1120,28 +1120,37 @@ class DataManager:
         from cache_manager import FACTORY_GLOBAL_CACHE
         import time 
         import asyncio
-        
+        import logging
+
         try:
+            # جلب الهيكل المعتمد للجداول
             sheets_structure = get_sheets_structure()
             print(f"⏳ [SYNC LOG]: بدء المزامنة الشاملة لـ {len(sheets_structure)} جدولاً...")
             
+            # تأمين الاتصال بجوجل شيت
             if spreadsheet is None:
                 spreadsheet = connect_to_google()
             
+            # جلب قائمة الأوراق الموجودة مسبقاً لتفادي تكرار طلبات البحث
             existing_ws = {ws.title: ws for ws in spreadsheet.worksheets()} if spreadsheet else {}
             
             for sheet_def in sheets_structure:
                 name = sheet_def.get("name")
                 cols = sheet_def.get("cols", [])
-                match_key = cols[0]
-                time.sleep(1.2) # تهدئة للـ API
+                match_key = cols[0] # العمود الأول هو مفتاح المطابقة الصارم
+                
+                # --- [ الخطوة الحركية الأولى: تهدئة الـ API قبل معالجة الجدول ] ---
+                time.sleep(1.2) 
 
                 # --- [ أولاً: مزامنة الهيكل (Google Sheets) ] ---
                 if spreadsheet:
                     if name not in existing_ws:
                         worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
+                        print(f"🆕 [CLOUD]: تم إنشاء ورقة جديدة: {name}")
                     else:
                         worksheet = existing_ws[name]
+                    
+                    # فرض الهيكل الصارم (الترتيب والعدد)
                     ensure_sheet_schema(worksheet, cols)
 
                 # --- [ ثانياً: مزامنة الهيكل (SQLite) ] ---
@@ -1149,77 +1158,106 @@ class DataManager:
                 existing_cols_info = self.cursor.fetchall()
                 
                 if not existing_cols_info:
-                    columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
-                    # تم تغيير الافتراضي لـ pending لضمان عمل المزامنة الحركية
+                    print(f"🛠️ [SQLITE]: إنشاء الجدول المفقود: {name}")
+                    columns_query = ", ".join([f"\"{c}\" TEXT" for c in cols])
+                    # الافتراضي 'pending' لضمان التقاط السجلات في المزامنة الحركية القادمة
                     create_table_query = f"CREATE TABLE IF NOT EXISTS '{name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
                     self.cursor.execute(create_table_query)
                 else:
+                    # فحص مطابقة الأعمدة (استثناء الأعمدة التقنية)
                     existing_names = [info[1] for info in existing_cols_info if info[1] not in ['local_id', 'sync_status', 'last_updated']]
+                    
                     if existing_names != cols:
-                        print(f"⚙️ [MIGRATION]: إعادة هيكلة الجدول '{name}' للمطابقة...")
+                        print(f"⚙️ [MIGRATION]: إعادة هيكلة الجدول '{name}' للمطابقة الصارمة...")
                         temp_name = f"{name}_temp"
-                        columns_query = ", ".join([f"'{c}' TEXT" for c in cols])
+                        columns_query = ", ".join([f"\"{c}\" TEXT" for c in cols])
                         self.cursor.execute(f"CREATE TABLE '{temp_name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                        
+                        # نقل البيانات للأعمدة المشتركة فقط لضمان عدم فقدان البيانات القديمة
                         common_cols = [c for c in cols if c in existing_names]
                         if common_cols:
-                            cols_str = ", ".join([f"'{c}'" for c in common_cols])
+                            cols_str = ", ".join([f"\"{c}\"" for c in common_cols])
                             self.cursor.execute(f"INSERT INTO '{temp_name}' ({cols_str}) SELECT {cols_str} FROM '{name}'")
+                        
                         self.cursor.execute(f"DROP TABLE '{name}'")
                         self.cursor.execute(f"ALTER TABLE '{temp_name}' RENAME TO '{name}'")
 
                 # --- [ ثالثاً: مطابقة البيانات الحركية (كاش ↔ SQLite) ] ---
-                print(f"🔄 [DATA SYNC]: مطابقة بيانات {name} (كاش ↔ SQLite)...")
+                print(f"🔄 [DATA MATCH]: مطابقة سجلات {name} (RAM ↔ Disk)...")
                 self.cursor.execute(f"SELECT * FROM '{name}'")
                 db_rows = [dict(row) for row in self.cursor.fetchall()]
                 db_dict = {str(r.get(match_key)): r for r in db_rows if r.get(match_key)}
                 
+                # التأكد من تهيئة الجدول في الكاش إذا كان مفقوداً
+                if name not in FACTORY_GLOBAL_CACHE["data"]:
+                    FACTORY_GLOBAL_CACHE["data"][name] = []
+
                 cache_rows = FACTORY_GLOBAL_CACHE["data"].get(name, [])
                 cache_dict = {str(r.get(match_key)): r for r in cache_rows if r.get(match_key)}
 
-                # 1. من الكاش إلى SQLite (المفقود محلياً)
+                # 1. من الكاش إلى SQLite (تأمين ما في الرام إلى الهاردسك)
+                injected_db = 0
                 for key, c_row in cache_dict.items():
                     if key not in db_dict:
                         placeholders = ", ".join(["?" for _ in cols])
                         vals = [str(c_row.get(c, "0")) for c in cols]
                         self.cursor.execute(f"INSERT INTO '{name}' ({', '.join([f'\"{x}\"' for x in cols])}, sync_status) VALUES ({placeholders}, 'pending')", vals)
+                        injected_db += 1
+                if injected_db > 0: print(f"   📥 تم حقن {injected_db} سجل في SQLite.")
                 
-                # 2. من SQLite إلى الكاش (المفقود في الرام)
+                # 2. من SQLite إلى الكاش (استعادة ما في الهاردسك إلى الرام)
+                restored_cache = 0
                 for key, d_row in db_dict.items():
                     if key not in cache_dict:
                         clean_row = {c: d_row.get(c, "0") for c in cols}
                         FACTORY_GLOBAL_CACHE["data"][name].append(clean_row)
+                        restored_cache += 1
+                if restored_cache > 0: print(f"   🧠 تم استعادة {restored_cache} سجل إلى الكاش.")
 
-                # --- [ رابعاً: المزامنة مع جوجل شيت (مع حظر الآي بي) ] ---
+                # --- [ رابعاً: المزامنة مع جوجل شيت (مع حظر الآي بي والطباعة الحركية) ] ---
                 if spreadsheet:
-                    print(f"☁️ [CLOUD]: رفع تحديثات {name} إلى السحابة...")
+                    print(f"☁️ [PUSH]: رفع تحديثات {name} إلى جوجل شيت...")
                     try:
                         worksheet = spreadsheet.worksheet(name)
                         google_records = worksheet.get_all_records()
                         google_dict = {str(row.get(match_key)): {"idx": i+2, "data": row} for i, row in enumerate(google_records) if row.get(match_key)}
                         
+                        added_cloud = 0
+                        updated_cloud = 0
+                        
+                        # نستخدم نسخة الكاش المحدثة الآن
                         for c_row in FACTORY_GLOBAL_CACHE["data"][name]:
                             key_val = str(c_row.get(match_key))
                             row_vals = [str(c_row.get(h, "0")) for h in cols]
                             
                             if key_val in google_dict:
+                                # تحديث السطر إذا وجد اختلاف في البيانات
                                 if list(google_dict[key_val]["data"].values()) != row_vals:
                                     worksheet.update(f"A{google_dict[key_val]['idx']}", [row_vals])
-                                    time.sleep(1.9) # حظر الآي بي
+                                    updated_cloud += 1
+                                    time.sleep(1.9) # حماية مكثفة من حظر جوجل (100 ثانية / 60 طلب)
                             else:
+                                # إضافة سطر جديد إذا لم يكن موجوداً
                                 worksheet.append_row(row_vals, value_input_option='USER_ENTERED')
-                                time.sleep(1.5) # حظر الآي بي
-                    except Exception as e:
-                        print(f"⚠️ [CLOUD WARNING]: حظر أو خطأ في {name}: {e}")
+                                added_cloud += 1
+                                time.sleep(1.5) # حماية الآي بي
+                        
+                        if added_cloud > 0 or updated_cloud > 0:
+                            print(f"   ✅ {name}: تم إضافة {added_cloud} وتحديث {updated_cloud} في السحاب.")
 
+                    except Exception as cloud_e:
+                        print(f"⚠️ [CLOUD WARNING]: فشل الوصول السحابي لورقة {name}: {cloud_e}")
+
+            # حفظ التغييرات النهائية في SQLite
             self.conn.commit()
-            print(f"✅ [SYNC LOG]: اكتملت المزامنة الصارمة والحركية بنجاح.")
+            print(f"✨ [FINISH]: اكتملت المزامنة الصارمة (هيكل + بيانات) لكافة الجداول.")
             
         except Exception as e:
-            from logger_config import logger # تأكد من المسار
-            logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
-
-
-
+            try:
+                from logger_config import logger
+                logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
+            except:
+                print(f"❌ خطأ حرج في المحرك الموحد: {e}")
 
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
