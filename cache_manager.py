@@ -1147,11 +1147,14 @@ class DataManager:
                     if name not in existing_ws:
                         worksheet = spreadsheet.add_worksheet(title=name, rows="1000", cols=str(len(cols) + 5))
                         print(f"🆕 [CLOUD]: تم إنشاء ورقة جديدة: {name}")
+                        time.sleep(1.2) # نبضة بعد الإنشاء
                     else:
                         worksheet = existing_ws[name]
+                        time.sleep(1.8)
                     
                     # فرض الهيكل الصارم (الترتيب والعدد)
                     ensure_sheet_schema(worksheet, cols)
+                    time.sleep(1.9)
 
                 # --- [ ثانياً: مزامنة الهيكل (SQLite) ] ---
                 self.cursor.execute(f"PRAGMA table_info('{name}')")
@@ -1160,11 +1163,9 @@ class DataManager:
                 if not existing_cols_info:
                     print(f"🛠️ [SQLITE]: إنشاء الجدول المفقود: {name}")
                     columns_query = ", ".join([f"\"{c}\" TEXT" for c in cols])
-                    # الافتراضي 'pending' لضمان التقاط السجلات في المزامنة الحركية القادمة
                     create_table_query = f"CREATE TABLE IF NOT EXISTS '{name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
                     self.cursor.execute(create_table_query)
                 else:
-                    # فحص مطابقة الأعمدة (استثناء الأعمدة التقنية)
                     existing_names = [info[1] for info in existing_cols_info if info[1] not in ['local_id', 'sync_status', 'last_updated']]
                     
                     if existing_names != cols:
@@ -1173,7 +1174,6 @@ class DataManager:
                         columns_query = ", ".join([f"\"{c}\" TEXT" for c in cols])
                         self.cursor.execute(f"CREATE TABLE '{temp_name}' (local_id INTEGER PRIMARY KEY AUTOINCREMENT, {columns_query}, sync_status TEXT DEFAULT 'pending', last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
                         
-                        # نقل البيانات للأعمدة المشتركة فقط لضمان عدم فقدان البيانات القديمة
                         common_cols = [c for c in cols if c in existing_names]
                         if common_cols:
                             cols_str = ", ".join([f"\"{c}\"" for c in common_cols])
@@ -1188,7 +1188,6 @@ class DataManager:
                 db_rows = [dict(row) for row in self.cursor.fetchall()]
                 db_dict = {str(r.get(match_key)): r for r in db_rows if r.get(match_key)}
                 
-                # التأكد من تهيئة الجدول في الكاش إذا كان مفقوداً
                 if name not in FACTORY_GLOBAL_CACHE["data"]:
                     FACTORY_GLOBAL_CACHE["data"][name] = []
 
@@ -1201,7 +1200,9 @@ class DataManager:
                     if key not in db_dict:
                         placeholders = ", ".join(["?" for _ in cols])
                         vals = [str(c_row.get(c, "0")) for c in cols]
-                        self.cursor.execute(f"INSERT INTO '{name}' ({', '.join([f'\"{x}\"' for x in cols])}, sync_status) VALUES ({placeholders}, 'pending')", vals)
+                        # تم تصحيح الكوتيشن هنا لضمان عمل المفاتيح العربية
+                        query = f"INSERT INTO '{name}' ({', '.join([f'\"{x}\"' for x in cols])}, sync_status) VALUES ({placeholders}, 'pending')"
+                        self.cursor.execute(query, vals)
                         injected_db += 1
                 if injected_db > 0: print(f"   📥 تم حقن {injected_db} سجل في SQLite.")
                 
@@ -1220,27 +1221,26 @@ class DataManager:
                     try:
                         worksheet = spreadsheet.worksheet(name)
                         google_records = worksheet.get_all_records()
+                        time.sleep(1.9) # نبضة تهدئة بعد القراءة
                         google_dict = {str(row.get(match_key)): {"idx": i+2, "data": row} for i, row in enumerate(google_records) if row.get(match_key)}
                         
                         added_cloud = 0
                         updated_cloud = 0
                         
-                        # نستخدم نسخة الكاش المحدثة الآن
                         for c_row in FACTORY_GLOBAL_CACHE["data"][name]:
                             key_val = str(c_row.get(match_key))
                             row_vals = [str(c_row.get(h, "0")) for h in cols]
                             
                             if key_val in google_dict:
-                                # تحديث السطر إذا وجد اختلاف في البيانات
                                 if list(google_dict[key_val]["data"].values()) != row_vals:
                                     worksheet.update(f"A{google_dict[key_val]['idx']}", [row_vals])
+                                    time.sleep(2.2) # النبضة الطويلة التي اخترتها
                                     updated_cloud += 1
-                                    time.sleep(2.2) # حماية مكثفة من حظر جوجل (100 ثانية / 60 طلب)
+                                    time.sleep(1.1) 
                             else:
-                                # إضافة سطر جديد إذا لم يكن موجوداً
                                 worksheet.append_row(row_vals, value_input_option='USER_ENTERED')
-                                added_cloud += 1
                                 time.sleep(1.9) # حماية الآي بي
+                                added_cloud += 1
                         
                         if added_cloud > 0 or updated_cloud > 0:
                             print(f"   ✅ {name}: تم إضافة {added_cloud} وتحديث {updated_cloud} في السحاب.")
@@ -1248,7 +1248,6 @@ class DataManager:
                     except Exception as cloud_e:
                         print(f"⚠️ [CLOUD WARNING]: فشل الوصول السحابي لورقة {name}: {cloud_e}")
 
-            # حفظ التغييرات النهائية في SQLite
             self.conn.commit()
             print(f"✨ [FINISH]: اكتملت المزامنة الصارمة (هيكل + بيانات) لكافة الجداول.")
             
@@ -1258,6 +1257,8 @@ class DataManager:
                 logger.error(f"❌ خطأ حرج في المحرك الموحد: {e}")
             except:
                 print(f"❌ خطأ حرج في المحرك الموحد: {e}")
+
+
 
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
