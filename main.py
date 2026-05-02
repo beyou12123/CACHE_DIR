@@ -1823,25 +1823,38 @@ async def process_admin_file(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # --------------------------------------------------------------------------
 
+# --- [ القسم 1: دالة المزامنة والمجدل الزمني المطور ] ---
+
 # دالة مساعدة جديدة لضمان المزامنة الصارمة بدون حظر API
 async def pull_sync_task_wrapper():
     """تغليف عملية المزامنة لضمان التتابع الزمني وحماية الكوتا"""
     from sheets import get_all_active_tokens, smart_sync_check
+    import asyncio # ضمان وجود المكتبة في النطاق
+    
+    print("📡 [SCHEDULER]: بدء مهمة المزامنة الصامتة (Pull Sync) لكافة البوتات...")
+    
     try:
         tokens = get_all_active_tokens()
+        print(f"🔍 [SCHEDULER]: تم العثور على {len(tokens)} توكن نشط للمزامنة.")
+        
         for token in tokens:
             # تنفيذ المزامنة لكل بوت على حدة
             await smart_sync_check(token)
-            # فاصل زمني بسيط (2 ثانية) بين كل بوت لضمان عدم تجاوز حصة جوجل (Avoid 429)
+            # فاصل زمني بسيط (2.5 ثانية) بين كل بوت لضمان عدم تجاوز حصة جوجل (Avoid 429)
             await asyncio.sleep(2.5) 
+            
+        print("✅ [SCHEDULER]: اكتملت مهمة المزامنة الدورية بنجاح.")
     except Exception as e:
-        print(f"⚠️ فشل في مهمة pull_sync المجدولة: {e}")
+        print(f"⚠️ [SCHEDULER ERROR]: فشل في مهمة pull_sync المجدولة: {e}")
 
 # دالة المزامنة مع جوجل شيت (المصححة)
 def start_scheduler():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from sheets import sync_ad_campaign_results
     from cache_manager import db_manager
+    import os
+
+    # إعداد المجدل مع ضبط التوقيت المحلي
     scheduler = AsyncIOScheduler(timezone="Asia/Riyadh")
 
     # 1. المزامنة الصامتة (Pull): تم استبدال الـ lambda بالدالة الجديدة pull_sync_task_wrapper
@@ -1870,24 +1883,36 @@ def start_scheduler():
     )  
 
     scheduler.start()  
-    print("⏰ تم تشغيل المجدل الزمني بنجاح: حماية الكوتا مفعلة (فاصل 2.5 ثانية بين البوتات).")
+    print("⏰ [SYSTEM]: تم تشغيل المجدل الزمني بنجاح: المزامنة كل 15 دقيقة، والرفع الشامل 03:30 فجراً.")
 
-    
-    
-   
 
 # --------------------------------------------------------------------------
-# --- [ 2. ثانياً: تعريف الـ Handler الخاص بالإذاعة (خارج الدالة الرئيسية) ] ---
+# --- [ القسم 2: تصحيح الـ Handler الخاص بالإذاعة (السطر 1881) ] ---
+# --------------------------------------------------------------------------
+
+print("🧩 [DEBUG]: جاري بناء محرك الإذاعة المركزية (broadcast_handler)...")
+
 broadcast_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_global_broadcast, pattern="^broadcast_owners$")],
+    entry_points=[
+        CallbackQueryHandler(start_global_broadcast, pattern="^broadcast_owners$")
+    ],
     states={
         WAITING_BROADCAST_CONTENT: [
+            # MessageHandler يتطلب per_message=False ليعمل بشكل صحيح مع النصوص والوسائط
             MessageHandler(filters.ALL & ~filters.COMMAND, process_global_broadcast)
         ],
     },
-    fallbacks=[CallbackQueryHandler(cancel_broadcast, pattern="^cancel_broadcast$")],
-    per_message=True  # حل التحذير لضمان دقة استجابة الأزرار
+    fallbacks=[
+        CallbackQueryHandler(cancel_broadcast, pattern="^cancel_broadcast$")
+    ],
+    # التعديل الجوهري: تحويل per_message إلى False لحل التحذير وضمان التقاط محتوى الرسالة
+    per_chat=True,
+    per_user=True,
+    per_message=False 
 )
+
+print("✅ [DEBUG]: تم تسجيل broadcast_handler بنجاح مع تأمين استقبال الوسائط.")
+
 
 
 

@@ -743,18 +743,43 @@ async def boot_all_bots():
             await asyncio.sleep(2) 
 
 
+# --- [ دالة الإلغاء المصححة والمؤمنة ] ---
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إلغاء عملية إنشاء البوت وتنظيف الذاكرة المؤقتة"""
+    """إلغاء عملية إنشاء البوت وتنظيف الذاكرة المؤقتة مع العودة للقائمة الرئيسية"""
+    from main import get_main_menu_inline # استيراد الواجهة لضمان استمرارية التدفق
+    
+    user_id = update.effective_user.id
     query = update.callback_query
+    
+    # رسالة الإلغاء الأصلية مع إضافة زر العودة للقائمة لضمان عدم تعليق المستخدم
+    cancel_text_query = "❌ تم إلغاء عملية الإنشاء. يمكنك البدء من جديد في أي وقت."
+    cancel_text_msg = "❌ تم إلغاء العملية والعودة للقائمة الرئيسية."
+
     if query:
         await query.answer()
-        await query.edit_message_text("❌ تم إلغاء عملية الإنشاء. يمكنك البدء من جديد في أي وقت.")
+        # تصحيح: إضافة reply_markup لضمان قدرة المستخدم على العودة للعمل فوراً
+        await query.edit_message_text(
+            text=cancel_text_query,
+            reply_markup=get_main_menu_inline(user_id)
+        )
     else:
-        await update.message.reply_text("❌ تم إلغاء العملية والعودة للقائمة الرئيسية.")
+        # تصحيح: إضافة reply_markup للرسالة النصية أيضاً
+        await update.message.reply_text(
+            text=cancel_text_msg,
+            reply_markup=get_main_menu_inline(user_id)
+        )
     
+    # تنظيف الذاكرة لضمان مسح مفتاح _conversation_state نهائياً
     context.user_data.clear()
+    
+    # طباعة Debug في السيرفر للتأكد من الخروج
+    print(f"✅ [CONVERSATION]: تم إنهاء الجلسة بنجاح للمستخدم {user_id}")
+    
     return ConversationHandler.END
 
+
+# --- [ محرك المحادثة المطور والمؤمن ] ---
 
 create_bot_conv = ConversationHandler(
     entry_points=[
@@ -762,12 +787,22 @@ create_bot_conv = ConversationHandler(
         MessageHandler(filters.Regex("^➕ إنشاء بوت$"), start_create_bot)
     ],
     states={
-        CHOOSING_TYPE: [CallbackQueryHandler(select_type, pattern="^set_type_")],
-        GETTING_TOKEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_token)],
+        # المرحلة الأولى: اختيار النوع (أزرار شفافة)
+        CHOOSING_TYPE: [
+            CallbackQueryHandler(select_type, pattern="^set_type_")
+        ],
+        # المرحلة الثانية: استقبال التوكن (رسالة نصية)
+        GETTING_TOKEN: [
+            # تصحيح: إضافة فلتر COMMAND لمنع تداخل الأوامر مع إرسال التوكن
+            MessageHandler(filters.TEXT & ~filters.COMMAND, receive_token)
+        ],
     },
     fallbacks=[
         CallbackQueryHandler(cancel, pattern="^cancel_action$"), 
         CommandHandler('cancel', cancel)
     ],
-    per_message=True  # <--- هذا هو الإضافة السحرية التي ستحل التحذير
+    # الإعدادات السيادية لحل مشكلة "لم أفهم طلبك" والتحذير البرمجي
+    per_chat=True,
+    per_user=True,
+    per_message=False  # القيمة السحرية التي تضمن بقاء البوت في وضع "انتظار التوكن"
 )
