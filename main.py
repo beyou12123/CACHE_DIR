@@ -397,10 +397,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ سجل تتبع (Debug بسيط)
     print(f"[MESSAGE] User:{user_id} Text:{text}")
 
+    # 🔥 [التصحيح الحرج]: إذا كان المستخدم في حالة "محادثة نشطة" (مثل إنشاء بوت)، توقف فوراً
+    # هذا يمنع الدالة من الرد بـ "لم أفهم طلبك" أثناء إرسال التوكن أو أي بيانات أخرى للمحادثات
+    if context.user_data.get('_conversation_state') is not None or context.user_data.get('action'):
+        return
+
     if text == "🔙 العودة للقائمة الرئيسية":
         await start(update, context)
         return
-    # تم تصحيح المسافات البادئة والمنطق هنا بناءً على طلبك
+        
     elif text == "🛠 لوحة التحكم (للأدمن)":
         if user_id == DEVELOPER_ID or user_id in ADMIN_IDS:
             await owner_dashboard(update, context)
@@ -422,46 +427,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("❌ خطأ: يرجى إرسال رقم آيدي (ID) صحيح فقط.")
 
-    # تم استبدال ADMIN_ID بـ DEVELOPER_ID لضمان صلاحية المطور (أنت)
     elif text == "📝 تعديل النصوص" and user_id == DEVELOPER_ID:
         await update.message.reply_text("أرسل ID البوت أو التوكن الذي تريد تعديل نصوصه:")
         context.user_data["admin_action"] = "edit_texts"
-        context.user_data["action_timestamp"] = asyncio.get_event_loop().time()  # ✅ تتبع الوقت
+        import asyncio # التأكد من الاستيراد للوقت
+        context.user_data["action_timestamp"] = asyncio.get_event_loop().time() 
 
-    # تم استبدال ADMIN_ID بـ DEVELOPER_ID هنا أيضاً لضمان استمرارية الوظيفة
     elif context.user_data.get("admin_action") == "edit_texts" and user_id == DEVELOPER_ID:
-        
-        # ✅ تحقق من انتهاء المهلة (Timeout حماية)
+        import asyncio
         action_time = context.user_data.get("action_timestamp")
         if action_time:
             now = asyncio.get_event_loop().time()
-            if now - action_time > 300:  # 5 دقائق
+            if now - action_time > 300: 
                 await update.message.reply_text("⏳ انتهت مهلة العملية، يرجى إعادة المحاولة.")
                 context.user_data["admin_action"] = None
                 return
 
         target_bot = text
-
-        # ✅ تحقق بسيط من المدخل
         if len(target_bot) < 5:
             await update.message.reply_text("⚠️ الإدخال غير صالح، حاول مرة أخرى.")
             return
 
         context.user_data["target_bot"] = target_bot
-
         keyboard = [
             [InlineKeyboardButton("الرسالة الترحيبية", callback_data="set_welcome")],
             [InlineKeyboardButton("القوانين", callback_data="set_rules")]
         ]
-
         await update.message.reply_text(
             f"ماذا تريد أن تعدل في سجلات البوت {target_bot}؟", 
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
         context.user_data["admin_action"] = None
 
-    # ✅ NEW: fallback لأي نص غير معروف
+    # ✅ الرد فقط إذا لم يكن المستخدم في حالة انتظار (Action) أو محادثة
     else:
         await update.message.reply_text(
             "❓ لم أفهم طلبك.\n"
