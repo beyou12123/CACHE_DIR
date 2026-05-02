@@ -2046,19 +2046,30 @@ async def main_factory_launcher():
         
         app = ApplicationBuilder().token(TOKEN).build()
 
-        # [A] ربط معالجات المستندات (المحرك الجديد) - أولوية قصوى
+        # [A] ربط معالجات المستندات (المحرك الجديد) - أولوية قصوى بمجموعات منفصلة
+        print("🛠️ [DEBUG]: تسجيل معالج المستندات JSON في المجموعة -1")
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
 
-        # [B] المعالجات الأساسية والمحادثات
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
-        
-        # التصحيح: يجب وضع محادثة الإنشاء قبل أي MessageHandler نصي لضمان استقبال التوكن
+        # [B] محادثات الإدخال والتدفق (Conversation Handlers)
+        # تصحيح: يجب تسجيل محركات المحادثة قبل المعالجات النصية العادية لمنع اعتراض التوكن
+        print("🧩 [DEBUG]: تسجيل محرك صناعة البوتات (ConversationHandler)")
         app.add_handler(create_bot_conv) 
+        
+        print("🧩 [DEBUG]: تسجيل محرك رفع الموديولات للمطور")
         app.add_handler(admin_module_conv) 
+        
+        print("🧩 [DEBUG]: تسجيل محرك الإذاعة المركزية")
         app.add_handler(broadcast_handler)
 
-        # [C] معالجات الـ CallbackQuery
+        # [C] الأوامر الأساسية (Commands)
+        print("📜 [DEBUG]: تسجيل الأوامر الأساسية (start, Delete_database, admin_export...)")
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("Delete_database", delete_database_handler))
+        app.add_handler(CommandHandler("admin_export", export_admins))
+        app.add_handler(CommandHandler("import_admin", import_admins_handler))
+
+        # [D] معالجات الـ CallbackQuery (الأزرار الشفافة)
+        print("🔘 [DEBUG]: تسجيل معالجات الأزرار الشفافة واللوحات الإدارية")
         app.add_handler(CallbackQueryHandler(owner_dashboard, pattern="^open_admin_dashboard$"))
         app.add_handler(CallbackQueryHandler(show_admins_dashboard, pattern="^admin_section$"))
         app.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^(remove_admin_|refresh_admins)"))
@@ -2069,20 +2080,19 @@ async def main_factory_launcher():
             pattern=r"^(stats_all|run_setup_db_now|broadcast_owners|restart_factory|download_cache_files|reboot_system|run_push_sync_manual|run_pull_sync_manual|confirm_hard_reset|execute_hard_reset|start_sync_shet|start_restore_request|back_to_main|toggle_maintenance|confirm_restore|backup_subs|manage_coaches|confirm_restorebotvip|cancel_restore|dev_panel|promote_user_.*|reject_user_.*|manual_add_admin|backup_to_channel|restore_from_channel|manage_subscriptions|bots_page_.*|sub_view_.*|exec_sub_.*|extend_sub_.*)$"
         ))        
         
-        # [D] معالجات الإقلاع اليدوي والاستعادة
+        # [E] معالجات الإقلاع اليدوي والاستعادة
         app.add_handler(CallbackQueryHandler(manual_init_handler, pattern="^(pull_google_data|restore_last_backup|init_tables_only|confirm_restore_yes|confirm_restore_no)$"))
 
-        app.add_handler(CommandHandler("admin_export", export_admins))
-        app.add_handler(CommandHandler("import_admin", import_admins_handler))
-        
-        # [E] معالجات الرسائل والمستندات الإضافية
+        # [F] معالجات الملفات الإضافية والرسائل العامة
+        print("📂 [DEBUG]: تسجيل معالجات الملفات العامة والنصوص (المرحلة الأخيرة)")
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
         
-        # تصحيح حرج: تأكد من أن handle_document في المجموعة -1 لا تتعارض مع المستندات الأخرى
-        app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=-1)
+        # تأمين handle_document للملفات العامة
+        app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=0)
         
-        # معالج النصوص العامة - يجب أن يكون الأخير تماماً 
-        # وتم إضافة فلتر يمنع تعارضه مع حالات المحادثة النشطة (State Filter)
+        # معالج النصوص العامة - مسجل في النهاية لضمان عدم اعتراض التوكن الخاص بالـ ConversationHandler
+        # تم الحفاظ على الفلتر المخصص لمنع التعارض مع الحالات النشطة
+        print("📝 [DEBUG]: تفعيل معالج النصوص الموحد (handle_message)")
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         # تشغيل محرك المصنع
@@ -2092,9 +2102,8 @@ async def main_factory_launcher():
         
         print("🚀 [LOG]: البوت الرئيسي يعمل الآن بكفاءة وبانتظار التعليمات.")
         
-        # --- [ تصحيح: إحياء البوتات الفرعية تلقائياً باستخدام الدالة المحدثة ] ---
+        # --- [ إحياء البوتات الفرعية تلقائياً ] ---
         try:
-            # استدعاء الدالة السيادية الموحدة لضمان التشغيل مع نظام الـ Queue
             asyncio.create_task(start_all_sub_bots())
             print("✅ [LOG]: تم إرسال أمر إحياء كافة البوتات الفرعية للمحرك.")
         except Exception as startup_err:
@@ -2120,22 +2129,21 @@ async def main_factory_launcher():
         )
         
         try:
-            # 1. إرسال للمطور في الخاص
             await app.bot.send_message(chat_id=DEVELOPER_ID, text=success_msg, reply_markup=reply_markup, parse_mode="Markdown")
-            
-            # 2. إرسال للقناة الرسمية
             await app.bot.send_message(chat_id=BACKUP_CHANNEL_ID, text=f"🚀 **إشعار إقلاع جديد:**\n{success_msg}", reply_markup=reply_markup, parse_mode="Markdown")
             print("📨 [LOG]: تم إرسال رسالة التحكم اليدوي إلى القناة والخاص بنجاح.")
         except Exception as msg_err:
-            print(f"⚠️ [LOG]: فشل إرسال رسائل الإقلاع (تحقق من وجود البوت في القناة): {msg_err}")
+            print(f"⚠️ [LOG]: فشل إرسال رسائل الإقلاع: {msg_err}")
         
         # الحفاظ على الجلسة حية
-        from telegram.ext import Application
         while True:
             await asyncio.sleep(3600)
 
     except Exception as e:
         print(f"🔴 [LOG - CRITICAL]: خطأ حرج في إقلاع المصنع: {e}")
+
+
+
 
 
 # --- [ تعديل كتلة التشغيل الخاصة بك ] ---
