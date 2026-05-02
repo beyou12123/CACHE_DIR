@@ -191,6 +191,8 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
     token = update.message.text.strip()
+    
+    # التحقق من صحة التوكن (الحفاظ على النمط الأصلي)
     if not re.match(r'^\d+:[A-Za-z0-9_-]{35,}$', token):
         await update.message.reply_text("❌ التوكن غير صحيح!")
         return GETTING_TOKEN
@@ -220,7 +222,15 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # تخزين الاسم النهائي في الذاكرة لضمان وصوله إلى finalize_bot بشكل صحيح
     context.user_data["bot_friendly_name"] = friendly_name
     
-    await finalize_bot(update, context)
+    # [تصحيح حرج]: استدعاء دالة الإنهاء مع التأكد من بقاء السياق نشطاً أثناء التنفيذ
+    try:
+        await finalize_bot(update, context)
+    except Exception as e:
+        print(f"❌ Error in finalize_bot: {e}")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء إتمام عملية إنشاء البوت.")
+        return GETTING_TOKEN # البقاء في المحادثة للمحاولة مرة أخرى في حال الفشل
+        
+    # إنهاء المحادثة فقط بعد التأكد من اكتمال finalize_bot بنجاح
     return ConversationHandler.END
 
 # --------------------------------------------------------------------------
