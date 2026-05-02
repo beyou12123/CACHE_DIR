@@ -139,7 +139,7 @@ def get_keyboard(kays: int, m_status="OFF"):
     
     
     keyboards[5] = [
-    """لوحة تحكم المالك بوت المنصة التعليمية """
+    #"""لوحة تحكم المالك بوت المنصة التعليمية """
     
         [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
          InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
@@ -154,7 +154,7 @@ def get_keyboard(kays: int, m_status="OFF"):
     ]
     
     keyboards[6] = [
-        """لوحة تحكم الموظف بوت المنصة التعليمية """
+      #  """لوحة تحكم الموظف بوت المنصة التعليمية """
         [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"), 
          InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
         [InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
@@ -172,7 +172,7 @@ def get_keyboard(kays: int, m_status="OFF"):
     
     
     keyboards[7] = [
-        """لوحة تحكم المدرب بوت المنصة التعليمية """
+     #   """لوحة تحكم المدرب بوت المنصة التعليمية """
         
         [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"), 
          InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
@@ -249,131 +249,3 @@ def get_coach_panel_keyboard(owner_id=None):
 def get_tech_settings_keyboard(owner_id=None):
     return get_keyboard(5)
 
-
-   # main.py #المصنع
-  #  ui_keyboard.py# ملف الأزرار والمفاتيح 
- #   ui_action.py # ملف الدوال التنفيذية
- #   ui_cannot.py # ملف إعداد المحتوى
-#    ui_start.py # ملف ابدا
-  #  ui_server1.py # ملف السيرفر 
-  #  ui_server2.py #ملف السيرفر 2
-#    ui_cache.py # ملف الكاش 
- #   ui_massage.py # ملف handle_contact_message 
- #   ui_callback.py #ملف الضغط على المفاتيح 
-    
-
-
-# ✅ الفكرة الأساسية
-
-# أنت الآن عندك دالة مركزية:
-
-# get_keyboard(kays)
-
-# إذن من أي مكان في البوت، كل ما تحتاجه هو:
-
-# - تحدد رقم اللوحة (kays)
-# - تمرره للدالة
-# - ترسله مع الرسالة
-
-
-# 🎯 1. الاستدعاء داخل message handler
-
-# async def some_function(update, context):
-#     keyboard = get_keyboard(0)  # لوحة الإعدادات مثلاً
-
-#     await update.message.reply_text(
-#         "اختر من القائمة:",
-#         reply_markup=keyboard
-#     )
-
-
-
-# 🎯 2. الاستدعاء داخل callback_query handler (الأهم)
-
-# هذا هو الاستخدام الحقيقي في البوتات:
-
-# async def button_handler(update, context):
-#     query = update.callback_query
-#     await query.answer()
-
-#     if query.data == "open_settings":
-#         await query.edit_message_text(
-#             "⚙️ لوحة الإعدادات:",
-#             reply_markup=get_keyboard(0)
-#         )
-
-
-#     elif query.data == "open_coach":
-#         await query.edit_message_text(
-#             "👨‍🏫 لوحة المدرب:",
-#             reply_markup=get_keyboard(1)
-#         )
-
-#     elif query.data == "open_admin":
-#         await query.edit_message_text(
-#             "🏛 لوحة الإدارة:",
-#             reply_markup=get_keyboard(2)
-#         )
-
-
-
-# 🎯 3. الاستدعاء من أي دالة خارجية (Service Layer)
-
-# لو عندك دالة منفصلة:
-
-# async def show_admin_panel(update, context):
-#     keyboard = get_keyboard(2)
-
-#     await update.callback_query.edit_message_text(
-#         "لوحة الإدارة:",
-#         reply_markup=keyboard
-#     )
-
-# وتستدعيها:
-
-# if query.data == "admin_panel":
-#     await show_admin_panel(update, context)
-
-
-# 🔥 الأفضل (احترافي): تمرير القيمة بدل تكرار if
-
-# بدل هذا:
-
-# if query.data == "open_settings":
-#     get_keyboard(0)
-
-# خلي callback_data نفسه يحمل الرقم:
-
-# InlineKeyboardButton("⚙️ الإعدادات", callback_data="menu_0")
-# InlineKeyboardButton("👨‍🏫 المدرب", callback_data="menu_1")
-
-# ثم في الهاندلر:
-
-# if query.data.startswith("menu_"):
-#     kays = int(query.data.split("_")[1])
-
-#     await query.edit_message_text(
-#         "📋 القائمة:",
-#         reply_markup=get_keyboard(kays)
-#     )
-
-
-
-# 💡 النتيجة
-
-# - أصبح عندك دالة واحدة لكل الكيبوردات
-# - استدعاء من أي مكان بسهولة
-# - نظام ديناميكي بدون if عشوائي
-
-
-
-# ⚠️ خطأ شائع لازم تنتبه له
-
-# ❌ خطأ:
-# keyboard = get_keyboard
-
-# ✔ صحيح:
-# keyboard = get_keyboard(0)   
-    
-    
-    
