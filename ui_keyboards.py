@@ -7,7 +7,7 @@ def get_keyboard(kays: int, m_status="OFF"):
     # 0️⃣ لوحة الإعدادات التقنية
     keyboards[0] = [
         [InlineKeyboardButton("📝 كليشة الترحيب", callback_data="manage_welcome_texts"),
-        [InlineKeyboardButton("🏢 اسم المؤسسة", callback_data="set_org_name"),
+         InlineKeyboardButton("🏢 اسم المؤسسة", callback_data="set_org_name"),
          InlineKeyboardButton("💬 الرسالة الترحيبية", callback_data="set_welcome_msg")],
 
         [InlineKeyboardButton("📜 القوانين", callback_data="set_rules"),
