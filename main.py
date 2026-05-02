@@ -386,7 +386,9 @@ async def owner_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  معالج الرسائل النصية الأزرار الدائمة 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الرسائل النصية والأزرار الدائمة"""
-    
+    # 🚫 تجاهل الرسائل أثناء ConversationHandler
+    if context.user_data.get("type") and not context.user_data.get("bot_token"):
+        return
     # ✅ حماية إضافية من الرسائل الفارغة أو غير النصية
     if not update.message or not update.message.text:
         return
@@ -394,12 +396,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()  # تحسين: إزالة الفراغات
     user_id = update.effective_user.id
 
+    # --- [ طبقة الحماية السيادية ] ---
+    # التحقق من وجود حالة نشطة في أي ConversationHandler
+    current_state = context.user_data.get('_conversation_state')
     # ✅ سجل تتبع (Debug بسيط)
     print(f"[MESSAGE] User:{user_id} Text:{text}")
 
-    # 🔥 [التصحيح الحرج]: إذا كان المستخدم داخل نظام إنشاء البوت (Conversation)
-    # نخرج فوراً (return) دون إرسال "لم أفهم طلبك" لترك المجال للمحرك المخصص
-    if context.user_data.get('_conversation_state') is not None:
+    # إذا كان هناك حالة نشطة (مثل انتظار التوكن)، اخرج فوراً واترك المعالجة لـ startbot
+    if current_state is not None:
+        print(f"🛡️ [DEBUG]: Ignoring message for User {user_id} - Conversation Active.")
         return
 
     if text == "🔙 العودة للقائمة الرئيسية":
@@ -2093,8 +2098,13 @@ async def main_factory_launcher():
         # معالج النصوص العامة - مسجل في النهاية لضمان عدم اعتراض التوكن الخاص بالـ ConversationHandler
         # تم الحفاظ على الفلتر المخصص لمنع التعارض مع الحالات النشطة
         print("📝 [DEBUG]: تفعيل معالج النصوص الموحد (handle_message)")
-        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
+        app.add_handler(
+            MessageHandler(
+                filters.TEXT & (~filters.COMMAND) & (~filters.UpdateType.EDITED_MESSAGE),
+                handle_message
+            ),
+            group=1
+        )
         # تشغيل محرك المصنع
         await app.initialize()
         await app.start() 
