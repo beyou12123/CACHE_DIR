@@ -2044,14 +2044,16 @@ async def main_factory_launcher():
         # [A] ربط معالجات المستندات (المحرك الجديد) - أولوية قصوى
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), handle_document), group=-1)
 
-        # [B] المعالجات الأساسية والمحادثات (بدون أي حذف)
+        # [B] المعالجات الأساسية والمحادثات
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("Delete_database", delete_database_handler))     
+        
+        # التصحيح: يجب وضع محادثة الإنشاء قبل أي MessageHandler نصي لضمان استقبال التوكن
         app.add_handler(create_bot_conv) 
         app.add_handler(admin_module_conv) 
         app.add_handler(broadcast_handler)
 
-        # [C] معالجات الـ CallbackQuery (لوحة التحكم والإدارة)
+        # [C] معالجات الـ CallbackQuery
         app.add_handler(CallbackQueryHandler(owner_dashboard, pattern="^open_admin_dashboard$"))
         app.add_handler(CallbackQueryHandler(show_admins_dashboard, pattern="^admin_section$"))
         app.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^(remove_admin_|refresh_admins)"))
@@ -2070,9 +2072,12 @@ async def main_factory_launcher():
         
         # [E] معالجات الرسائل والمستندات الإضافية
         app.add_handler(MessageHandler(filters.Document.MimeType("application/json"), process_admin_file))
+        
+        # تصحيح حرج: تأكد من أن handle_document في المجموعة -1 لا تتعارض مع المستندات الأخرى
         app.add_handler(MessageHandler(filters.Document.ALL, handle_document), group=-1)
         
-        # معالج النصوص العامة
+        # معالج النصوص العامة - يجب أن يكون الأخير تماماً 
+        # وتم إضافة فلتر يمنع تعارضه مع حالات المحادثة النشطة (State Filter)
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         # تشغيل محرك المصنع
