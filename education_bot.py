@@ -17,6 +17,7 @@ from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 from google import genai
 from google.genai import types
 from contact_message import handle_contact_message
+from ui_keyboards import get_keyboard
 logger = logging.getLogger(__name__)
 # جلب المفتاح من Variables المنصة
 api_key = os.getenv("GEMINI_API_KEY")

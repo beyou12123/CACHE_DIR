@@ -1,9 +1,179 @@
-# ملف خاص بابازرار ولوحات المفاتيح
-# ui_keyboards.py
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-def get_coach_panel_keyboard(): # غيرنا الاسم قليلاً ليكون واضحاً أنه للأزرار فقط
-    keyboard = [
+def get_keyboard(kays: int, m_status="OFF"):
+    
+    keyboards = {}
+
+    # 0️⃣ لوحة الإعدادات التقنية
+    keyboards[0] = [
+        [InlineKeyboardButton("📝 كليشة الترحيب", callback_data="manage_welcome_texts"),
+        [InlineKeyboardButton("🏢 اسم المؤسسة", callback_data="set_org_name"),
+         InlineKeyboardButton("💬 الرسالة الترحيبية", callback_data="set_welcome_msg")],
+
+        [InlineKeyboardButton("📜 القوانين", callback_data="set_rules"),
+         InlineKeyboardButton("🤖 الرد التلقائي", callback_data="set_auto_reply")],
+
+        [InlineKeyboardButton("🧠 تشغيل AI", callback_data="toggle_ai"),
+         InlineKeyboardButton("⚙️ تعليمات AI", callback_data="set_ai_prompt")],
+
+        [InlineKeyboardButton("🌅 الصباحية", callback_data="edit_welcome_morning"),
+         InlineKeyboardButton("☀️ الظهرية", callback_data="edit_welcome_noon"),
+         InlineKeyboardButton("🌆 المسائية", callback_data="edit_welcome_evening")],
+
+        [InlineKeyboardButton("🌃 الليلية", callback_data="edit_welcome_night"),
+         InlineKeyboardButton("🌆 ترحيب المساء", callback_data="set_welcome_evening"),
+         InlineKeyboardButton("🌙 ترحيب الليل", callback_data="set_welcome_night")],
+
+        [InlineKeyboardButton("🚫 المحظورات", callback_data="set_banned_words"),
+         InlineKeyboardButton("👮‍♂️ الأدمن", callback_data="manage_admins")],
+
+        [InlineKeyboardButton("🔘 الأزرار", callback_data="set_buttons"),
+         InlineKeyboardButton("⌨️ الأوامر", callback_data="set_commands")],
+
+        [InlineKeyboardButton("💳 معلومات الدفع", callback_data="set_payment"), InlineKeyboardButton("إعدادات هامة", callback_data="important_settings")],
+
+        [InlineKeyboardButton("🌐 اللغة", callback_data="set_language"),
+         InlineKeyboardButton("⏱️ وقت الرد", callback_data="set_delay")],
+
+        [InlineKeyboardButton("🔙 عودة", callback_data="tech_settings")]
+    ]
+
+    # 1️⃣ لوحة المدربين
+    keyboards[1] = [
+        [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"),
+         InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
+
+        [InlineKeyboardButton("📅 جدول المحاضرات", callback_data="schedules_lectures"),
+         InlineKeyboardButton("📖 المكتبة التعليمية", callback_data="manage_library")],
+
+        [InlineKeyboardButton("📑 تصحيح الواجبات", callback_data="hw_view_submissions"),
+         InlineKeyboardButton("📝 بنك الأسئلة", callback_data="manage_q_bank")],
+
+        [InlineKeyboardButton("🏆 الأوسمة والتقييمات", callback_data="honors_achievements"),
+         InlineKeyboardButton("🎮 غرفة الكنترول", callback_data="manage_control")],
+
+        [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="main_menu")]
+    ]
+
+    # 2️⃣ لوحة الإدارة
+    keyboards[2] = [
+        
+         [InlineKeyboardButton("🔄 المزامنة", callback_data="manual_cache_sync")],
+
+        [InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")],
+
+        [InlineKeyboardButton("إدارة الفروع", callback_data="manage_branches"),
+         InlineKeyboardButton("الإدارة المالية", callback_data="manage_financial"),
+         InlineKeyboardButton("الكنترول", callback_data="manage_control")],
+
+        [InlineKeyboardButton("📊 استيراد Excel", callback_data="excel_import_start"),
+         InlineKeyboardButton("📊 تصدير Excel", callback_data="excel_export_start")],
+
+        [InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")],
+
+        [InlineKeyboardButton("👨‍🏫 الصلاحيات", callback_data="manage_personnel"),
+         InlineKeyboardButton("تكويد الكادر", callback_data="manage_coaches"),
+         InlineKeyboardButton("المهام الإدارية", callback_data="administrative_tasks")],
+
+        [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"),
+         InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"),
+         InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
+
+        [InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"),
+         InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
+         InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")],
+
+        [InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons"),
+         InlineKeyboardButton("📢 الإعلانات", callback_data="manage_ads"),
+         InlineKeyboardButton("أكواد الخصم", callback_data="discount_codes")],
+
+        [InlineKeyboardButton("🔙 عودة", callback_data="back_to_admin")]
+    ]
+
+
+    keyboards[3] = [
+        [InlineKeyboardButton("🔗 نقاط الإحالة", callback_data="ref_points_join"),
+         InlineKeyboardButton("💰 نقاط الشراء", callback_data="ref_points_purchase")],
+
+        [InlineKeyboardButton("🎁 نقاط الاستبدال", callback_data="min_points_redeem"),
+         InlineKeyboardButton("💱 وحدة العملة", callback_data="currency_unit")],
+
+        [InlineKeyboardButton("📝 درجة الواجبات", callback_data="homework_grade"),
+         InlineKeyboardButton("📉 الحد الأدنى للسحب", callback_data="maximum_withdrawal_marketers")],
+
+        [InlineKeyboardButton("📊 نسبة المسوق", callback_data="marketers_commission"),
+         InlineKeyboardButton("🏆 قناة الأوسمة", callback_data="honors_channel_id")],
+
+        [InlineKeyboardButton("🎯 درجة النجاح الصغرى", callback_data="minimum_passing_gradee"),
+         InlineKeyboardButton("🎯 درجة النجاح الكبرى", callback_data="greatest_success_gradee")],
+
+        [InlineKeyboardButton("📢 القناة العامة", callback_data="public_channel_id"),
+         InlineKeyboardButton("🔗 رابط الإحالة", callback_data="referral_link")],
+
+        [InlineKeyboardButton("🔙 رجوع", callback_data="tech_settings")]
+        
+
+    ]
+
+    keyboards[4] = [
+        [InlineKeyboardButton("🔗 نقاط الإحالة", callback_data="ref_points_join"),
+         InlineKeyboardButton("💰 نقاط الشراء", callback_data="ref_points_purchase")],
+
+        [InlineKeyboardButton("🎁 نقاط الاستبدال", callback_data="min_points_redeem"),
+         InlineKeyboardButton("💱 وحدة العملة", callback_data="currency_unit")],
+
+        [InlineKeyboardButton("📝 درجة الواجبات", callback_data="homework_grade"),
+         InlineKeyboardButton("📉 الحد الأدنى للسحب", callback_data="maximum_withdrawal_marketers")],
+
+        [InlineKeyboardButton("📊 نسبة المسوق", callback_data="marketers_commission"),
+         InlineKeyboardButton("🏆 قناة الأوسمة", callback_data="honors_channel_id")],
+
+        [InlineKeyboardButton("🎯 درجة النجاح الصغرى", callback_data="minimum_passing_gradee"),
+         InlineKeyboardButton("🎯 درجة النجاح الكبرى", callback_data="greatest_success_gradee")],
+
+        [InlineKeyboardButton("📢 القناة العامة", callback_data="public_channel_id"),
+         InlineKeyboardButton("🔗 رابط الإحالة", callback_data="referral_link")],
+
+        [InlineKeyboardButton("🔙 رجوع", callback_data="tech_settings")]
+    ]
+    
+    
+    keyboards[5] = [
+    """لوحة تحكم المالك بوت المنصة التعليمية """
+    
+        [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
+         InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
+        [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
+        [InlineKeyboardButton("معلومات تجهيز النظام", callback_data="system_setup_information"), InlineKeyboardButton("ضبط الهوية", callback_data="contentcanager")],
+        [InlineKeyboardButton("📥 تحميل نسخة احتياطية ", callback_data="export_data_json"),
+         InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
+
+        [InlineKeyboardButton("❌ إغلاق", callback_data="close_panel")] 
+        
+        
+    ]
+    
+    keyboards[6] = [
+        """لوحة تحكم الموظف بوت المنصة التعليمية """
+        [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"), 
+         InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
+        [InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
+         InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")],
+        [InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"), 
+         InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")],
+        [InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"), 
+         InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons")],
+        [InlineKeyboardButton("الكنترول", callback_data="manage_control")],
+        [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
+    
+        
+        
+    ]    
+    
+    
+    keyboards[7] = [
+        """لوحة تحكم المدرب بوت المنصة التعليمية """
+        
         [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"), 
          InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
         [InlineKeyboardButton("📅 جدول المحاضرات", callback_data="schedules_lectures"), 
@@ -13,112 +183,193 @@ def get_coach_panel_keyboard(): # غيرنا الاسم قليلاً ليكون 
         [InlineKeyboardButton("🏆 الأوسمة والتقييمات", callback_data="honors_achievements"), 
          InlineKeyboardButton("🎮 غرفة الكنترول", callback_data="manage_control")],
         [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="main_menu")]
+        
+        
+    ]    
+    
+    keyboards[8] = [
+        """ لوحة تحكم الطالب بوت المنصة التعليمية """
+        [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
+        [InlineKeyboardButton("👤 ملفي الدراسي", callback_data="my_profile"), 
+         InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
+        # --- الزر الجديد الذي طلبته ---
+        
+        [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
+        
+        [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
+         InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
+        
+        
+        
     ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_tech_settings_keyboard(m_status):
-    """لوحة إعدادات الإدارة الأكاديمية والشؤون التعليمية"""
-    keyboard = [
-        [
-            InlineKeyboardButton("📝 كليشة الترحيب", callback_data="manage_welcome_texts"),
-            InlineKeyboardButton("🔄 المزامنة", callback_data="manual_cache_sync")
-        ],
-        [
-            InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")
-        ],
-        [
-            InlineKeyboardButton("إدارة الفروع", callback_data="manage_branches"),
-            InlineKeyboardButton("الإدارة المالية", callback_data="manage_financial"),
-            InlineKeyboardButton("الكنترول", callback_data="manage_control")
-        ],
-        [
-           InlineKeyboardButton("📊 استيراد Excel", callback_data="excel_import_start"),
-           InlineKeyboardButton("📊 تصدير Excel", callback_data="excel_export_start")
-        ],
-        [InlineKeyboardButton("الأوسمة والإنجازات", callback_data="honors_achievements")], 
-        [
-            InlineKeyboardButton("👨‍🏫 الصلاحيات", callback_data="manage_personnel"),
-            InlineKeyboardButton("تكويد الكادر", callback_data="manage_coaches"), 
-            InlineKeyboardButton("المهام الإدارية", callback_data="administrative_tasks")
-        ],
-        [
-            InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"),
-            InlineKeyboardButton("جداول المحاضرات", callback_data="schedules_lectures"),
-            InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")
-        ],
-        [
-            InlineKeyboardButton("إدارة المجموعات", callback_data="manage_group"),
-            InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
-            InlineKeyboardButton("الأسئلة الشائعة", callback_data="frequently_guestions")
-        ],
-        [
-            InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons"),
-            InlineKeyboardButton("📢 الإعلانات", callback_data="manage_ads"),
-            InlineKeyboardButton("أكواد الخصم", callback_data="discount_codes")
-        ],
-        [
-            InlineKeyboardButton("ضبط نقاط الدخول", callback_data="referral_points_settings"), 
-            InlineKeyboardButton("ضبط وحدة العملة", callback_data="currency_unit")
-        ],
-        [
-            InlineKeyboardButton("ضبط درجة النجاح", callback_data="passing_grade"),            
-            InlineKeyboardButton("ضبط درجة الواجبات", callback_data="homework_grade")
-        ],
-        [
-            InlineKeyboardButton("ضبط مبلغ السحب", callback_data="minimum_withdrawal_amount"),
-            InlineKeyboardButton("معلومات الدفع الافتراضية", callback_data="default_payment_information"),
-        ],
-        [
-            InlineKeyboardButton("القناة الرسمية", callback_data="public_channel_idd"),
-            InlineKeyboardButton("قناة الأوسمة والإنجازات", callback_data="honors_channel_idd"),
-        ],  
-        [InlineKeyboardButton("ضبط عمولة المسوقين %", callback_data="percentage_marketers")],                                                
-        [InlineKeyboardButton("🔙 عودة", callback_data="back_to_admin")]
+    
+    keyboards[9] = [
+        """لوحة تحكم الزائر بوت المنصة التعليمية """
+        [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
+        # --- الزر الجديد الذي طلبته ---
+        [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
+        [InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
+        [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
+         InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
+        
+        
+        
     ]
-    return InlineKeyboardMarkup(keyboard)
     
+    keyboards[10] = [
+        
+        
+        
+    ]
     
+    keyboards[11] = [
+        
+        
+        
+    ]
     
-   
-#لوحة تحكم المصنع
-def get_owner_dashboard_keyboard(user_id, developer_id, m_status):
-    # 1. أزرار متاحة لجميع الإداريين والمطور
-    keyboard = [
-        [InlineKeyboardButton("📊 إحصائيات البوتات", callback_data="stats_all")],
-        [InlineKeyboardButton("📢 إذاعة للمشتركين", callback_data="broadcast_owners")],
-        [InlineKeyboardButton("📥 تحميل نسخة", callback_data="download_cache_files")]
+    keyboards[12] = [
+        
+        
+        
     ]
 
-    # 2. أزرار حصرية للمطور فقط
-    if user_id == developer_id:
-        keyboard.extend([
-            [InlineKeyboardButton("─── المحرك الهجين (SQLite) ───", callback_data="none")],
-            [
-                InlineKeyboardButton("📤 نسخة احتياطية للقناة", callback_data="backup_to_channel"),
-                InlineKeyboardButton("🔄 استعادة من القناة", callback_data="restore_from_channel")
-            ],
-            [InlineKeyboardButton("─── عمليات النظام الحساسة ───", callback_data="none")],
-            [InlineKeyboardButton("💳 إدارة الاشتراكات والترقيات", callback_data="manage_coaches")],
-            [InlineKeyboardButton(f"🛠 وضع الصيانة {m_status}", callback_data="toggle_maintenance")],
-            [InlineKeyboardButton("⚙️ تهيئة الجداول", callback_data="run_setup_db_now")],
-            [
-                InlineKeyboardButton("📤 رفع نسخة", callback_data="start_restore_request"),
-                InlineKeyboardButton("⏳ بدء المزامنة اليدوية", callback_data="start_sync_shet")
-            ],
-            [
-                InlineKeyboardButton("🔄 تحديث السيرفر", callback_data="restart_factory"),
-                InlineKeyboardButton("♻️ إعادة تشغيل", callback_data="reboot_system")
-            ],
-            [InlineKeyboardButton("👨‍💼 قسم الأدمن", callback_data="admin_section")],
-            [InlineKeyboardButton("⚠️ تصفير النظام بالكامل", callback_data="confirm_hard_reset")]
-        ])
-
-    # 3. زر العودة الدائم
-    keyboard.append([
-        InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="back_to_main")
+    # 🔐 fallback (مهم جداً)
+    keyboard = keyboards.get(kays, [
+        [InlineKeyboardButton("⚠️ لوحة غير معروفة", callback_data="main_menu")]
     ])
 
     return InlineKeyboardMarkup(keyboard)
 
 
 
+
+
+
+   # main.py #المصنع
+  #  ui_keyboard.py# ملف الأزرار والمفاتيح 
+ #   ui_action.py # ملف الدوال التنفيذية
+ #   ui_cannot.py # ملف إعداد المحتوى
+#    ui_start.py # ملف ابدا
+  #  ui_server1.py # ملف السيرفر 
+  #  ui_server2.py #ملف السيرفر 2
+#    ui_cache.py # ملف الكاش 
+ #   ui_massage.py # ملف handle_contact_message 
+ #   ui_callback.py #ملف الضغط على المفاتيح 
+    
+
+
+# ✅ الفكرة الأساسية
+
+# أنت الآن عندك دالة مركزية:
+
+# get_keyboard(kays)
+
+# إذن من أي مكان في البوت، كل ما تحتاجه هو:
+
+# - تحدد رقم اللوحة (kays)
+# - تمرره للدالة
+# - ترسله مع الرسالة
+
+
+# 🎯 1. الاستدعاء داخل message handler
+
+# async def some_function(update, context):
+#     keyboard = get_keyboard(0)  # لوحة الإعدادات مثلاً
+
+#     await update.message.reply_text(
+#         "اختر من القائمة:",
+#         reply_markup=keyboard
+#     )
+
+
+
+# 🎯 2. الاستدعاء داخل callback_query handler (الأهم)
+
+# هذا هو الاستخدام الحقيقي في البوتات:
+
+# async def button_handler(update, context):
+#     query = update.callback_query
+#     await query.answer()
+
+#     if query.data == "open_settings":
+#         await query.edit_message_text(
+#             "⚙️ لوحة الإعدادات:",
+#             reply_markup=get_keyboard(0)
+#         )
+
+
+#     elif query.data == "open_coach":
+#         await query.edit_message_text(
+#             "👨‍🏫 لوحة المدرب:",
+#             reply_markup=get_keyboard(1)
+#         )
+
+#     elif query.data == "open_admin":
+#         await query.edit_message_text(
+#             "🏛 لوحة الإدارة:",
+#             reply_markup=get_keyboard(2)
+#         )
+
+
+
+# 🎯 3. الاستدعاء من أي دالة خارجية (Service Layer)
+
+# لو عندك دالة منفصلة:
+
+# async def show_admin_panel(update, context):
+#     keyboard = get_keyboard(2)
+
+#     await update.callback_query.edit_message_text(
+#         "لوحة الإدارة:",
+#         reply_markup=keyboard
+#     )
+
+# وتستدعيها:
+
+# if query.data == "admin_panel":
+#     await show_admin_panel(update, context)
+
+
+# 🔥 الأفضل (احترافي): تمرير القيمة بدل تكرار if
+
+# بدل هذا:
+
+# if query.data == "open_settings":
+#     get_keyboard(0)
+
+# خلي callback_data نفسه يحمل الرقم:
+
+# InlineKeyboardButton("⚙️ الإعدادات", callback_data="menu_0")
+# InlineKeyboardButton("👨‍🏫 المدرب", callback_data="menu_1")
+
+# ثم في الهاندلر:
+
+# if query.data.startswith("menu_"):
+#     kays = int(query.data.split("_")[1])
+
+#     await query.edit_message_text(
+#         "📋 القائمة:",
+#         reply_markup=get_keyboard(kays)
+#     )
+
+
+
+# 💡 النتيجة
+
+# - أصبح عندك دالة واحدة لكل الكيبوردات
+# - استدعاء من أي مكان بسهولة
+# - نظام ديناميكي بدون if عشوائي
+
+
+
+# ⚠️ خطأ شائع لازم تنتبه له
+
+# ❌ خطأ:
+# keyboard = get_keyboard
+
+# ✔ صحيح:
+# keyboard = get_keyboard(0)   
+    
+    
+    

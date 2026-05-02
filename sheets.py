@@ -1237,6 +1237,7 @@ def seed_default_settings(bot_token):
             {"key": "operating_environment", "title": "بيئة_التشغيل", "value": "Ar", "note": "تحدد بيئة تشغيل البوت (إنتاج/تجريبي)"},
             {"key": "subscription_price", "title": "سعر_الاشتراك", "value": "100", "note": "السعر المطلوب للاشتراك في البوت"},
             {"key": "maximum_number_sections", "title": "الحد الأقصى للاقسام", "value": "3", "note": "أقصى عدد أقسام يمكن للبوت إدارتها"},
+            {"key": "maximum_number_groups", "title": "الحد الأقصى لعدد الجروبات", "value": "3", "note": "أقصى عدد من الجروبات متاحة للبوت إنشائها"},
             {"key": "maximum_number_courses", "title": "الحد الأقصى للدورات", "value": "10", "note": "أقصى عدد دورات يمكن للبوت إدارتها"},
             {"key": "maximum_number_students", "title": "الحد الأقصى للطلاب", "value": "100", "note": "أقصى عدد طلاب يمكن للبوت خدمتهم"},
             {"key": "currency_unit", "title": "وحدة العملة", "value": "نقطة", "note": "الاسم الذي يظهر بجانب الرصيد (مثلاً: نقطة أو ريال)"},
@@ -1247,7 +1248,8 @@ def seed_default_settings(bot_token):
             {"key": "honors_channel_id", "title": "معرف قناة الأوسمة", "value": "-100yyyyyyy", "note": "قناة مخصصة لاستعراض انحازات الطلاب"},                 
             {"key": "minimum_passing_gradee", "title": "درجة النجاح الصغرى", "value": "50", "note": "الدرجة الادنى للنجاح "},                  
             {"key": "greatest_success_gradee", "title": "درجة النجاح الكبرى", "value": "100", "note": "الدرجة الاعلى للنجاح"},                              
-            {"key": "public_channel_id", "title": "معرف القناة العامة", "value": "-100xxxxxxx", "note": "معرف القناة الرسمية للمؤسسة "}
+            {"key": "public_channel_id", "title": "معرف القناة العامة", "value": "-100xxxxxxx", "note": "معرف القناة الرسمية للمؤسسة "}, 
+            {"key": "referral_link", "title": "رابط الإحالة", "value": "show_", "note": "تفعيل وتعطيل رابط الإحالة"}
         ]
 
         # 2. فحص ومنع التكرار (محلياً عبر SQLite - باستخدام المسميات العربية)
