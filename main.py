@@ -15,6 +15,7 @@ from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager as 
 from apscheduler.schedulers.background import BackgroundScheduler
 from sheets import sync_ad_campaign_results, connect_to_google
 
+
 # استيراد الأدوات الأساسية من مكتبة تليجرام
 from telegram import (
     Update, 
@@ -939,11 +940,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "<i>يرجى الانتظار، لا تغلق هذه الصفحة...</i>"
         )
 
-        from sheets import setup_bot_factory_database
-        import time
-
         # 2. تشغيل المهمة في مسار خلفي لضمان استجابة البوت
-        setup_task = asyncio.create_task(asyncio.to_thread(setup_bot_factory_database, context.bot.token))
+        setup_task = asyncio.create_task(asyncio.to_thread(dm.setup_bot_factory_database, context.bot.token))
         
         try:
             color_index = 0
