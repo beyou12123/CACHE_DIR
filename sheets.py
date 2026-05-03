@@ -862,20 +862,33 @@ def update_content_setting(bot_id, column_name, new_value):
     return False
 
 def get_bot_config(bot_id):
-    """جلب الإعدادات من الكاش العالمي مباشرة (RAM)"""
+    """
+    جلب الإعدادات من الكاش العالمي مباشرة (RAM)
+    تم التطوير لضمان استخراج المعرف الرقمي الموحد (Numeric ID) للمطابقة مع 'الورق'.
+    """
     try:
+        # 1. توحيد المعرف: إذا كان المدخل توكن كامل، نأخذ الرقم الذي قبل النقطتين فقط
+        # هذا يضمن أن البحث سينجح دائماً سواء أرسلت التوكن أو الرقم
+        target_bot_id = str(bot_id).split(':')[0] if ':' in str(bot_id) else str(bot_id)
+        
         # الوصول للكاش الذي يتم تحديثه تلقائياً
         records = FACTORY_GLOBAL_CACHE["data"].get("إعدادات_المحتوى", [])
         
-        # البحث عن سجل البوت باستخدام bot_id
-        # نستخدم str() لضمان المطابقة سواء كان المعرف رقم أو نص
-        config = next((r for r in records if str(r.get("bot_id")) == str(bot_id)), {})
+        # 2. البحث عن سجل البوت باستخدام المعرف الرقمي الموحد
+        # نستخدم str() لضمان المطابقة المطلقة بين بيانات الشيت والمدخلات
+        config = next((r for r in records if str(r.get("bot_id")) == target_bot_id), {})
         
+        # تتبع داخلي (اختياري للديبرج)
+        if not config:
+            print(f"⚠️ تنبيه: لم يتم العثور على إعدادات في 'الورق' للمعرف: {target_bot_id}")
+            
         return config
     except Exception as e:
+        # الحفاظ على نظام التسجيل الأصلي للأخطاء
+        import logging
+        logger = logging.getLogger(__name__)
         logger.error(f"❌ خطأ جلب تكوين من الكاش: {e}")
     return {}
-
 
 
 
