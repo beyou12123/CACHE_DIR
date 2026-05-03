@@ -1079,34 +1079,46 @@ def safe_api_call(func, *args, **kwargs):
 
 # --------------------------------------------------------------------------
 # دالة إنشاء وتجهيز الورق - النسخة المعززة بالفواصل الزمنية
+
+
+
+
 def setup_bot_factory_database(bot_token=None):
     """
-    المحرك الشامل المطور (نسخة الفرض الصارم):
-    1. ينشئ ويحدث الجداول في Google Sheets و SQLite معاً.
-    2. يفرض الترتيب، يضيف الناقص، ويحذف الزائد من العناوين لضمان تطابق 100%.
-    3. يعبئ الرام (Cache) ويهيئ التنسيقات والبيانات الوصفية.
+    المحرك الشامل المطور (V8.8 - نسخة الفرض الصارم):
+    1. الإنشاء في الكاش (RAM): عبر تحديث _ws_cache و FACTORY_GLOBAL_CACHE.
+    2. الإنشاء في SQLite: عبر محرك المزامنة المحلي local_db.
+    3. الإنشاء في جوجل شيت: مع تطبيق اللون الموحد تلقائياً.
+    - الحفاظ المطلق على الهيكل، التوقيت، والمفاتيح.
     """
     global ss, _ws_cache
-    if 'ss' not in globals() or ss is None: connect_to_google()
+    from sheets import connect_to_google, safe_api_call, get_sheets_structure
+    
+    # تعريف اللون الموحد (الأزرق الهادئ) ليعمل على كل الجداول تلقائياً
+    DEFAULT_BRAND_COLOR = {"red": 0.81, "green": 0.88, "blue": 0.95}
+    
+    if 'ss' not in globals() or ss is None: 
+        ss = connect_to_google()
+        
     all_requests = []
 
-    # [1] مزامنة هيكلية SQLite والرام أولاً (الحل الجذري للمحرك المحلي)
+    # [1] المرحلة الأولى: مزامنة وإنشاء هيكل SQLite والرام (الإنشاء المحلي)
     try:
         from cache_manager import db_manager as local_db
-        print("🔗 جاري ربط الهيكل المحلي بـ SQLite وفرض الترتيب الصارم...")
-        # هذا الاستدعاء سيقوم داخلياً بعمل Migration للجداول لتطابق get_sheets_structure
+        print("🔗 [1/3] جاري إنشاء الهيكل في SQLite وتحديث الرام...")
+        # هذه الدالة تفرض وجود الجداول محلياً وفي الكاش بناءً على الهيكل المعتمد
         local_db.sync_schema(ss)
     except Exception as e:
         print(f"⚠️ تنبيه: فشل مزامنة الهيكل المحلي: {e}")
 
-    # جلب الهيكل المعتمد
+    # جلب الهيكل المعتمد (كافة التفاصيل والمفاتيح)
     structures = get_sheets_structure()  
     total_sheets = len(structures)   
     
-    print(f"⚙️ بدء محرك تهيئة وتصحيح الجداول ({total_sheets} ورقة)...")
+    print(f"⚙️ [2/3] بدء محرك تهيئة وتصحيح جوجل شيت ({total_sheets} ورقة)...")
     time.sleep(1)  
     
-    # تحديث الكاش الخاص بأوراق العمل من جوجل
+    # تحديث كاش أوراق العمل (RAM Cache) لضمان السرعة ومنع تكرار الطلبات
     _ws_cache = {ws.title: ws for ws in ss.worksheets()}  
 
     for config in structures:  
@@ -1114,13 +1126,14 @@ def setup_bot_factory_database(bot_token=None):
             sheet_name = config["name"]  
             headers = config["cols"]  
            
-            # [2] التحقق من وجود الورقة أو إنشاؤها باستخدام المحرك الصارم
-            # تم دمج ensure_sheet_structure لضمان (الوجود + الترتيب + حذف الزائد)
-            from sheets import ensure_sheet_structure, ensure_sheet_schema
+            # [2] المرحلة الثانية: التحقق من وجود الورقة سحابياً أو إنشاؤها
+            from sheets import ensure_sheet_schema
             
             if sheet_name not in _ws_cache:  
-                print(f"🆕 إنشاء ورقة جديدة: {sheet_name}")
+                print(f"🆕 إنشاء ورقة جديدة سحابياً: {sheet_name}")
+                # إنشاء الورقة بـ 1000 صف
                 worksheet = safe_api_call(ss.add_worksheet, title=sheet_name, rows="1000", cols=str(len(headers) + 5))  
+                # تحديث الكاش فوراً بعد الإنشاء (RAM Update)
                 _ws_cache[sheet_name] = worksheet  
                 time.sleep(1) 
                 safe_api_call(worksheet.append_row, headers)
@@ -1128,16 +1141,13 @@ def setup_bot_factory_database(bot_token=None):
             else:  
                 worksheet = _ws_cache[sheet_name]
                 print(f"🛠️ فحص وتصحيح هيكل: {sheet_name}")
-                # استدعاء دالة الفحص الصارم (إضافة/حذف/ترتيب) التي صححناها سابقاً
+                # فرض الترتيب وحذف الزائد وإضافة الناقص في العناوين
                 ensure_sheet_schema(worksheet, headers)
 
-            # [3] نظام التنسيق التلقائي (الحفاظ على الوظيفة الأصلية كاملة)
+            # [3] المرحلة الثالثة: نظام التنسيق والتلوين الموحد
             try:  
-                wrap_cols = [] 
-                try: 
-                    from sheets import get_wrap_columns, setup_sheet_format
-                    wrap_cols = get_wrap_columns(sheet_name)
-                except: pass
+                from sheets import get_wrap_columns, setup_sheet_format
+                wrap_cols = get_wrap_columns(sheet_name)
                 
                 if wrap_cols:
                     print(f"✨ تطبيق نظام التفاف النص لـ: {sheet_name}")
@@ -1146,15 +1156,18 @@ def setup_bot_factory_database(bot_token=None):
             except Exception as e:
                 print(f"⚠️ فشل تنسيق الورقة {sheet_name}: {e}")
 
-            # [4] بناء طلبات التنسيق الجماعي (Batch Update) - تلوين وتجميد
+            # [4] بناء طلبات التنسيق الجماعي (تطبيق اللون الموحد آلياً)
             sheet_id = worksheet.id  
+            # سحب اللون من الإعدادات أو استخدام اللون الأزرق الموحد كافتراضي للجميع
+            target_color = config.get("color", DEFAULT_BRAND_COLOR)
+            
             all_requests.extend([  
                 {
                     "repeatCell": {
                         "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1}, 
                         "cell": {
                             "userEnteredFormat": {
-                                "backgroundColor": config.get("color", {"red": 0.9, "green": 0.9, "blue": 0.9}), 
+                                "backgroundColor": target_color, 
                                 "textFormat": {"bold": True}, 
                                 "horizontalAlignment": "CENTER"
                             }
@@ -1169,8 +1182,7 @@ def setup_bot_factory_database(bot_token=None):
                     }
                 }  
             ])  
-
-            time.sleep(0.8) # فاصل زمني آمن
+            time.sleep(0.8) 
 
         except Exception as e:   
             print(f"❌ خطأ تهيئة {sheet_name}: {e}")  
@@ -1178,7 +1190,7 @@ def setup_bot_factory_database(bot_token=None):
 
     # [5] دفع التحديثات الجماعية للتنسيق
     if all_requests:  
-        print(f"🚀 دفع التحديثات الجماعية للتنسيق...")
+        print(f"🚀 [3/3] دفع التحديثات الجماعية للتنسيق...")
         batch_size = globals().get('BATCH_SIZE', 10)
         for i in range(0, len(all_requests), batch_size):  
             try:
@@ -1186,59 +1198,67 @@ def setup_bot_factory_database(bot_token=None):
                 time.sleep(2)
             except: pass
 
-    # [6] زرع الإعدادات وتحديث الميتا (حسب المنطق الأصلي)
+    # [6] زرع الإعدادات وتحديث الميتا (تفعيل وظائف البوت)
     if bot_token:  
         try:
             from sheets import seed_default_settings
-            print(f"🌱 زرع الإعدادات الافتراضية للبوت...")
+            print(f"🌱 زرع الإعدادات الافتراضية للبوت (SQLite/Sheets)...")
             seed_default_settings(bot_token)  
             time.sleep(1)
         except: pass
 
     try:
-        from sheets import update_meta_info, verify_setup
-        print(f"📊 تحديث الميتا والتحقق النهائي...")
+        from sheets import update_meta_info, verify_setup as final_verify
+        print(f"📊 تحديث الميتا والتحقق النهائي الشامل...")
         update_meta_info()  
         time.sleep(1.5)  
 
-        if verify_setup(structures):  
-            print(f"🎊 اكتملت المزامنة والتهيئة لـ {total_sheets} ورقة (سحابي/محلي/رام)!")
+        # التحقق النهائي من اكتمال التأسيس (الرام + SQLite + شيت)
+        if final_verify(bot_token):  
+            print(f"🎊 اكتملت المزامنة الثلاثية بنجاح لـ {total_sheets} ورقة!")
             return total_sheets  
-    except: pass
+    except Exception as e:
+        print(f"⚠️ خطأ في الخطوات النهائية: {e}")
     
     return 0
+
 
 
 def verify_setup(bot_token):
     """
     دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار.
-    تم التصحيح لتستخدم المحرك المحلي الموحد والتأكد من وجود الجداول العربية.
+    تم التطوير لدعم الكشف عن الهيكل العربي الجديد وضمان وجود الأعمدة الأساسية.
     """
     try:
-        # 1. التأكد من استيراد المحرك المحلي (DataManager)
+        # 1. جلب المحرك المحلي (DataManager)
         from cache_manager import db_manager as local_db
         
-        # في حال كان المحرك لم يتم إنشاؤه بعد، نستخدم نسخة مؤقتة للتحقق
-        if not local_db:
+        # تصحيح: إذا كان المحرك غير مهيأ، نقوم بإنشائه فوراً بالتوكن الصحيح
+        if not local_db or not hasattr(local_db, 'cursor'):
             from cache_manager import DataManager
             local_db = DataManager(bot_token)
 
-        # 2. التحقق من وجود جدول "البوتات_المصنوعة" كعينة لاكتمال التهيئة
-        # تم استخدام اسم الجدول العربي الجديد المعتمد في الهيكل الموحد
+        # 2. التحقق من وجود جدول "البوتات_المصنوعة" (العمود الفقري للنظام)
+        # نستخدم مسمى الجدول العربي المعتمد
         query = "SELECT name FROM sqlite_master WHERE type='table' AND name='البوتات_المصنوعة'"
         local_db.cursor.execute(query)
         table_exists = local_db.cursor.fetchone() is not None
         
         if table_exists:
-            # 3. خطوة إضافية لضمان سلامة الهيكل: التحقق من وجود عمود "التوكن"
-            # لضمان أن الجدول ليس فقط موجوداً، بل تم إنشاؤه بالهيكل العربي الجديد
+            # 3. التحقق الصارم من الأعمدة لضمان سلامة الهيكل العربي
             try:
+                # التأكد من وجود عمود 'التوكن' و 'المعرف_الرقمي'
                 local_db.cursor.execute("PRAGMA table_info('البوتات_المصنوعة')")
                 columns = [info[1] for info in local_db.cursor.fetchall()]
-                if "التوكن" in columns:
+                required_cols = ["التوكن", "المعرف_الرقمي"]
+                
+                # التحقق من تطابق الحد الأدنى من الأعمدة لضمان عدم وجود جدول قديم تالف
+                if all(col in columns for col in required_cols):
                     return True
-            except:
-                pass
+                else:
+                    print("⚠️ تحذير: جدول 'البوتات_المصنوعة' موجود ولكن بهيكل أعمدة قديم أو غير مكتمل.")
+            except Exception as col_err:
+                print(f"⚠️ فشل فحص أعمدة الجدول: {col_err}")
                 
         return table_exists
     except Exception as e:
@@ -1364,7 +1384,7 @@ def update_meta_info():
     except Exception as e: 
         # الحفاظ على نص تسجيل الخطأ الأصلي "فشل تحديث الميتا"
         print(f"❌ فشل تحديث الميتا (المحرك المطور): {e}")
-
+# ==========================================================================
 # --------------------------------------------------------------------------
 # إضافة قسم 
 def add_new_category(bot_token, cat_id, cat_name):

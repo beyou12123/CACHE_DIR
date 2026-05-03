@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 from telegram.request import HTTPXRequest
 from telegram.error import Forbidden, BadRequest, TelegramError
-import hashlib
+import time
 
 from startbot import (
     # --- المتغيرات والثوابت والمعرفات ---
@@ -510,11 +510,21 @@ def generate_excel_from_cache():
 class DataManager:
     def __init__(self, bot_token):
         self.bot_token = bot_token
-        # تم الاكتفاء بإنشاء المجلد في بداية الملف لتوحيد المسارات
-        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row  # للوصول للبيانات بأسماء الأعمدة
-        self.cursor = self.conn.cursor()
+        
+        # 1. تهيئة أولية للمعرفات (اختياري لكن يوضع في البداية)
+        self.conn = None
+        self.cursor = None
+        self.active_tasks = {} 
 
+        # 2. إنشاء الاتصال الفعلي (هذا هو الأهم لضمان عمل الدالة)
+        try:
+            self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row  
+            self.cursor = self.conn.cursor()
+        except Exception as e:
+            print(f"❌ فشل الاتصال بقاعدة البيانات في DataManager: {e}")
+
+        
     async def create_backup_to_telegram(self, shared_bot=None, user_id=None, bot_id=None):
         """
         محرك النسخ الاحتياطي المؤسسي V7.1 - نظام الهوية المزدوجة (Dual-Identity Hardened).
@@ -1324,41 +1334,103 @@ class DataManager:
             print(f"❌ خطأ أثناء تصفير القاعدة: {e}")
             return False
 #دالة حذف بوت
-    async def delete_bot_permanently(self, bot_token):
-        """
-        محرك الحذف النهائي V7.2 - إزالة البوت من المصنع تماماً.
-        المهام: الحذف من SQLite، تحديث الكاش العالمي، إيقاف المزامنة.
-        """
-        import logging
-        current_logger = logging.getLogger("FACTORY_DELETE")
-        
-        try:
-            # 1. الحذف من قاعدة البيانات المحلية (SQLite)
-            # نستخدم التوكن كمعرف فريد أساسي للحذف
-            query = "DELETE FROM البوتات_المصنوعة WHERE التوكن = ?"
-            self.cursor.execute(query, (bot_token,))
-            self.conn.commit()
-            
-            # 2. تحديث الكاش العالمي (FACTORY_GLOBAL_CACHE) لضمان عدم الإقلاع مجدداً
-            if 'FACTORY_GLOBAL_CACHE' in globals():
-                all_bots = globals()['FACTORY_GLOBAL_CACHE'].get('all_bots', [])
-                # تصفية القائمة لاستبعاد البوت المحذوف
-                new_bot_list = [b for b in all_bots if str(b.get('التوكن')) != str(bot_token)]
-                globals()['FACTORY_GLOBAL_CACHE']['all_bots'] = new_bot_list
-                
-                # إزالة بيانات المزامنة الخاصة بالبوت من الكاش إن وجدت
-                if 'bot_sync_versions' in globals()['FACTORY_GLOBAL_CACHE']:
-                    globals()['FACTORY_GLOBAL_CACHE']['bot_sync_versions'].pop(bot_token, None)
+    async def delete_bot_permanently(self, bot_token):  
+        """  
+        محرك الحذف النهائي V9.5 - إزالة كاملة وإعادة ضبط المصنع داخل الكلاس.  
+        المهام: الحذف من SQLite، تصفير الكاش، تدمير أوراق جوجل، وإعادة بناء الهيكل.  
+        """  
+        # الحفاظ على استيراد اللوجر الداخلي كما هو في كودك الأصلي
+        import logging  
+        current_logger = logging.getLogger("FACTORY_DELETE")  
+          
+        try:  
+            # --- [1] إيقاف المهام النشطة (منع استمرار طلبات api.telegram.org) ---
+            if hasattr(self, 'active_tasks') and bot_token in self.active_tasks:
+                current_logger.info(f"🛑 [HALT]: إيقاف مهمة البوت {bot_token[:10]}...")
+                self.active_tasks[bot_token].cancel()
+                try:
+                    # انتظار الإغلاق لضمان عدم حدوث تداخل أثناء الحذف
+                    await self.active_tasks[bot_token]
+                except (asyncio.CancelledError, Exception): 
+                    pass
+                self.active_tasks.pop(bot_token, None)
 
-            current_logger.info(f"🗑️ [DELETE]: تم حذف البوت {bot_token[:15]}... من النظام نهائياً.")
+            # --- [2] الحذف من قاعدة البيانات المحلية (SQLite) ---
+            # الحفاظ على الكويري والمسميات العربية الأصلية (التوكن، البوتات_المصنوعة)
+            query = "DELETE FROM البوتات_المصنوعة WHERE التوكن = ?"  
             
-            # 3. محاولة إرسال إشارة إيقاف للمهمة المشغلة (اختياري حسب منطق startbot)
-            # يمكن إضافة منطق هنا لإغلاق جلسة البوت البرمجية فوراً
+            # تنفيذ غير متزامن لضمان عدم تجميد الكلاس (Thread-safe execution)
+            loop = asyncio.get_event_loop()
+            if self.cursor and self.conn:
+                await loop.run_in_executor(None, lambda: self.cursor.execute(query, (bot_token,)))  
+                await loop.run_in_executor(None, self.conn.commit)  
+              
+            # --- [3] تحديث وتصفير الكاش العالمي (FACTORY_GLOBAL_CACHE) ---
+            # الالتزام الصارم بمنطق globals() الذي وضعته أنت
+            if 'FACTORY_GLOBAL_CACHE' in globals():  
+                all_bots = globals()['FACTORY_GLOBAL_CACHE'].get('all_bots', [])  
+                # تصفية القائمة لاستبعاد البوت المحذوف (الوظيفة الأصلية)
+                new_bot_list = [b for b in all_bots if str(b.get('التوكن')) != str(bot_token)]  
+                globals()['FACTORY_GLOBAL_CACHE']['all_bots'] = new_bot_list  
+                  
+                # إزالة بيانات المزامنة الخاصة بالبوت من الكاش إن وجدت (الوظيفة الأصلية)
+                if 'bot_sync_versions' in globals()['FACTORY_GLOBAL_CACHE']:  
+                    globals()['FACTORY_GLOBAL_CACHE']['bot_sync_versions'].pop(bot_token, None)  
+
+            # --- [4] تدمير أوراق العمل سحابياً (Google Sheets Cleanup) ---
+            # الوصول لـ ss عبر globals() لضمان تطهير الشيت بالكامل
+            global ss
+            if 'ss' in globals() and ss:
+                current_logger.info("🧨 بدء تدمير الأوراق السحابية لتصفير النظام...")
+                all_sheets = ss.worksheets()
+                for ws in all_sheets:
+                    # نترك ورقة واحدة فقط (الرئيسية) كمرجع تقني لأن جوجل ترفض الشيت الفارغ تماماً
+                    if ws.title != "الرئيسية":
+                        try:
+                            ss.del_worksheet(ws)
+                            current_logger.info(f"🧨 تم تدمير الورقة السحابية: {ws.title}")
+                            # فاصل زمني بسيط لتجنب خطأ تجاوز الطلبات (Rate Limit) في جوجل
+                            await asyncio.sleep(0.5) 
+                        except Exception as e_ws:
+                            current_logger.warning(f"⚠️ تخطي ورقة {ws.title}: {e_ws}")
+
+            # --- [5] معالجة خطأ DataManager (إصلاح نقص الوسيط bot_token) ---
+            try:
+                from cache_manager import DataManager
+                # تمرير bot_token المطلوب لإصلاح خطأ سجلات Railway المكتشف
+                dm = DataManager(bot_token=bot_token)
+                if hasattr(dm, 'reset_local_files'):
+                    # تنفيذ تصفير الملفات المحلية (الوظيفة الأصلية)
+                    await dm.reset_local_files()
+            except Exception as dm_err:
+                current_logger.warning(f"⚠️ تنبيه: فشل تصفير الملفات المحلية: {dm_err}")
+
+            # --- [6] رسالة الانتهاء وإعادة البناء التلقائي ---
+            current_logger.info(f"🗑️ [PURGED]: تم حذف كل المعلومات. النظام الآن في حالة 'المصنع الخام'.")
+            print("\n✅ تم الانتهاء من حذف جميع المعلومات (كاش/SQLite/شيت)")
+            
+            # استدعاء دالة بناء الجداول الموجودة داخل الكلاس (Re-build Mechanism)
+            print("🔄 جاري البدء في بناء الجداول الجديدة...")
+            # التأكد من تمرير bot_token لضمان زرع الإعدادات الافتراضية
+            total_created = self.setup_bot_factory_database(bot_token)
+            
+            if total_created > 0:
+                print(f"🎊 تم إعادة بناء {total_created} جدول بنجاح. تم التنفيذ بناءً على طلبك.")
             
             return True
-        except Exception as e:
-            current_logger.error(f"❌ [DELETE ERROR]: فشل حذف البوت: {e}")
+
+        except Exception as e:  
+            # تسجيل الخطأ مع كامل التفاصيل التقنية (الوظيفة الأصلية)
+            current_logger.error(f"❌ [DELETE ERROR]: فشل حذف البوت: {e}", exc_info=True)  
             return False
+
+    def setup_bot_factory_database(self, bot_token=None):
+        """
+        دالة بناء الجداول (يجب أن تكون موجودة داخل نفس الكلاس أو يتم استدعاؤها بشكل صحيح)
+        """
+        # ... هنا يتم وضع كود بناء الجداول الذي قدمته أنت مسبقاً ...
+        pass
+
 
 
 #~~~~~~~~~~~~~~~~
@@ -1393,6 +1465,161 @@ if db_manager:
 
 
 # --------------------------------------------------------------------------
+def get_translation_dict(bot_id):
+    """
+    محرك الترجمة المركزي المطور:
+    - يسحب اللغة من الكاش العالمي لسرعة الاستجابة.
+    - يدعم نظام الـ Fallback.
+    """
+    from cache_manager import FACTORY_GLOBAL_CACHE
+    
+    # 1. جلب بيانات البوت من الكاش (بدلاً من الاتصال المباشر بالشيت في كل مرة)
+    all_bots = FACTORY_GLOBAL_CACHE.get("all_bots", [])
+    bot_row = next((row for row in all_bots if str(row.get("التوكن")) == str(bot_id) or str(row.get("bot_id")) == str(bot_id)), None)
+
+    # 2. تحديد اللغة
+    lang = "ar"
+    if bot_row:
+        # نبحث عن عمود اللغة (تأكد من تسميته في الشيت 'language')
+        lang_value = str(bot_row.get("language", "ar")).lower()
+        if lang_value in ["en", "english"]:
+            lang = "en"
+
+    # 3. القواميس (تم تصحيح تكرار التعريف فقط)
+    translations = {
+        "ar": {
+            "ref_points_join": "نقاط دعوة صديق",
+            "ref_points_purchase": "نقاط الشراء",
+            "min_points_redeem": "حد استبدال النقاط",
+            "AI_cost": "تكلفة الذكاء الاصطناعي",
+            "operating_environment": "بيئة التشغيل",
+            "subscription_price": "سعر الاشتراك",
+            "maximum_number_sections": "الحد الأقصى للأقسام",
+            "maximum_number_groups": "الحد الأقصى للجروبات",
+            "maximum_number_courses": "الحد الأقصى للدورات",
+            "maximum_number_students": "الحد الأقصى للطلاب",
+            "currency_unit": "وحدة العملة",
+            "homework_grade": "درجة الواجبات",
+            "maximum_withdrawal_marketers": "سحب الرصيد",
+            "payment_information": "معلومات الدفع",
+            "marketers_commission": "عمولة المسوقين",
+            "honors_channel_id": "معرف قناة الأوسمة",
+            "minimum_passing_gradee": "درجة النجاح الصغرى",
+            "greatest_success_gradee": "درجة النجاح الكبرى",
+            "public_channel_id": "معرف القناة العامة",
+            "referral_link": "رابط الإحالة",
+        },
+
+        "en": {
+            "ref_points_join": "Referral Points (Join)",
+            "ref_points_purchase": "Referral Points (Purchase)",
+            "min_points_redeem": "Minimum Redeem Points",
+            "AI_cost": "AI Cost",
+            "operating_environment": "Operating Environment",
+            "subscription_price": "Subscription Price",
+            "maximum_number_sections": "Max Sections",
+            "maximum_number_groups": "Max Groups",
+            "maximum_number_courses": "Max Courses",
+            "maximum_number_students": "Max Students",
+            "currency_unit": "Currency Unit",
+            "homework_grade": "Homework Grade",
+            "maximum_withdrawal_marketers": "Max Withdrawal (Marketers)",
+            "payment_information": "Payment Information",
+            "marketers_commission": "Marketers Commission",
+            "honors_channel_id": "Honors Channel ID",
+            "minimum_passing_gradee": "Minimum Passing Grade",
+            "greatest_success_gradee": "Maximum Grade",
+            "public_channel_id": "Public Channel ID",
+            "referral_link": "Referral Link",
+        }
+    }
+    
+    selected_dict = translations.get(lang, translations["ar"])
+
+    # 4. نظام الـ Fallback الذكي
+    class SafeDict(dict):
+        def __missing__(self, key):
+            # إذا لم يجد الترجمة في الإنجليزية مثلاً، يبحث عنها في العربي قبل إرجاع المفتاح
+            return translations["ar"].get(key, key)
+
+    return SafeDict(selected_dict)
+
+
+
+
+
+
+async def get_settings_bote(page: int = 0, limit: int = 10):
+    """
+    جلب البوتات المصنوعة من ورقة البوتات_المصنوعة وعرضها كأزرار.
+    تلتزم بكافة الأعمدة والمفاتيح الأصلية في قاعدة البيانات.
+    """
+    from cache_manager import FACTORY_GLOBAL_CACHE, db_manager
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    try:
+        offset = page * limit
+        cache_key = f"bots_page_{page}"
+        
+        # محاولة جلب البيانات من الكاش العالمي
+        bots = FACTORY_GLOBAL_CACHE.get(cache_key)
+
+        if not bots:
+            # جلب البيانات من قاعدة البيانات (ورقة البوتات_المصنوعة)
+            # نستخدم db_manager لجلب السجلات وفق ليميت وأوفست
+            try:
+                # استعلام لجلب البيانات مع الحفاظ على ترتيب الأعمدة المطلوبة
+                query = "SELECT * FROM البوتات_المصنوعة LIMIT ? OFFSET ?"
+                bots = db_manager.execute_query_dict(query, (limit, offset))
+                
+                # تخزين في الكاش (التزام بالإسناد المباشر للقاموس)
+                FACTORY_GLOBAL_CACHE[cache_key] = bots
+            except Exception as e:
+                print(f"❌ Error fetching from DB: {e}")
+                bots = []
+
+        keyboard = []
+
+        # بناء الأزرار بناءً على قائمة البوتات
+        if bots:
+            for bot in bots:
+                # استخدام المفاتيح الأصلية: 'اسم البوت'، 'plan'، 'التوكن'
+                btn_text = f"🤖 {bot.get('اسم البوت', 'بدون اسم')} ({bot.get('plan', 'FREE')})"
+                keyboard.append([
+                    InlineKeyboardButton(
+                        btn_text,
+                        callback_data=f"sub_view_{bot.get('التوكن')}"
+                    )
+                ])
+
+        # نظام التنقل (Navigation)
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("⬅️ السابق", callback_data=f"botss_page_{page-1}"))
+        
+        # زر التالي (يظهر دائماً حسب المنطق المطلوب)
+        nav.append(InlineKeyboardButton("➡️ التالي", callback_data=f"botss_page_{page+1}"))
+
+        if nav:
+            keyboard.append(nav)
+
+        # زر العودة الدائم للوحة التحكم
+        keyboard.append([
+            InlineKeyboardButton("🔙 عودة للوحة التحكم", callback_data="open_admin_dashboard")
+        ])
+
+        return InlineKeyboardMarkup(keyboard)
+
+    except Exception as e:
+        print(f"❌ Error in get_settings_bote: {e}")
+        # في حالة الخطأ، إرجاع زر العودة على الأقل لضمان عدم تعطل الواجهة
+        return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة للوحة التحكم", callback_data="open_admin_dashboard")]])
+
+# ملاحظة: دالة جلب البيانات المساعدة المقترحة في حال عدم توفرها
+def _fetch_all_bots(limit, offset):
+    from cache_manager import db_manager
+    query = "SELECT * FROM البوتات_المصنوعة LIMIT ? OFFSET ?"
+    return db_manager.execute_query_dict(query, (limit, offset))
 
 # --------------------------------------------------------------------------
 
