@@ -293,6 +293,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =========================================================
     user = update.effective_user
     bot_token = context.bot.token
+    # استخراج الآيدي الرقمي للبوت لضمان مطابقة الفلترة في "الورق"
+    bot_id_only = str(bot_token.split(':')[0]) if ':' in str(bot_token) else str(bot_token)
+    
     query = update.callback_query
     message = update.message or (query.message if query else None)
 
@@ -300,6 +303,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"\n--- [ 🟢 بدء تتبع عملية التمييز ] ---")
     print(f"👤 المستخدم الحالي: {user.full_name}")
     print(f"🆔 آيدي المستخدم (Current User ID): {user.id}")
+    print(f"🤖 آيدي البوت الحالي (Numeric ID): {bot_id_only}")
 
     # حماية ai_config من None
     def ensure_dict(val):
@@ -325,7 +329,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = get_bot_config(bot_token)
     
     # تحسين جلب آيدي الملاك لدعم القوائم أو النصوص المنفصلة بفاصلة (مطابقة لعمود admin_ids في الورق)
-    raw_admin_ids = config.get("admin_ids", "0")
+    raw_admin_ids = config.get("admin_ids") or config.get("آيدي_الأدمن") or "0"
     if isinstance(raw_admin_ids, list):
         admin_list = [int(str(i).strip()) for i in raw_admin_ids if str(i).strip().isdigit()]
     else:
@@ -350,10 +354,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_owner:
         if is_empty(ai_config.get('اسم_المؤسسة')):
             try:
-                # محاولة الجلب من قاعدة البيانات المحلية في حال فشل الكاش
+                # محاولة الجلب باستخدام المعرف الرقمي للمطابقة مع عمود bot_id في الورق
                 db_manager.cursor.execute(
                     'SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?',
-                    (str(bot_token),)
+                    (str(bot_id_only),)
                 )
                 db_row = db_manager.cursor.fetchone()
 
@@ -468,7 +472,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             all_users = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
             total_users = sum(
-                1 for u in all_users if str(u.get("bot_id")) == str(context.bot.token)
+                1 for u in all_users if str(u.get("bot_id")) == str(bot_id_only)
             )
         except Exception as e:
             total_users = "جاري التحديث.."
@@ -525,11 +529,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_cat_perm = str(check_user_permission(bot_token, user.id, "صلاحية_الأقسام")).upper() == "TRUE"
     
     # جلب بيانات الموظفين (ID الموظف أو المدرب هو العمود 3 في الهيكل)
-    employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
+    # ملاحظة: نستخدم الهيكل التنظيمي لفلترة المستخدم حسب آيدي البوت الحالي (العمود 1)
+    employees_data = FACTORY_GLOBAL_CACHE["data"].get("الهيكل_التنظيمي_والصلاحيات") or \
+                     FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
+    
     user_row = next(
         (row for row in employees_data if 
-            (isinstance(row, list) and len(row) > 2 and str(row[2]) == str(user.id)) or
-            (isinstance(row, dict) and str(row.get("ID_الموظف_أو_المدرب") or row.get("user_id")) == str(user.id))
+            (isinstance(row, list) and len(row) > 2 and str(row[2]) == str(user.id) and str(row[0]) == str(bot_id_only)) or
+            (isinstance(row, dict) and str(row.get("ID_الموظف_أو_المدرب") or row.get("user_id")) == str(user.id) and str(row.get("bot_id")) == str(bot_id_only))
         ),
         None
     )
@@ -538,7 +545,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"📋 فحص الصلاحيات: has_perm={has_perm}, is_staff={is_staff}")
 
     if is_owner:
-        print(f"✅ تم التوجيه: واجهة المالك (Key 5)")
+        print(f"✅ تم التمييز كـ: مالك (Owner)")
         final_text = (
             f"<b>مرحباً بك يا دكتور {user.first_name} في مركز قيادة منصتك</b> 🎓\n\n"
             f"{msg}\n\n"
@@ -574,16 +581,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # فحص هل المستخدم مسجل كطالب (مطابقة لورقة المستخدمين - عمود ID المستخدم)
         all_students = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
+        
+        # الفلترة بالمستخدم والبوت معاً لضمان عدم الخلط بين المنصات كما هو موضح في "الورق"
         is_registered_student = any(
-            str(s.get("ID المستخدم") or s.get("user_id") or s.get("id")) == str(user.id) 
+            (str(s.get("ID المستخدم") or s.get("user_id") or s.get("id")) == str(user.id)) and 
+            (str(s.get("bot_id")) == str(bot_id_only))
             for s in all_students
         )
         
-        # إذا لم يكن في الكاش، نعتمد على نتيجة save_user (إذا أعادت False فهو موجود مسبقاً)
+        # إذا لم يكن في الكاش، نعتمد على نتيجة save_user (إذا أعادت False فهو موجود مسبقاً لهذا البوت)
         if not is_registered_student and is_new_user is False:
             is_registered_student = True
             
-        print(f"🎓 هل المستخدم طالب مسجل؟ -> {is_registered_student}")
+        print(f"🎓 هل المستخدم طالب مسجل في هذا البوت؟ -> {is_registered_student}")
 
         org_name = ai_config.get('اسم_المؤسسة', 'منصتنا التعليمية')
         
@@ -601,6 +611,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =========================================================
     print(f"🚀 إرسال الواجهة النهائية... \n--- [ 🔴 انتهاء تتبع عملية التمييز ] ---\n")
     await safe_send(final_text, reply_markup=reply_markup, use_edit=True)
+
+
+
+
+
+
 
 # --------------------------------------------------------------------------
 # دالة توليد لوحة الصلاحيات (التي أرسلتها أنت)

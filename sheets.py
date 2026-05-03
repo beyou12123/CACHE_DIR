@@ -689,9 +689,12 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
     تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite):
     - الالتزام الصارم بـ 45 عموداً لجدول 'البوتات_المصنوعة'.
     - الالتزام الصارم بـ 39 عموداً لجدول 'إعدادات_المحتوى' (مطابقة للورق).
-    - تصحيح: استخدام bot_id الرقمي كمفتاح أساسي لضمان تعرف النظام على المالك.
+    - الحفاظ الكامل على كافة الوظائف الجانبية والمسميات العربية.
     """
     try:
+        # استيراد المكتبات اللازمة داخلياً لضمان العمل
+        import requests
+        import uuid
         from sheets import get_system_time, local_bulk_save, ensure_bot_sync_row, seed_default_settings, update_global_version
         from cache_manager import db_manager
 
@@ -699,10 +702,10 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         today = get_system_time("date")
         bot_token = str(bot_token).strip()
         
-        # استخراج الآيدي الرقمي فقط (المفتاح المستخدم في "الورق" للربط)
+        # استخراج الآيدي الرقمي (Numeric ID) وهو المفتاح الربط في "الورق"
         bot_id_only = bot_token.split(':')[0] if ':' in bot_token else "0"
 
-        # 1. جلب معلومات البوت من تيليجرام
+        # 1. جلب معلومات البوت من تيليجرام (الحفاظ على الوظيفة الأصلية)
         real_bot_name = bot_name
         username_bot = ""
         try:
@@ -712,7 +715,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
                 username_bot = res["result"]["username"]
         except: pass
 
-        # 2. حجر الأساس (ضمان وجود السجل الأساسي)
+        # 2. حجر الأساس (الحفاظ على صمامات الأمان) - استخدام الآيدي الرقمي للربط
         ensure_bot_sync_row(bot_id_only, owner_id)
         seed_default_settings(bot_token)
 
@@ -723,7 +726,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
             real_bot_name,          # 3. اسم البوت
             bot_token,              # 4. التوكن
             "نشط",                  # 5. حالة التشغيل
-            bot_id_only,            # 6. bot_id
+            bot_id_only,            # 6. bot_id (المعرف الرقمي للربط)
             username_bot,           # 7. username_bot
             now,                    # 8. تاريخ الإنشاء
             now,                    # 9. آخر تشغيل
@@ -775,16 +778,16 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
 
         # 5. إدارة سجل "إعدادات_المحتوى" (39 عموداً بدقة وفقاً للهيكل التنظيمي للورق)
         content_row = [""] * 39
-        content_row[0] = bot_id_only          # 1. bot_id (يجب أن يكون الرقم التعريفي للربط)
+        content_row[0] = bot_id_only          # 1. bot_id (يجب أن يكون الرقم الرقمي للمطابقة مع start_handler)
         content_row[1] = "أهلاً بك! 🤖"         # 2. الرسالة الترحيبية
         content_row[2] = "لا توجد قوانين."     # 3. القوانين
-        content_row[3] = "البوت متوقف."        # 4. رد التوقف
+        content_row[3] = "عذراً، البوت متوقف." # 4. رد التوقف
         content_row[4] = "false"              # 5. auto_reply
         content_row[5] = "false"              # 6. ai_enabled
         content_row[6] = "true"               # 7. welcome_enabled
         content_row[7] = "[]"                 # 8. buttons
         content_row[8] = "[]"                 # 9. banned_words
-        content_row[9] = str(owner_id)        # 10. admin_ids (وضع آيدي المالك الفعلي)
+        content_row[9] = str(owner_id)        # 10. admin_ids (المسؤول الفعلي)
         content_row[10] = "ar"                # 11. language
         content_row[11] = "default"           # 12. theme
         content_row[12] = "0"                 # 13. delay_response
@@ -792,14 +795,16 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         content_row[14] = "[]"                # 15. custom_commands
         content_row[15] = "صباح الخير والهمة"  # 16. welcome_morning
         content_row[16] = "طاب يومك السعيد"    # 17. welcome_noon
-        content_row[17] = "مساء الفكر المستنير" # 18. welcome_evening
+        content_row[17] = "مساء النور والفكر"  # 18. welcome_evening
         content_row[18] = "ليلة هادئة ومثمرة"  # 19. welcome_night
-        content_row[19] = "منصتي التعليمية"    # 20. اسم_المؤسسة
+        content_row[19] = "المؤسسة التعليمية"  # 20. اسم_المؤسسة
         content_row[20] = "أنت مساعد ذكي"      # 21. تعليمات_AI
-        content_row[35] = "Default Payment"   # 36. إعدادات_الدفع
+        content_row[35] = "إعدادات الدفع"      # 36. إعدادات_الدفع
+        content_row[36] = "1.0.0"             # 37. إصدار_التحديث
+        content_row[37] = "synced"            # 38. حالة_المزامنة
         content_row[38] = now                 # 39. وقت_التعديل
 
-        # منع التكرار في جدول الإعدادات باستخدام المعرف الرقمي
+        # منع التكرار في جدول الإعدادات (محلياً)
         db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_id_only,))
         if db_manager.cursor.fetchone():
             update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, "وقت_التعديل" = ?, sync_status = "pending" WHERE "bot_id" = ?'
@@ -809,7 +814,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
 
         db_manager.conn.commit()
         
-        # 6. تحديث الكاش العالمي والمزامنة
+        # 6. تحديث الكاش العالمي
         update_global_version("GLOBAL_SYNC") 
         return True
 
