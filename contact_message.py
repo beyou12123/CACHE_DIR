@@ -238,10 +238,8 @@ from cache_manager import (
     save_cache_to_disk, 
     fetch_full_factory_data,
     export_bot_data_to_excel,
-    db_manager,
+    db_manager as dm,
     update_global_version,
-    export_bot_data_to_excel,
-    fetch_full_factory_data,
     check_excel_permission_from_cache
 )
 
@@ -452,7 +450,7 @@ async def handle_contact_message(update: Update, context: ContextTypes.DEFAULT_T
 
                 # 2. تنفيذ الاستعادة عبر الدالة الموجودة داخل الكلاس
                 # نمرر المحتوى (content) ومعرف المستخدم (user_id) للتحقق من الصلاحية
-                success = await db_manager.restore_from_telegram(
+                success = await db.restore_from_telegram(
                     file_content=content, 
                     user_id=update.effective_user.id
                 )

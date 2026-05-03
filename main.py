@@ -9,7 +9,9 @@ from datetime import datetime
 import json
 import SubscriptionManager
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager
+
+from cache_manager import FACTORY_GLOBAL_CACHE, smart_sync_check, db_manager as dm
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from sheets import sync_ad_campaign_results, connect_to_google
 
@@ -316,10 +318,10 @@ def start_scheduler():
     )  
 
     # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة (Pending) لجوجل شيت فجراً  
-    # تصحيح: الاستدعاء يجب أن يتم عبر db_manager.push_to_google_sheets
+    # تصحيح: الاستدعاء يجب أن يتم عبر dm.push_to_google_sheets
     # وتأكدنا أن الدالة في الكلاس لا تطلب spreadsheet كوسيط إجباري أو يتم تمريره من الإعدادات
     scheduler.add_job(  
-        db_manager.push_to_google_sheets,   
+        dm.push_to_google_sheets,   
         'cron',   
         hour=3,   
         minute=30,  
@@ -512,7 +514,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # 2. استدعاء الدالة مع تمرير المعاملات اللازمة (context.bot أو الـ bot الحالي)
             # الدالة تتطلب (shared_bot, user_id) لتعمل بنظام "الهوية المزدوجة"
-            await db_manager.create_backup_to_telegram(shared_bot=query.get_bot(), user_id=user_id)
+            await dm.create_backup_to_telegram(shared_bot=query.get_bot(), user_id=user_id)
             
             await query.edit_message_text("✅ تم إرسال النسخة الاحتياطية المشفرة إلى القناة بنجاح! 🛡️")
 
@@ -534,20 +536,43 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("‼️ **تحذير حرج:**\nهذا الإجراء سيحذف كافة البيانات في جوجل شيت. هل أنت متأكد؟", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     elif data == "execute_hard_reset":
-        # --- [ إضافة جديدة: حماية المطور ] ---
+        # --- [ حماية المطور ] ---
         if user_id != DEVELOPER_ID:
             return
 
-        await query.edit_message_text("⏳ جاري التصفير...")
-        if reset_entire_database():
-            await query.edit_message_text("✅ تم تصفير النظام بنجاح.\nيرجى إعادة تشغيل السيرفر الآن.")
-        else:
-            await query.edit_message_text("❌ فشلت العملية. راجع السجلات.")
+        # إبلاغ المطور ببدء العملية المعقدة
+        await query.edit_message_text("⏳ جاري تنفيذ الفرمتة الشاملة (تطهير السحاب + مسح SQLite + تصفير الرام)...")
+        
+        try:
+            # استدعاء المحرك المطور من ملف cache_manager.py
+            # نستخدم await لأن الدالة async وتتعامل مع API جوجل
+            success = await dm.hard_factory_reset_comprehensive() 
+
+            if success:
+                # رسالة النجاح النهائية بعد إعادة البناء التلقائي
+                success_text = (
+                    "✅ **تمت إعادة ضبط المصنع بنجاح**\n\n"
+                    "🔹 تم حذف كافة الجداول السحابية.\n"
+                    "🔹 تم تدمير وإعادة إنشاء SQLite.\n"
+                    "🔹 تم تصفير الكاش (RAM) بالكامل.\n"
+                    "🔹 تم إعادة بناء الهيكل (36 جدول) باللون الموحد.\n\n"
+                    "⚠️ النظام الآن جاهز للعمل كنسخة خام."
+                )
+                await query.edit_message_text(success_text, parse_mode="Markdown")
+            else:
+                await query.edit_message_text("❌ فشلت عملية إعادة البناء. يرجى فحص ملف السجلات (Logs).")
+        
+        except Exception as e:
+            # تسجيل الخطأ في حال حدوث مشكلة في الاتصال
+            import logging
+            logging.getLogger("BOT_MAIN").error(f"Error in hard reset: {e}")
+            await query.edit_message_text(f"❌ حدث خطأ تقني أثناء التصفير:\n`{str(e)}`", parse_mode="Markdown")
+
 
     elif data.startswith("confirm_delete_bot_"):
         target_token = data.replace("confirm_delete_bot_", "")
      
-        success = await db_manager.delete_bot_permanently(target_token)
+        success = await dm.delete_bot_permanently(target_token)
         
         if success:
             await query.edit_message_text("✅ تم حذف البوت وإزالته من سجلات المصنع بنجاح.")
@@ -752,9 +777,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # إجبار كافة السجلات على التحول لحالة 'pending' لضمان رفعها حتى لو كانت قديمة
         from cache_manager import db_manager
-        db_manager.cursor.execute("UPDATE 'البوتات_المصنوعة' SET sync_status = 'pending'")
-        db_manager.cursor.execute("UPDATE 'المستخدمين' SET sync_status = 'pending'") # اختياري للمستخدمين أيضاً
-        db_manager.conn.commit()
+        dm.cursor.execute("UPDATE 'البوتات_المصنوعة' SET sync_status = 'pending'")
+        dm.cursor.execute("UPDATE 'المستخدمين' SET sync_status = 'pending'") # اختياري للمستخدمين أيضاً
+        dm.conn.commit()
        
         try:
             # استدعاء الدالة المطورة من داخل كلاس قاعدة البيانات (db_manager)
@@ -764,7 +789,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # لكي لا يتوقف البوت عن الرد على المستخدمين الآخرين أثناء المزامنة
             import asyncio
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, db_manager.sync_schema)
+            await loop.run_in_executor(None, dm.sync_schema)
             
             # 3. إرسال تأكيد النجاح النهائي
             await query.edit_message_text(
@@ -796,7 +821,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id not in ALL_ADMINS:
             await deny_access(query)
             return
-        await db_manager.create_backup_to_telegram(shared_bot=context.bot, user_id=update.effective_user.id)
+        await dm.create_backup_to_telegram(shared_bot=context.bot, user_id=update.effective_user.id)
 
         
     elif data == "start_restore_request":
@@ -1875,7 +1900,7 @@ def start_scheduler():
 
     # 3. الرفع الشامل (Push): رفع كل العمليات المعلقة لجوجل شيت فجراً  
     scheduler.add_job(  
-        db_manager.push_to_google_sheets,   
+        dm.push_to_google_sheets,   
         'cron',   
         hour=3,   
         minute=30,  
@@ -1936,8 +1961,8 @@ async def delete_database_handler(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text("⏳ جاري إغلاق الاتصال وتدمير القاعدة القديمة...")
 
         # 1. إغلاق الاتصال لتجنب خطأ "ملف قيد الاستخدام"
-        if db_manager and db_manager.conn:
-            db_manager.conn.close()
+        if db_manager and dm.conn:
+            dm.conn.close()
 
         # 2. حذف الملف فيزيائياً
         if os.path.exists(DB_PATH):
@@ -1973,7 +1998,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("جاري الاتصال بجوجل...")
         print("⏳ [MANUAL LOG]: تم طلب سحب البيانات من جوجل شيت.")
         await query.edit_message_text("⏳ جاري سحب البيانات الكاملة من جوجل (قد يستغرق وقتاً بسبب الـ Quota)...")
-        db_manager.sync_schema(structure)
+        dm.sync_schema(structure)
         await query.message.reply_text("✅ تمت المزامنة بنجاح من جوجل شيت.")
         
     elif data == "init_tables_only":
@@ -1982,7 +2007,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         ss = connect_to_google() 
         print("⚙️ [MANUAL LOG]: تم طلب تهيئة الجداول المحلية فقط.")
         await query.edit_message_text("⚙️ جاري بناء الهياكل المحلية (SQLite) فقط...")
-        db_manager.sync_schema(spreadsheet=ss)
+        dm.sync_schema(spreadsheet=ss)
         await query.message.reply_text("✅ تم إنشاء الجداول محلياً بنجاح.")
 
 
@@ -2010,7 +2035,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("⏳ **بدء عملية الاستعادة...**\nجاري جلب الملف من القناة.")
         
         # 1. تنفيذ الاستعادة (تحديث ملف database.db المحلي)
-        success = await db_manager.restore_from_telegram()
+        success = await dm.restore_from_telegram()
         
         if success:
             print("✅ [MANUAL LOG]: اكتملت عملية الاستعادة بنجاح. جاري تنشيط البيانات...")
@@ -2023,7 +2048,7 @@ async def manual_init_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 3. تحديث قائمة البوتات في الرام من الملف المحلي الجديد
                 # ملاحظة: لا نسحب من جوجل هنا لكي لا نمسح ما استعدناه
                 from cache_manager import db_manager
-                all_bots = await db_manager.get_all_bots()
+                all_bots = await dm.get_all_bots()
                 FACTORY_GLOBAL_CACHE["all_bots"] = all_bots
                 
                 final_msg = "✅ **اكتملت استعادة البيانات بنجاح!**\nتم جلب النسخة من تليجرام وتنشيطها في ذاكرة البوت فوراً."
@@ -2227,7 +2252,7 @@ if __name__ == "__main__":
                 print("🚨 [CRITICAL]: تم اكتشاف مسح البيانات! جاري الاستعادة التلقائية من التليجرام...")
                 
                 # دالة الاستعادة التي تبحث عن آخر ملف مثبت (Pinned) في قناتك
-                restore_success = await db_manager.restore_from_telegram()
+                restore_success = await dm.restore_from_telegram()
                 
                 if restore_success:
                     print("✅ [RESTORE]: تمت استعادة قاعدة البيانات بنجاح قبل الإقلاع.")

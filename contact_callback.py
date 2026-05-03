@@ -234,15 +234,14 @@ from course_engine import (
 # --- [ إدارة الكاش والبيانات ] ---
 from cache_manager import (
     FACTORY_GLOBAL_CACHE,
+    db_manager as dm,
     save_cache_to_disk, 
     fetch_full_factory_data,
     export_bot_data_to_excel,
-    db_manager,
     update_global_version,
-    export_bot_data_to_excel,
-    fetch_full_factory_data,
     check_excel_permission_from_cache
 )
+ 
 
 # --- [ استيراد محرك إعدادات المؤسسة الجديد ] ---
 from set_org import (
@@ -254,6 +253,7 @@ from set_org import (
     org_input_handler,
     trigger_add_org_handler 
 )
+
 
 
 # --------------------------------------------------------------------------
@@ -2423,7 +2423,7 @@ async def contact_callback_handler(update: Update, context: ContextTypes.DEFAULT
             
             # استدعاء الدالة من داخل الكائن db_manager مع تمرير المعاملات المطلوبة
             # المعاملات: البوت الحالي، معرف المستخدم، ومعرف البوت (اختياري)
-            await db_manager.create_backup_to_telegram(
+            await dm.create_backup_to_telegram(
                 shared_bot=context.bot, 
                 user_id=update.effective_user.id
             )

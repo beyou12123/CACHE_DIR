@@ -497,7 +497,7 @@ async def start_all_sub_bots():
     import asyncio
     import aiohttp
     import logging
-    from cache_manager import FACTORY_GLOBAL_CACHE, db_manager
+    from cache_manager import FACTORY_GLOBAL_CACHE, db_manager as dm
     from sheets import get_all_active_bots
 
     logger = logging.getLogger("SUB_BOTS_MANAGER")
@@ -527,8 +527,8 @@ async def start_all_sub_bots():
             if not active_bots:
                 print("⚠️ [LOG]: fallback إضافي → SQLite مباشر")
                 try:
-                    db_manager.cursor.execute("SELECT * FROM البوتات_المصنوعة")
-                    rows = db_manager.cursor.fetchall()
+                    dm.cursor.execute("SELECT * FROM البوتات_المصنوعة")
+                    rows = dm.cursor.fetchall()
                     active_bots = [dict(row) for row in rows]
                     print(f"📊 [SUCCESS]: تم جلب {len(active_bots)} من SQLite")
                     loader_logger.info(f"Fetched {len(active_bots)} bots from SQLite.")

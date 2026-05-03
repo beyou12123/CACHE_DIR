@@ -10,7 +10,7 @@ import random
 # استيراد كل شيء من الملف الموحد الجديد
 from cache_manager import (
     DataManager, 
-    db_manager, 
+    db_manager as dm,
     get_bot_data_from_cache, 
     smart_sync_check, 
     update_global_version,
@@ -527,9 +527,9 @@ def local_save_wrapper(table_name, data_list):
         query = f"INSERT INTO '{table_name}' VALUES (NULL, {placeholders}, 'pending', CURRENT_TIMESTAMP)"
         
         # 4. التنفيذ مع التحقق من وجود الكرسر
-        if db_manager and db_manager.cursor:
-            db_manager.cursor.execute(query, data_list)
-            db_manager.conn.commit()
+        if db_manager and dm.cursor:
+            dm.cursor.execute(query, data_list)
+            dm.conn.commit()
             return True
         else:
             print(f"⚠️ محرك قاعدة البيانات لا يزال غير جاهز للحفظ في {table_name}")
@@ -572,16 +572,16 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
 
         # 2. التحقق من وجود المستخدم ومعالجة التكرار (البحث بالهوية المزدوجة: مستخدم + بوت)
         # تم تصحيح الاستعلام ليفحص المستخدم داخل هذا البوت تحديداً لضمان دقة التمييز
-        db_manager.cursor.execute(
+        dm.cursor.execute(
             'SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ? AND "bot_id" = ?', 
             (user_id_str, bot_token_str)
         )
-        results = db_manager.cursor.fetchall() 
+        results = dm.cursor.fetchall() 
 
         if results:
             # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم في نفس البوت) وتطهيره
             if len(results) > 1:
-                db_manager.cursor.execute('''
+                dm.cursor.execute('''
                     DELETE FROM "المستخدمين" 
                     WHERE "ID المستخدم" = ? AND "bot_id" = ?
                     AND local_id NOT IN (
@@ -589,7 +589,7 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
                         WHERE "ID المستخدم" = ? AND "bot_id" = ?
                     )
                 ''', (user_id_str, bot_token_str, user_id_str, bot_token_str))
-                db_manager.conn.commit()
+                dm.conn.commit()
                 print(f"🧹 تم تطهير تكرار قديم للمستخدم {user_id_str} في البوت {bot_token_str}")
 
             # ب- تحديث بيانات النشاط للمستخدم الحالي في هذا البوت فقط
@@ -598,15 +598,15 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
                 SET "اسم المستخدم" = ?, "آخر نشاط" = ?, sync_status = "pending" 
                 WHERE "ID المستخدم" = ? AND "bot_id" = ?
             '''
-            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id_str, bot_token_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id_str, bot_token_str))
+            dm.conn.commit()
             return False  # العضو مسجل مسبقاً في هذا البوت المحدد
 
         else:
             # ج- إضافة مستخدم جديد تماماً لهذا البوت
             local_bulk_save("المستخدمين", user_row)
             print(f"👤 مستخدم جديد مسجل محلياً: {user_id_str} في البوت: {bot_token_str}")
-            db_manager.conn.commit()
+            dm.conn.commit()
             return True  # العضو جديد فعلاً على هذا البوت
 
     except Exception as e:
@@ -641,8 +641,8 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
 
         # 2. فحص هيكل الجدول الفعلي في قاعدة البيانات لمعرفة عدد الأعمدة المطلوبة
         # نستخدم PRAGMA table_info لجلب معلومات الأعمدة
-        db_manager.cursor.execute(f'PRAGMA table_info("{table_name}")')
-        table_info = db_manager.cursor.fetchall()
+        dm.cursor.execute(f'PRAGMA table_info("{table_name}")')
+        table_info = dm.cursor.fetchall()
         
         if not table_info:
             print(f"❌ خطأ: لم يتم العثور على هيكل للجدول [{table_name}] في قاعدة البيانات.")
@@ -668,15 +668,15 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
         query = f'INSERT INTO "{table_name}" VALUES (NULL, {placeholders}, ?, CURRENT_TIMESTAMP)'
         
         # 6. التنفيذ مع دمج حالة المزامنة (sync_status)
-        db_manager.cursor.execute(query, (*final_data, sync_status))
-        db_manager.conn.commit()
+        dm.cursor.execute(query, (*final_data, sync_status))
+        dm.conn.commit()
         
         return True
         
     except Exception as e:
         print(f"❌ خطأ حرج في الحفظ المحلي المطور للجدول [{table_name}]: {e}")
         # في حال حدوث خطأ "Database Locked" أو غيره، نحاول التراجع عن العمليات المعلقة
-        try: db_manager.conn.rollback()
+        try: dm.conn.rollback()
         except: pass
         return False
 
@@ -769,10 +769,10 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         ]
 
         # 4. منع التكرار في جدول البوتات (محلياً)
-        db_manager.cursor.execute('SELECT local_id FROM "البوتات_المصنوعة" WHERE "bot_id" = ?', (bot_id_only,))
-        if db_manager.cursor.fetchone():
+        dm.cursor.execute('SELECT local_id FROM "البوتات_المصنوعة" WHERE "bot_id" = ?', (bot_id_only,))
+        if dm.cursor.fetchone():
             update_query = 'UPDATE "البوتات_المصنوعة" SET "حالة التشغيل" = ?, "آخر تشغيل" = ?, "التوكن" = ?, sync_status = "pending" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(update_query, ("نشط", now, bot_token, bot_id_only))
+            dm.cursor.execute(update_query, ("نشط", now, bot_token, bot_id_only))
         else:
             local_bulk_save("البوتات_المصنوعة", bot_row)
 
@@ -805,14 +805,14 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         content_row[38] = now                 # 39. وقت_التعديل
 
         # منع التكرار في جدول الإعدادات (محلياً)
-        db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_id_only,))
-        if db_manager.cursor.fetchone():
+        dm.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_id_only,))
+        if dm.cursor.fetchone():
             update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, "وقت_التعديل" = ?, sync_status = "pending" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(update_content_query, (str(owner_id), now, bot_id_only))
+            dm.cursor.execute(update_content_query, (str(owner_id), now, bot_id_only))
         else:
             local_bulk_save("إعدادات_المحتوى", content_row)
 
-        db_manager.conn.commit()
+        dm.conn.commit()
         
         # 6. تحديث الكاش العالمي
         update_global_version("GLOBAL_SYNC") 
@@ -837,8 +837,8 @@ def update_content_setting(bot_id, column_name, new_value):
     try:
         # 1. جلب العناوين من الجدول المحلي لمعرفة معلومات الأعمدة
         # نستخدم الاقتباسات المزدوجة لاسم الجدول العربي لضمان سلامة الاستعلام في SQLite
-        db_manager.cursor.execute(f"PRAGMA table_info('إعدادات_المحتوى')")
-        columns = [info[1] for info in db_manager.cursor.fetchall()]
+        dm.cursor.execute(f"PRAGMA table_info('إعدادات_المحتوى')")
+        columns = [info[1] for info in dm.cursor.fetchall()]
         
         # البحث عن اسم العمود (تجاهل الأعمدة التقنية local_id و sync_status)
         if column_name in columns:
@@ -846,8 +846,8 @@ def update_content_setting(bot_id, column_name, new_value):
             # واستخدام الاقتباسات المزدوجة لاسم العمود المحدث لضمان قبول المسميات العربية (مثل "اسم_المؤسسة")
             query = f'UPDATE "إعدادات_المحتوى" SET "{column_name}" = ?, sync_status = "pending" WHERE "bot_id" = ?'
             
-            db_manager.cursor.execute(query, (str(new_value), str(bot_id)))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(new_value), str(bot_id)))
+            dm.conn.commit()
             
             # تحديث نسخة الكاش لضمان الانعكاس الفوري في البوتات (الالتزام بموضع الاستدعاء)
             update_global_version("GLOBAL_SYNC") 
@@ -908,7 +908,7 @@ def check_connection():
     try:
         # 1. التأكد من أن ملف القاعدة المحلي مفتوح وقابل للقراءة
         # استخدام استعلام خفيف (SELECT 1) للتأكد من حيوية المحرك
-        db_manager.cursor.execute("SELECT 1")
+        dm.cursor.execute("SELECT 1")
         
         # 2. التأكد من اتصال جوجل شيت (المنطق الأصلي الخاص بك دون تغيير)
         try:
@@ -984,8 +984,8 @@ def get_total_bots_count():
     try:
         # التأكد من استخدام الاقتباسات لاسم الجدول العربي
         query = 'SELECT COUNT(*) as total FROM "البوتات_المصنوعة"'
-        db_manager.cursor.execute(query)
-        result = db_manager.cursor.fetchone()
+        dm.cursor.execute(query)
+        result = dm.cursor.fetchone()
         
         # إذا كان المحرك يستخدم sqlite3.Row، نصل للقيمة عبر المفتاح 'total'
         # وإذا كان يستخدم Tuple، نصل إليها عبر الفهرس [0]
@@ -1009,8 +1009,8 @@ def get_total_factory_users():
     try:
         # التأكد من استخدام الاقتباسات لاسم الجدول العربي "المستخدمين"
         query = 'SELECT COUNT(*) as total FROM "المستخدمين"'
-        db_manager.cursor.execute(query)
-        result = db_manager.cursor.fetchone()
+        dm.cursor.execute(query)
+        result = dm.cursor.fetchone()
         
         # التعامل الذكي مع كائن sqlite3.Row أو Tuple لضمان استرجاع الرقم
         if result:
@@ -1306,9 +1306,9 @@ def seed_default_settings(bot_token):
         for item in default_keys:
             # التعديل: استخدام "bot_id" و "المفتاح_البرمجي" بدلاً من column_1 و column_2
             query = 'SELECT 1 FROM "الإعدادات" WHERE "bot_id" = ? AND "المفتاح_البرمجي" = ?'
-            db_manager.cursor.execute(query, (str(bot_token), item['key']))
+            dm.cursor.execute(query, (str(bot_token), item['key']))
             
-            if not db_manager.cursor.fetchone():
+            if not dm.cursor.fetchone():
                 # 3. إعداد الصف الجديد (الالتزام الصارم بالترتيب اليدوي الذي وضعته)
                 new_row = [
                     str(bot_token),   # 1: bot_id
@@ -1323,7 +1323,7 @@ def seed_default_settings(bot_token):
                 local_bulk_save("الإعدادات", new_row)
                 print(f"✅ [محلي] تم زرع المفتاح: {item['key']}")
         
-        db_manager.conn.commit()
+        dm.conn.commit()
         return True
 
     except Exception as e:
@@ -1360,11 +1360,11 @@ def update_meta_info():
             try:
                 # نستخدم الاقتباسات المزدوجة لضمان توافق الأسماء التقنية مع SQLite
                 query = 'INSERT OR REPLACE INTO "_meta" ("key", "value", "updated_at", "sync_status") VALUES (?, ?, ?, "pending")'
-                db_manager.cursor.execute(query, (str(row[0]), str(row[1]), str(row[2])))
+                dm.cursor.execute(query, (str(row[0]), str(row[1]), str(row[2])))
             except Exception as sql_e:
                 print(f"⚠️ تنبيه: فشل تحديث سجل ميتا محلي: {sql_e}")
         
-        db_manager.conn.commit()
+        dm.conn.commit()
 
         # 3. التحديث في Google Sheets (الالتزام الصارم بالنطاق A1:C7)
         # التأكد من وجود ورقة الميتا في الكاش _ws_cache
@@ -1443,8 +1443,8 @@ def delete_category_by_id(bot_token, cat_id):
             # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_القسم" لجدول "الأقسام"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'DELETE FROM "الأقسام" WHERE "bot_id" = ? AND "معرف_القسم" = ?'
-            db_manager.cursor.execute(query, (bot_token_str, cat_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (bot_token_str, cat_id_str))
+            dm.conn.commit()
             
             # تحديث نسخة المزامنة لتطهير الرام فوراً
             update_global_version(bot_token)
@@ -1491,8 +1491,8 @@ def update_category_name(bot_token, cat_id, new_name):
             # التعديل: استخدام المسميات العربية "اسم_القسم" بدلاً من column_3
             # واستخدام "bot_id" و "ID_القسم" لضمان التوافق مع الهيكل الجديد
             query = 'UPDATE "الأقسام" SET "اسم_القسم" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "ID_القسم" = ?'
-            db_manager.cursor.execute(query, (str(new_name).strip(), str(bot_token).strip(), str(cat_id).strip()))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(new_name).strip(), str(bot_token).strip(), str(cat_id).strip()))
+            dm.conn.commit()
             print(f"🔄 [محلي] تم تحديث اسم القسم إلى: {new_name}")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل التحديث المحلي، سيتم الاعتماد على جوجل فقط: {local_e}")
@@ -1670,8 +1670,8 @@ def delete_course_by_id(bot_token, course_id):
             # التعديل: استخدام المسميات العربية "bot_id" و "معرف_الدورة" لجدول "الدورات_التدريبية"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'DELETE FROM "الدورات_التدريبية" WHERE "bot_id" = ? AND "معرف_الدورة" = ?'
-            db_manager.cursor.execute(query, (str(bot_token).strip(), str(course_id).strip()))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(bot_token).strip(), str(course_id).strip()))
+            dm.conn.commit()
             print(f"🗑️ [محلي] تم حذف الدورة {course_id} من القاعدة المحلية.")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل الحذف المحلي، سيتم الاعتماد على حذف جوجل فقط: {local_e}")
@@ -1722,8 +1722,8 @@ def find_user_by_username(bot_token, username):
             # التعديل: استخدام المسميات العربية "bot_id"، "يوزر_المستخدم"، "ID المستخدم"، "الاسم"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'SELECT * FROM "المستخدمين" WHERE "bot_id" = ? AND LOWER("يوزر_المستخدم") = ?'
-            db_manager.cursor.execute(query, (str(bot_token), search_name))
-            row_local = db_manager.cursor.fetchone()
+            dm.cursor.execute(query, (str(bot_token), search_name))
+            row_local = dm.cursor.fetchone()
             
             if row_local:
                 # تحويل الصف إلى قاموس (الالتزام بالمفاتيح id و name كما في طلبك)
@@ -1867,8 +1867,8 @@ def get_ai_setup(bot_token):
         try:
             # تم التغيير لجدول "إعدادات_المحتوى" مع الحفاظ على الاقتباسات المزدوجة للأسماء العربية
             query = 'SELECT * FROM "إعدادات_المحتوى" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(query, (clean_token,))
-            row_local = db_manager.cursor.fetchone()
+            dm.cursor.execute(query, (clean_token,))
+            row_local = dm.cursor.fetchone()
             
             if row_local:
                 res_local = dict(row_local)
@@ -1928,8 +1928,8 @@ def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instru
         # 1. المعالجة المحلية (SQLite) - جدول "إعدادات_المحتوى"
         try:
             # التحقق من وجود البوت في جدول إعدادات_المحتوى
-            db_manager.cursor.execute('SELECT "bot_id" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token_clean,))
-            existing_local = db_manager.cursor.fetchone()
+            dm.cursor.execute('SELECT "bot_id" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token_clean,))
+            existing_local = dm.cursor.fetchone()
 
             if existing_local:
                 # تحديث فقط اسم المؤسسة وتعليمات AI ووقت التعديل
@@ -1945,7 +1945,7 @@ def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instru
                 
                 update_query += ' WHERE "bot_id" = ?'
                 params.append(bot_token_clean)
-                db_manager.cursor.execute(update_query, params)
+                dm.cursor.execute(update_query, params)
             else:
                 # إنشاء صف جديد تماماً (39 عموداً) - المعلومات المطلوبة في أماكنها والباقي "0"
                 # ترتيب الأعمدة حسب الهيكل المرفق:
@@ -1959,9 +1959,9 @@ def save_ai_setup(bot_token, user_id, username, institution_name=None, ai_instru
                 
                 # بناء استعلام الإدخال لـ 39 عموداً
                 placeholders = ', '.join(['?'] * 39)
-                db_manager.cursor.execute(f'INSERT INTO "إعدادات_المحتوى" VALUES ({placeholders})', local_row)
+                dm.cursor.execute(f'INSERT INTO "إعدادات_المحتوى" VALUES ({placeholders})', local_row)
             
-            db_manager.conn.commit()
+            dm.conn.commit()
             print(f"✅ [محلي] تم تحديث إعدادات المحتوى (39 عموداً) بنجاح.")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل الحفظ المحلي في إعدادات_المحتوى: {local_e}")
@@ -2091,8 +2091,8 @@ def get_employee_permissions(bot_token, employee_id):
             # التعديل: استخدام المسميات العربية "bot_id" و "ID_الموظف_أو_المدرب" بناءً على هيكلك
             # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'SELECT * FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
-            db_manager.cursor.execute(query, (str(bot_token), str(employee_id)))
-            row_local = db_manager.cursor.fetchone()
+            dm.cursor.execute(query, (str(bot_token), str(employee_id)))
+            row_local = dm.cursor.fetchone()
             
             if row_local:
                 # تحويل الصف إلى قاموس (Dict) ليطابق مخرجات get_all_records()
@@ -2128,8 +2128,8 @@ def toggle_employee_permission(bot_token, employee_id, col_name):
         try:
             # جلب القيمة الحالية مع مراعاة الاقتباسات لاسم العمود العربي
             query_select = f'SELECT "{col_name}" FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
-            db_manager.cursor.execute(query_select, (str(bot_token), str(employee_id)))
-            current_row = db_manager.cursor.fetchone()
+            dm.cursor.execute(query_select, (str(bot_token), str(employee_id)))
+            current_row = dm.cursor.fetchone()
             
             if current_row:
                 # استخراج القيمة من القاموس المرتجع باستخدام اسم العمود كـ Key
@@ -2138,8 +2138,8 @@ def toggle_employee_permission(bot_token, employee_id, col_name):
                 
                 # تحديث القيمة محلياً ووسمها بـ pending
                 query_update = f'UPDATE "الهيكل_التنظيمي_والصلاحيات" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
-                db_manager.cursor.execute(query_update, (new_val, str(bot_token), str(employee_id)))
-                db_manager.conn.commit()
+                dm.cursor.execute(query_update, (new_val, str(bot_token), str(employee_id)))
+                dm.conn.commit()
                 print(f"🔄 [محلي] تم تبديل صلاحية {col_name} إلى {new_val}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي للصلاحية: {local_e}")
@@ -2238,8 +2238,8 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
             # التعديل: استخدام المسميات العربية "bot_id" و "ID_الموظف_أو_المدرب"
             # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية للأعمدة (مثل "الدورات_المسموحة")
             query_select = f'SELECT "{scope_column}" FROM "الهيكل_التنظيمي_والصلاحيات" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
-            db_manager.cursor.execute(query_select, (bot_token_str, employee_id_str))
-            local_row = db_manager.cursor.fetchone()
+            dm.cursor.execute(query_select, (bot_token_str, employee_id_str))
+            local_row = dm.cursor.fetchone()
             
             if local_row:
                 # استخراج القيمة الحالية من القاموس المرتجع باستخدام اسم العمود
@@ -2256,8 +2256,8 @@ def toggle_scope_id(bot_token, employee_id, scope_column, target_id):
                 
                 # تحديث القيمة محلياً ووسمها بـ pending للمزامنة اللاحقة
                 query_update = f'UPDATE "الهيكل_التنظيمي_والصلاحيات" SET "{scope_column}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "ID_الموظف_أو_المدرب" = ?'
-                db_manager.cursor.execute(query_update, (new_value, bot_token_str, employee_id_str))
-                db_manager.conn.commit()
+                dm.cursor.execute(query_update, (new_value, bot_token_str, employee_id_str))
+                dm.conn.commit()
                 print(f"🔄 [محلي] تم تحديث {scope_column} للموظف {employee_id_str}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي للنطاق: {local_e}")
@@ -2421,8 +2421,8 @@ def get_groups_by_course(bot_token, course_id):
             # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_الدورة"
             # استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'SELECT * FROM "إدارة_المجموعات" WHERE "bot_id" = ? AND "معرف_الدورة" = ?'
-            db_manager.cursor.execute(query, (str(bot_token).strip(), str(course_id).strip()))
-            rows_local = db_manager.cursor.fetchall()
+            dm.cursor.execute(query, (str(bot_token).strip(), str(course_id).strip()))
+            rows_local = dm.cursor.fetchall()
             
             if rows_local:
                 # تحويل الصفوف المحلية إلى قواميس لتطابق مخرجات get_all_records()
@@ -2524,8 +2524,8 @@ def delete_group_by_id(bot_token, group_id):
             # التعديل: استخدام المسميات العربية "bot_id" و "معرف_المجموعة" لجدول "إدارة_المجموعات"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'DELETE FROM "إدارة_المجموعات" WHERE "bot_id" = ? AND "معرف_المجموعة" = ?'
-            db_manager.cursor.execute(query, (bot_token_str, group_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (bot_token_str, group_id_str))
+            dm.conn.commit()
             print(f"🗑️ [محلي] تم حذف المجموعة {group_id_str} من القاعدة المحلية.")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل الحذف المحلي، سيتم الاعتماد على حذف جوجل فقط: {local_e}")
@@ -2578,8 +2578,8 @@ def update_group_field(bot_token, group_id, col_name, new_value):
             # التعديل: استخدام المسميات العربية "bot_id" و "معرف_المجموعة" لجدول "إدارة_المجموعات"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية للأعمدة والجداول مع محرك SQLite
             query = f'UPDATE "إدارة_المجموعات" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_المجموعة" = ?'
-            db_manager.cursor.execute(query, (str(new_value), bot_token_str, group_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(new_value), bot_token_str, group_id_str))
+            dm.conn.commit()
             print(f"?? [محلي] تم تحديث الحقل {col_name} للمجموعة {group_id_str}")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل التحديث المحلي، سيتم الاعتماد على تحديث جوجل فقط: {local_e}")
@@ -2769,8 +2769,8 @@ def toggle_quiz_visibility(bot_token, quiz_id):
             # العمود 14 في الهيكل يقابله "حالة_الاختبار"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query_select = 'SELECT "حالة_الاختبار" FROM "الاختبارات_الآلية" WHERE "bot_id" = ? AND "معرف_الاختبار" = ?'
-            db_manager.cursor.execute(query_select, (bot_token_str, quiz_id_str))
-            local_row = db_manager.cursor.fetchone()
+            dm.cursor.execute(query_select, (bot_token_str, quiz_id_str))
+            local_row = dm.cursor.fetchone()
             
             if local_row:
                 # استخراج القيمة من القاموس المرتجع باستخدام المفتاح العربي
@@ -2779,8 +2779,8 @@ def toggle_quiz_visibility(bot_token, quiz_id):
                 
                 # تحديث القيمة محلياً ووسم السجل بـ pending للمزامنة اللاحقة
                 query_update = 'UPDATE "الاختبارات_الآلية" SET "حالة_الاختبار" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_الاختبار" = ?'
-                db_manager.cursor.execute(query_update, (new_val, bot_token_str, quiz_id_str))
-                db_manager.conn.commit()
+                dm.cursor.execute(query_update, (new_val, bot_token_str, quiz_id_str))
+                dm.conn.commit()
                 print(f"🔄 [محلي] تم تبديل حالة الاختبار {quiz_id_str} إلى {new_val}")
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل التبديل المحلي للحالة في 'الاختبارات_الآلية': {local_e}")
@@ -3017,8 +3017,8 @@ def delete_question_from_bank(bot_token, q_id):
             # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معرف_السؤال" لجدول "بنك_الأسئلة"
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'DELETE FROM "بنك_الأسئلة" WHERE "bot_id" = ? AND "معرف_السؤال" = ?'
-            db_manager.cursor.execute(query, (bot_token_str, q_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (bot_token_str, q_id_str))
+            dm.conn.commit()
             print(f"🗑️ [محلي] تم حذف السؤال {q_id_str} من القاعدة المحلية.")
         except Exception as local_e:
             print(f"⚠️ فشل الحذف المحلي للسؤال في 'بنك_الأسئلة': {local_e}")
@@ -3269,13 +3269,13 @@ def link_user_to_inviter(bot_token, student_id, inviter_id):
                 # التعديل: استخدام المسميات العربية "رصيد"، "bot_id" (أو عمود التوكن)، و "ID المستخدم"
                 # العمود 11 في هيكلك لجدول المستخدمين هو "رصيد"
                 query_inviter = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
-                db_manager.cursor.execute(query_inviter, (new_points, str(inviter_id)))
+                dm.cursor.execute(query_inviter, (new_points, str(inviter_id)))
             
             # ب) ربط الطالب بالداعي محلياً (تحديث العمود 10 "معرف إحالة")
             query_student = 'UPDATE "المستخدمين" SET "معرف إحالة" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
-            db_manager.cursor.execute(query_student, (str(inviter_id), str(student_id)))
+            dm.cursor.execute(query_student, (str(inviter_id), str(student_id)))
             
-            db_manager.conn.commit()
+            dm.conn.commit()
             print(f"🎁 [محلي] تم منح {points_to_add} نقطة للداعي {inviter_id}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي لنظام الإحالة: {local_e}")
@@ -3365,8 +3365,8 @@ def redeem_points_for_course(bot_token, user_id, course_price):
                     # التعديل: استخدام المسميات العربية "رصيد" و "ID المستخدم" داخل الاستعلام
                     # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء التي تحتوي على مسافات
                     query_update = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
-                    db_manager.cursor.execute(query_update, (new_balance, str(user_id)))
-                    db_manager.conn.commit()
+                    dm.cursor.execute(query_update, (new_balance, str(user_id)))
+                    dm.conn.commit()
                     print(f"✅ [محلي] تم خصم {course_price} نقطة من المستخدم {user_id}")
                 except Exception as local_e:
                     print(f"⚠️ فشل الخصم المحلي: {local_e}")
@@ -3464,8 +3464,8 @@ def reset_entire_database():
             ]
             
             # إغلاق الاتصال بالقاعدة أولاً لتجنب خطأ PermissionError في نظام Windows/Linux
-            if 'db_manager' in globals() and db_manager.conn:
-                db_manager.conn.close()
+            if 'db_manager' in globals() and dm.conn:
+                dm.conn.close()
                 print("🔌 تم إغلاق اتصال قاعدة البيانات بنجاح.")
 
             for file_path in files_to_destroy:
@@ -3475,7 +3475,7 @@ def reset_entire_database():
             
             # إعادة تهيئة كائن db_manager لإعادة بناء الجداول الـ 37 فارغة فوراً
             if 'db_manager' in globals():
-                db_manager.__init__() 
+                dm.__init__() 
                 print("🧱 تم إعادة بناء الهيكل المحلي الفارغ.")
                 
         except Exception as local_e:
@@ -3715,8 +3715,8 @@ def check_bot_limits(bot_token, feature_name):
                     
                     # تحديث محلي أيضاً (استخدام المسميات العربية الجديدة)
                     query = 'UPDATE "البوتات_المصنوعة" SET "ميزة_الذكاء_الاصطناعي" = ?, sync_status = "pending" WHERE "التوكن" = ?'
-                    db_manager.cursor.execute(query, ("FALSE", bot_token_str))
-                    db_manager.conn.commit()
+                    dm.cursor.execute(query, ("FALSE", bot_token_str))
+                    dm.conn.commit()
                 
                 return False, "انتهت الفترة التجريبية لمساعد الذكاء الاصطناعي (30 يوم). يرجى الترقية للاستمرار."
             
@@ -3983,8 +3983,8 @@ def delete_branch_db(bot_token, branch_id):
         try:
             # التعديل: استخدام "bot_id" و "معرف_الفرع" بدلاً من column_1 و column_2
             query = 'DELETE FROM "إدارة_الفروع" WHERE "bot_id" = ? AND "معرف_الفرع" = ?'
-            db_manager.cursor.execute(query, (bot_token_str, branch_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (bot_token_str, branch_id_str))
+            dm.conn.commit()
         except Exception as local_e:
             print(f"⚠️ فشل الحذف المحلي للفرع: {local_e}")
 
@@ -4015,8 +4015,8 @@ def update_branch_field_db(bot_token, branch_id, col_name, new_value):
         try:
             # التعديل: استخدام المسميات العربية المقتبسة لضمان توافق الأسماء التي قد تحتوي على مسافات
             query = f'UPDATE "إدارة_الفروع" SET "{col_name}" = ?, sync_status = "pending" WHERE "bot_id" = ? AND "معرف_الفرع" = ?'
-            db_manager.cursor.execute(query, (str(new_value), bot_token_str, branch_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(new_value), bot_token_str, branch_id_str))
+            dm.conn.commit()
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي للفرع: {local_e}")
 
@@ -4201,8 +4201,8 @@ def delete_coach_from_sheet(bot_token, coach_id):
         try:
             # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "ID"
             query = 'DELETE FROM "إدارة_الموظفين" WHERE "bot_id" = ? AND "ID" = ? AND "الرتبة" = "مدرب"'
-            db_manager.cursor.execute(query, (bot_token_str, coach_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (bot_token_str, coach_id_str))
+            dm.conn.commit()
             print(f"🗑️ [محلي] تم حذف المدرب {coach_id_str} من القاعدة المحلية.")
         except Exception as local_e:
             print(f"⚠️ فشل الحذف المحلي للمدرب: {local_e}")
@@ -4276,8 +4276,8 @@ def process_referral_reward_on_purchase(bot_token, student_id):
                 # تحديث قاعدة البيانات المحلية SQLite فوراً (استخدام المسميات العربية للأعمدة)
                 try:
                     query = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
-                    db_manager.cursor.execute(query, (new_balance, inviter_id_str))
-                    db_manager.conn.commit()
+                    dm.cursor.execute(query, (new_balance, inviter_id_str))
+                    dm.conn.commit()
                 except: pass
             
             # 4. التحديث السحابي (الالتزام الصارم بمنطقك الأصلي 100%)
@@ -4344,8 +4344,8 @@ def create_withdrawal_request(bot_token, user_id, username, amount, payment_meth
         try:
             # التعديل: استخدام المسميات العربية الحقيقية "رصيد" و "ID المستخدم"
             query_deduct = 'UPDATE "المستخدمين" SET "رصيد" = ?, sync_status = "pending" WHERE "ID المستخدم" = ?'
-            db_manager.cursor.execute(query_deduct, (new_balance, user_id_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query_deduct, (new_balance, user_id_str))
+            dm.conn.commit()
             print(f"💰 [محلي] تم حجز مبلغ {amount_val} من المستخدم {user_id_str}")
         except: pass
 
@@ -4398,8 +4398,8 @@ def update_withdrawal_status(bot_token, request_id, new_status, admin_note="", p
                 SET "الحالة" = ?, "ملاحظة_الإدارة" = ?, "رابط_تأكيد الدفع" = ?, "تاريخ_التنفيذ" = ?, sync_status = 'pending'
                 WHERE "معرف_الطلب" = ? AND "bot_id" = ?
             '''
-            db_manager.cursor.execute(query, (new_status, admin_note, proof_link, execution_date, request_id, bot_token_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (new_status, admin_note, proof_link, execution_date, request_id, bot_token_str))
+            dm.conn.commit()
         except Exception as local_e:
             print(f"⚠️ تنبيه: فشل التحديث المحلي للسحب: {local_e}")
 
@@ -4487,8 +4487,8 @@ def update_payment_settings(bot_token, text):
             # التعديل: استخدام المسميات العربية الحقيقية "bot_id" و "معلومات_الدفع" (العمود 36)
             # تم استخدام الاقتباسات المزدوجة لضمان توافق الأسماء العربية مع محرك SQLite
             query = 'UPDATE "إعدادات_المحتوى" SET "معلومات_الدفع" = ?, sync_status = "pending" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(query, (str(text), bot_token_str))
-            db_manager.conn.commit()
+            dm.cursor.execute(query, (str(text), bot_token_str))
+            dm.conn.commit()
             print(f"💳 [محلي] تم تحديث معلومات الدفع للتوكن: {bot_token_str}")
         except Exception as local_e:
             print(f"⚠️ فشل التحديث المحلي لإعدادات الدفع: {local_e}")
@@ -4697,10 +4697,10 @@ def sync_ad_campaign_results(bot_token):
                 # [إضافة الهجين]: تحديث المحرك المحلي فوراً لضمان (Zero Lag) في الإحصائيات
                 try:
                     query = 'UPDATE "إدارة_الحملات_الإعلانية" SET "عدد_المسجلين" = ?, sync_status = "pending" WHERE "معرف_الحملة" = ? AND "bot_id" = ?'
-                    db_manager.cursor.execute(query, (count, campaign_id, bot_token_str))
+                    dm.cursor.execute(query, (count, campaign_id, bot_token_str))
                 except: pass
             
-        db_manager.conn.commit()
+        dm.conn.commit()
         # رفع إصدار البوت لتحديث الرام (الالتزام بموضع الاستدعاء)
         update_global_version(bot_token)
         return True

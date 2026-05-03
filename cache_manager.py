@@ -1269,11 +1269,22 @@ class DataManager:
                 print(f"❌ خطأ حرج في المحرك الموحد: {e}")
 
 
-
+# ==========================================================================
+# دوال التصفير والفرمتة واعادة البناء
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
         from sheets import safe_api_call, ss, connect_to_google
+        import logging
+        logger = logging.getLogger("SYNC_ENGINE")
+
         try:
+            if spreadsheet is None:
+                if 'ss' in globals() and globals()['ss']:
+                    spreadsheet = globals()['ss']
+                else:
+                    logger.error("❌ لا يوجد اتصال نشط بجوجل شيت.")
+                    return
+
             self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
             tables = self.cursor.fetchall()
 
@@ -1286,8 +1297,8 @@ class DataManager:
 
                 try:
                     worksheet = spreadsheet.worksheet(table_name)
-                except:
-                    logger.warning(f"⚠️ الورقة {table_name} غير موجودة في جوجل.")
+                except Exception:
+                    logger.warning(f"⚠️ الورقة {table_name} غير موجودة in Google.")
                     continue
 
                 data_to_upload = []
@@ -1295,45 +1306,196 @@ class DataManager:
 
                 for row in rows:
                     row_dict = dict(row)
-                    # استخراج البيانات بالترتيب الصحيح للأعمدة الأصلية فقط
-                    original_row = [row_dict[key] for key in row_dict.keys() if key not in ['local_id', 'sync_status', 'last_updated']]
+                    # استخراج البيانات مع حماية القيم الفارغة None
+                    original_row = [
+                        str(row_dict[key]) if row_dict[key] is not None else "" 
+                        for key in row_dict.keys() 
+                        if key not in ['local_id', 'sync_status', 'last_updated']
+                    ]
                     data_to_upload.append(original_row)
-                    row_ids.append(row_dict['local_id'])
+                    if 'local_id' in row_dict:
+                        row_ids.append(row_dict['local_id'])
 
                 if data_to_upload:
                     success = safe_api_call(worksheet.append_rows, data_to_upload, value_input_option='USER_ENTERED')
-                    
-                    if success:
-                        # تحديث الحالة محلياً لتصبح 'synced'
+                    if success and row_ids:
                         placeholders = ", ".join(["?" for _ in row_ids])
-                        self.cursor.execute(f"UPDATE '{table_name}' SET sync_status = 'synced' WHERE local_id IN ({placeholders})", row_ids)
+                        update_query = f"UPDATE '{table_name}' SET sync_status = 'synced' WHERE local_id IN ({placeholders})"
+                        self.cursor.execute(update_query, row_ids)
                         self.conn.commit()
                         logger.info(f"✅ تم رفع {len(data_to_upload)} سجل بنجاح إلى {table_name}")
-        except Exception as e:
-            logger.error(f"❌ خطأ حرج أثناء المزامنة الشاملة: {e}")
+                        
 
-
-    def hard_reset(self):
+    def setup_bot_factory_database(self, bot_token=None):
         """
-        تصفير كامل لقاعدة البيانات المحلية:
-        1. مسح جميع الجداول الموجودة.
-        2. إعادة إنشاء قاعدة بيانات فارغة.
+        المحرك الشامل المطور (V8.5 - نسخة الفرض الصارم):
+        1. ينشئ ويحدث الجداول في Google Sheets و SQLite معاً.
+        2. يفرض الترتيب، يضيف الناقص، ويحذف الزائد من العناوين لضمان تطابق 100%.
+        3. يعبئ الرام (Cache) ويهيئ التنسيقات والبيانات الوصفية.
+        """
+        global ss, _ws_cache
+        from sheets import connect_to_google, safe_api_call, get_sheets_structure
+        
+        # التأكد من الاتصال بجوجل
+        if 'ss' not in globals() or ss is None: 
+            ss = connect_to_google()
+        
+        all_requests = []
+
+        # [1] مزامنة هيكلية SQLite والرام أولاً (الحل الجذري للمحرك المحلي)
+        try:
+            from cache_manager import db_manager as local_db
+            print("🔗 جاري ربط الهيكل المحلي بـ SQLite وفرض الترتيب الصارم...")
+            # هذا الاستدعاء سيقوم داخلياً بعمل Migration للجداول لتطابق get_sheets_structure
+            local_db.sync_schema(ss)
+        except Exception as e:
+            print(f"⚠️ تنبيه: فشل مزامنة الهيكل المحلي: {e}")
+
+        # جلب الهيكل المعتمد
+        structures = get_sheets_structure()  
+        total_sheets = len(structures)   
+        
+        print(f"⚙️ بدء محرك تهيئة وتصحيح الجداول ({total_sheets} ورقة)...")
+        time.sleep(1)  
+        
+        # تحديث الكاش الخاص بأوراق العمل من جوجل
+        _ws_cache = {ws.title: ws for ws in ss.worksheets()}  
+
+        for config in structures:  
+            try:  
+                sheet_name = config["name"]  
+                headers = config["cols"]  
+               
+                # [2] التحقق من وجود الورقة أو إنشاؤها باستخدام المحرك الصارم
+                from sheets import ensure_sheet_structure, ensure_sheet_schema
+                
+                if sheet_name not in _ws_cache:  
+                    print(f"🆕 إنشاء ورقة جديدة: {sheet_name}")
+                    worksheet = safe_api_call(ss.add_worksheet, title=sheet_name, rows="1000", cols=str(len(headers) + 5))  
+                    _ws_cache[sheet_name] = worksheet  
+                    time.sleep(1) 
+                    safe_api_call(worksheet.append_row, headers)
+                    time.sleep(1)
+                else:  
+                    worksheet = _ws_cache[sheet_name]
+                    print(f"🛠️ فحص وتصحيح هيكل: {sheet_name}")
+                    # استدعاء دالة الفحص الصارم (إضافة/حذف/ترتيب)
+                    ensure_sheet_schema(worksheet, headers)
+
+                # [3] نظام التنسيق التلقائي (الحفاظ على الوظيفة الأصلية كاملة)
+                try:  
+                    wrap_cols = [] 
+                    try: 
+                        from sheets import get_wrap_columns, setup_sheet_format
+                        wrap_cols = get_wrap_columns(sheet_name)
+                    except: pass
+                    
+                    if wrap_cols:
+                        print(f"✨ تطبيق نظام التفاف النص لـ: {sheet_name}")
+                        setup_sheet_format(worksheet, wrap_columns=wrap_cols)
+                        time.sleep(1.2)
+                except Exception as e:
+                    print(f"⚠️ فشل تنسيق الورقة {sheet_name}: {e}")
+
+                # [4] بناء طلبات التنسيق الجماعي (Batch Update) - تلوين وتجميد
+                sheet_id = worksheet.id  
+                all_requests.extend([  
+                    {
+                        "repeatCell": {
+                            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1}, 
+                            "cell": {
+                                "userEnteredFormat": {
+                                    # استخدام لون مخصص أو اللون الأزرق الهادئ الافتراضي
+                                    "backgroundColor": config.get("color", {"red": 0.81, "green": 0.88, "blue": 0.95}), 
+                                    "textFormat": {"bold": True}, 
+                                    "horizontalAlignment": "CENTER"
+                                }
+                            }, 
+                            "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
+                        }
+                    },  
+                    {
+                        "updateSheetProperties": {
+                            "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}}, 
+                            "fields": "gridProperties.frozenRowCount"
+                        }
+                    }  
+                ])  
+
+                time.sleep(0.8) # فاصل زمني آمن
+
+            except Exception as e:   
+                print(f"❌ خطأ تهيئة {sheet_name}: {e}")  
+                time.sleep(1.5) 
+
+        # [5] دفع التحديثات الجماعية للتنسيق
+        if all_requests:  
+            print(f"🚀 دفع التحديثات الجماعية للتنسيق...")
+            batch_size = globals().get('BATCH_SIZE', 10)
+            for i in range(0, len(all_requests), batch_size):  
+                try:
+                    safe_api_call(ss.batch_update, {"requests": all_requests[i:i+batch_size]})  
+                    time.sleep(2)
+                except: pass
+
+        # [6] زرع الإعدادات وتحديث الميتا (حسب المنطق الأصلي)
+        if bot_token:  
+            try:
+                from sheets import seed_default_settings
+                print(f"🌱 زرع الإعدادات الافتراضية للبوت...")
+                seed_default_settings(bot_token)  
+                time.sleep(1)
+            except: pass
+
+        try:
+            from sheets import update_meta_info
+            print(f"📊 تحديث الميتا والتحقق النهائي...")
+            update_meta_info()  
+            time.sleep(1.5)  
+
+            # استدعاء دالة التحقق من داخل الكلاس
+            if self.verify_setup(bot_token):  
+                print(f"🎊 اكتملت المزامنة والتهيئة لـ {total_sheets} ورقة (سحابي/محلي/رام)!")
+                return total_sheets  
+        except Exception as e:
+            print(f"⚠️ خطأ في التحقق النهائي: {e}")
+        
+        return 0
+
+    def verify_setup(self, bot_token):
+        """
+        دالة التحقق من اكتمال تأسيس الجداول لضمان عدم الانهيار.
+        تم التصحيح لتستخدم المحرك المحلي الموحد والتأكد من وجود الجداول العربية.
         """
         try:
-            # جلب أسماء جميع الجداول
-            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
-            tables = self.cursor.fetchall()
+            # 1. التأكد من استيراد المحرك المحلي (DataManager)
+            from cache_manager import db_manager as local_db
             
-            for table in tables:
-                self.cursor.execute(f"DROP TABLE IF EXISTS '{table[0]}'")
+            # في حال كان المحرك لم يتم إنشاؤه بعد، نستخدم الكائن الحالي أو نسخة جديدة
+            if not local_db or not hasattr(local_db, 'cursor'):
+                from cache_manager import DataManager
+                local_db = DataManager(bot_token)
+
+            # 2. التحقق من وجود جدول "البوتات_المصنوعة" كعينة لاكتمال التهيئة
+            query = "SELECT name FROM sqlite_master WHERE type='table' AND name='البوتات_المصنوعة'"
+            local_db.cursor.execute(query)
+            table_exists = local_db.cursor.fetchone() is not None
             
-            self.conn.commit()
-            print("🗑️ تم مسح كافة الجداول المحلية بنجاح (Hard Reset).")
-            return True
+            if table_exists:
+                # 3. خطوة إضافية لضمان سلامة الهيكل: التحقق من وجود عمود "التوكن"
+                try:
+                    local_db.cursor.execute("PRAGMA table_info('البوتات_المصنوعة')")
+                    columns = [info[1] for info in local_db.cursor.fetchall()]
+                    if "التوكن" in columns:
+                        return True
+                except:
+                    pass
+                    
+            return table_exists
         except Exception as e:
-            print(f"❌ خطأ أثناء تصفير القاعدة: {e}")
+            print(f"⚠️ فشل التحقق من تهيئة قاعدة البيانات: {e}")
             return False
-#دالة حذف بوت
+
     async def delete_bot_permanently(self, bot_token):  
         """  
         محرك الحذف النهائي V9.5 - إزالة كاملة وإعادة ضبط المصنع داخل الكلاس.  
@@ -1423,20 +1585,85 @@ class DataManager:
             # تسجيل الخطأ مع كامل التفاصيل التقنية (الوظيفة الأصلية)
             current_logger.error(f"❌ [DELETE ERROR]: فشل حذف البوت: {e}", exc_info=True)  
             return False
-
-    def setup_bot_factory_database(self, bot_token=None):
+           
+    async def hard_factory_reset_comprehensive(self):
         """
-        دالة بناء الجداول (يجب أن تكون موجودة داخل نفس الكلاس أو يتم استدعاؤها بشكل صحيح)
+        محرك الفرمتة الشامل (الوضع الخام):
+        1. تصفير الكاش العالمي (RAM) تماماً.
+        2. تدمير وحذف ملف SQLite من الهاردوير.
+        3. مسح وتطهير كافة أوراق جوجل شيت (ماعدا الرئيسية).
+        4. إعادة بناء الهيكل الجديد عبر setup_bot_factory_database.
         """
-        # ... هنا يتم وضع كود بناء الجداول الذي قدمته أنت مسبقاً ...
-        pass
+        current_logger = logging.getLogger("FACTORY_RESET")
+        current_logger.warning("🚨 بدء عملية تصفير النظام الشاملة (ضبط المصنع)...")
+
+        try:
+            # --- [1] تصفير الكاش العالمي (RAM Cache) ---
+            if 'FACTORY_GLOBAL_CACHE' in globals():
+                globals()['FACTORY_GLOBAL_CACHE'] = {
+                    'all_bots': [],
+                    'bot_sync_versions': {},
+                    'system_status': 'RAW_FACTORY',
+                    'reset_time': time.ctime()
+                }
+                current_logger.info("🧹 [1/4] تم تصفير الذاكرة المؤقتة (RAM) بنجاح.")
+
+            # --- [2] تدمير قاعدة بيانات SQLite نهائياً ---
+            try:
+                if self.conn:
+                    self.conn.close()
+                
+                if os.path.exists(self.db_path):
+                    os.remove(self.db_path)
+                    current_logger.info(f"💾 [2/4] تم حذف ملف قاعدة البيانات {self.db_path} نهائياً.")
+                
+                # إعادة إنشاء اتصال نظيف وخاوٍ تماماً
+                self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                self.cursor = self.conn.cursor()
+            except Exception as db_e:
+                current_logger.error(f"⚠️ فشل تدمير SQLite: {db_e}")
+
+            # --- [3] تطهير جوجل شيت (Cloud Clean) ---
+            global ss, _ws_cache
+            if 'ss' in globals() and ss:
+                current_logger.info("☁️ [3/4] جاري تطهير أوراق العمل من السحاب...")
+                all_ws = ss.worksheets()
+                for ws in all_ws:
+                    # نترك ورقة واحدة (الرئيسية) كجذر للنظام لأن جوجل تمنع حذف كل الأوراق
+                    if ws.title != "الرئيسية":
+                        try:
+                            ss.del_worksheet(ws)
+                            current_logger.info(f"🧨 تم تدمير الورقة: {ws.title}")
+                            time.sleep(0.5) # فاصل زمني لتجنب حظر جوجل
+                        except: pass
+                # تصفير كاش الأوراق
+                _ws_cache = {}
+
+            # --- [4] إرسال رسالة البيان ---
+            print("\n" + "🔥" * 15)
+            print("تم الانتهاء من حذف كافة البيانات القديمة بنجاح.")
+            print("النظام الآن في حالة 'المصنع الخام'.")
+            print("🔥" * 15 + "\n")
+
+            # --- [5] استدعاء دالة البناء (إعادة الإعمار) ---
+            print("🔄 جاري الآن بناء الجداول الجديدة وزرع الإعدادات الافتراضية...")
+            # استدعاء دالة البناء المتطورة (الرام + SQLite + شيت)
+            total_sheets = self.setup_bot_factory_database(self.bot_token)
+
+            if total_sheets > 0:
+                print(f"🎊 مبروك! تم إعادة بناء المصنع بـ {total_sheets} جدول نظيف.")
+                current_logger.info("🎊 عملية ضبط المصنع اكتملت بنجاح.")
+                return True
+            
+            return False
+
+        except Exception as e:
+            current_logger.error(f"❌ خطأ كارثي أثناء ضبط المصنع: {e}", exc_info=True)
+            return False
 
 
-
-#~~~~~~~~~~~~~~~~
-
-#~~~~~~~~~~~~~~~~
-
+# ==========================================================================
+#نهاية دوال الفورمات الهيكلة 
 
 # ==========================================================================
 

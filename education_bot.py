@@ -226,11 +226,9 @@ from cache_manager import (
     FACTORY_GLOBAL_CACHE,
     save_cache_to_disk, 
     fetch_full_factory_data,
-    export_bot_data_to_excel,
-    db_manager,
+    db_manager as dm,
     update_global_version,
     export_bot_data_to_excel,
-    fetch_full_factory_data,
     check_excel_permission_from_cache
 )
 from contact_callback import contact_callback_handler
@@ -355,11 +353,11 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_empty(ai_config.get('اسم_المؤسسة')):
             try:
                 # محاولة الجلب باستخدام المعرف الرقمي للمطابقة مع عمود bot_id في الورق
-                db_manager.cursor.execute(
+                dm.cursor.execute(
                     'SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?',
                     (str(bot_id_only),)
                 )
-                db_row = db_manager.cursor.fetchone()
+                db_row = dm.cursor.fetchone()
 
                 if db_row and db_row[0] not in [None, "0", "", "None"]:
                     ai_config['اسم_المؤسسة'] = db_row[0]
