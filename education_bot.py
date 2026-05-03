@@ -311,17 +311,23 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
             except Exception as e:
-                logger.error(f"❌ Send Fallback Failed: {e}")
+                # التأكد من تعريف logger أو استخدامه بشكل صحيح
+                print(f"❌ Send Fallback Failed: {e}")
 
     # =========================================================
-    # [ 1 ] جلب الإعدادات
+    # [ 1 ] جلب الإعدادات وتحديد قائمة الملاك
     # =========================================================
     config = get_bot_config(bot_token)
+    
+    # تحسين جلب آيدي الملاك لدعم القوائم أو النصوص المنفصلة بفاصلة
+    raw_admin_ids = config.get("admin_ids", "0")
+    if isinstance(raw_admin_ids, list):
+        admin_list = [int(str(i).strip()) for i in raw_admin_ids if str(i).strip().isdigit()]
+    else:
+        admin_list = [int(i.strip()) for i in str(raw_admin_ids).split(",") if i.strip().isdigit()]
 
-    try:
-        bot_owner_id = int(config.get("admin_ids", 0))
-    except (ValueError, TypeError):
-        bot_owner_id = 0
+    bot_owner_id = admin_list[0] if admin_list else 0
+    is_owner = user.id in admin_list
 
     ai_config = ensure_dict(get_ai_setup(bot_token))
 
@@ -331,7 +337,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     def is_empty(val):
         return not val or str(val).strip() in ["0", "None", ""]
 
-    if user.id == bot_owner_id:
+    if is_owner:
         if is_empty(ai_config.get('اسم_المؤسسة')):
             try:
                 db_manager.cursor.execute(
@@ -349,12 +355,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     FACTORY_GLOBAL_CACHE["data"][bot_token]['اسم_المؤسسة'] = db_row[0]
 
             except Exception as e:
+                import logging
                 logging.error(f"⚠️ خطأ في فحص اسم المؤسسة من القاعدة المحلية: {e}")
 
     # =========================================================
     # [ 3 ] التهيئة الأولى للمالك
     # =========================================================
-    if user.id == bot_owner_id:
+    if is_owner:
         if is_empty(ai_config.get('اسم_المؤسسة')):
             context.user_data['action'] = 'awaiting_institution_name'
 
@@ -423,7 +430,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await safe_send("⚠️ معذرة، هذا الرابط تم استخدامه مسبقاً أو غير موجود.")
 
         except Exception as e:
-            logger.error(f"Gift Link Error: {e}")
+            print(f"Gift Link Error: {e}")
             await safe_send("⚠️ حدث خطأ أثناء معالجة رابط الهدية.")
 
         return
@@ -438,22 +445,20 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             inviter_id = potential_inviter
 
     # =========================================================
-    # [ 8 ] تسجيل المستخدم (بدون تغيير السلوك)
+    # [ 8 ] تسجيل المستخدم (تم التعديل ليكون استدعاء واحد فقط)
     # =========================================================
-    save_user(user.id, user.username, inviter_id, bot_token=bot_token)
-    is_new_user = save_user(user.id, user.username, inviter_id, bot_token=context.bot.token)
+    is_new_user = save_user(user.id, user.username, inviter_id, bot_token=bot_token)
 
     # =========================================================
     # [ 9 ] إشعار المالك
     # =========================================================
-    if is_new_user:
+    if is_new_user and bot_owner_id:
         try:
             all_users = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
             total_users = sum(
                 1 for u in all_users if str(u.get("bot_id")) == str(context.bot.token)
             )
         except Exception as e:
-            logging.error(f"⚠️ خطأ في حساب الإحصائيات من الكاش: {e}")
             total_users = "جاري التحديث.."
 
         try:
@@ -475,11 +480,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         except Exception as e:
-            logging.error(f"⚠️ فشل إرسال إشعار العضو الجديد للمالك: {e}")
+            print(f"⚠️ فشل إرسال إشعار العضو الجديد للمالك: {e}")
 
     # =========================================================
     # [ 10 ] اختيار رسالة الترحيب
     # =========================================================
+    from datetime import datetime
     hour = datetime.now().hour
 
     def fetch_valid_msg(key, fallback):
@@ -498,49 +504,73 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = fetch_valid_msg("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
 
     # =========================================================
-    # [ 11 ] تحديد الدور
+    # [ 11 ] تحديد الدور (تصحيح منطق الفحص)
     # =========================================================
-    if user.id == bot_owner_id:
+    
+    # فحص صلاحيات الموظفين بشكل صارم
+    has_perm = str(check_user_permission(bot_token, user.id, "الصلاحيات")).upper() == "TRUE"
+    has_cat_perm = str(check_user_permission(bot_token, user.id, "صلاحية_الأقسام")).upper() == "TRUE"
+    
+    # جلب بيانات الموظفين أولاً لضمان التحقق من الدور
+    employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
+    user_row = next(
+        (row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)),
+        None
+    )
+
+    # تصحيح منطق is_staff: الموظف هو من لديه صلاحية TRUE أو موجود في شيت الموظفين
+    is_staff = has_perm or has_cat_perm or (user_row is not None)
+
+    if is_owner:
         final_text = (
             f"<b>مرحباً بك يا دكتور {user.first_name} في مركز قيادة منصتك</b> 🎓\n\n"
             f"{msg}\n\n"
             f"يمكنك إدارة كافة تفاصيل المنصة من الأزرار أدناه:"
         )
-        reply_markup = get_admin_panel()
+        reply_markup = get_keyboard(5)
 
-    elif (check_user_permission(bot_token, user.id, "الصلاحيات") == True) or \
-         (check_user_permission(bot_token, user.id, "صلاحية_الأقسام") == True):
-
-        employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
-        user_row = next(
-            (row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)),
-            None
-        )
-
-        if user_row and len(user_row) >= 42 and str(user_row[41]).strip() == "مدرب":
+    elif is_staff:
+        # التحقق هل هو مدرب أم موظف إداري من خلال العمود 42 (رقم 41 في البرمجة)
+        if user_row and len(user_row) >= 42 and "مدرب" in str(user_row[41]):
             final_text = (
                 f"<b>مرحباً بك يا كابتن {user.first_name} في غرفتك الأكاديمية</b> 👨‍🏫\n\n"
                 f"{msg}\n\n"
                 f"يمكنك متابعة طلابك وتصحيح الواجبات من الأزرار أدناه:"
             )
-            reply_markup = get_coach_panel()
+            reply_markup = get_keyboard(7)
         else:
             final_text = (
                 f"<b>مرحباً بك يا {user.first_name} في لوحة الإدارة التعليمية</b> 💼\n\n"
                 f"{msg}\n\n"
                 f"لديك صلاحيات الإدارة المعتمدة، يمكنك البدء من الأزرار أدناه:"
             )
-            reply_markup = get_employee_panel()
+            reply_markup = get_keyboard(6)
 
     else:
-        org_name = ai_config.get('اسم_المؤسسة', 'منصتنا التعليمية')
-        final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓"
-        reply_markup = get_student_menu()
+        # فحص هل المستخدم مسجل كطالب (لديه بيانات) أم زائر
+        all_students = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
+        # تحسين الفحص ليشمل آيدي المستخدم بشكل صحيح في الكاش
+        is_registered_student = any(str(s.get("user_id") or s.get("id")) == str(user.id) for s in all_students)
+        
+        # إذا لم يكن في الكاش، نعتمد على نتيجة save_user (إذا لم يكن جديداً فهو مسجل)
+        if not is_registered_student and is_new_user is False:
+            is_registered_student = True
 
+        org_name = ai_config.get('اسم_المؤسسة', 'منصتنا التعليمية')
+        
+        if is_registered_student:
+            final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓"
+            reply_markup = get_keyboard(8)
+        else:
+            # عرض لوحة الزائر (9)
+            final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓\nنحن سعداء بزيارتك، استكشف منصتنا الآن:"
+            reply_markup = get_keyboard(9)
+       
     # =========================================================
     # [ 12 ] الإرسال النهائي
     # =========================================================
     await safe_send(final_text, reply_markup=reply_markup, use_edit=True)
+
     
 # --------------------------------------------------------------------------
 # دالة توليد لوحة الصلاحيات (التي أرسلتها أنت)
