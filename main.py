@@ -917,6 +917,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # تهيئة الورق والإعدادات - النسخة الاحترافية النهائية
     elif data == "run_setup_db_now":
+        import asyncio  # تصحيح خطأ UnboundLocalError
+        from cache_manager import db_manager as dm
         # --- [ إضافة جديدة: حماية المطور ] ---
         if user_id != DEVELOPER_ID:
             await deny_access(query, "⚙️ تهيئة الجداول متاحة للمطور فقط.")

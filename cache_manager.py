@@ -1365,7 +1365,7 @@ class DataManager:
         total_sheets = len(structures)   
         
         print(f"⚙️ بدء محرك تهيئة وتصحيح الجداول ({total_sheets} ورقة)...")
-        time.sleep(1)  
+        time.sleep(2.2)  
         
         # تحديث الكاش الخاص بأوراق العمل من جوجل
         _ws_cache = {ws.title: ws for ws in ss.worksheets()}  
@@ -1382,9 +1382,9 @@ class DataManager:
                     print(f"🆕 إنشاء ورقة جديدة: {sheet_name}")
                     worksheet = safe_api_call(ss.add_worksheet, title=sheet_name, rows="1000", cols=str(len(headers) + 5))  
                     _ws_cache[sheet_name] = worksheet  
-                    time.sleep(1) 
+                    time.sleep(2.1) 
                     safe_api_call(worksheet.append_row, headers)
-                    time.sleep(1)
+                    time.sleep(2.1)
                 else:  
                     worksheet = _ws_cache[sheet_name]
                     print(f"🛠️ فحص وتصحيح هيكل: {sheet_name}")
@@ -1402,7 +1402,7 @@ class DataManager:
                     if wrap_cols:
                         print(f"✨ تطبيق نظام التفاف النص لـ: {sheet_name}")
                         setup_sheet_format(worksheet, wrap_columns=wrap_cols)
-                        time.sleep(1.2)
+                        time.sleep(2.2)
                 except Exception as e:
                     print(f"⚠️ فشل تنسيق الورقة {sheet_name}: {e}")
 
@@ -1431,11 +1431,11 @@ class DataManager:
                     }  
                 ])  
 
-                time.sleep(0.8) # فاصل زمني آمن
+                time.sleep(2.1) # فاصل زمني آمن
 
             except Exception as e:   
                 print(f"❌ خطأ تهيئة {sheet_name}: {e}")  
-                time.sleep(1.5) 
+                time.sleep(2.5) 
 
         # [5] دفع التحديثات الجماعية للتنسيق
         if all_requests:  
@@ -1444,7 +1444,7 @@ class DataManager:
             for i in range(0, len(all_requests), batch_size):  
                 try:
                     safe_api_call(ss.batch_update, {"requests": all_requests[i:i+batch_size]})  
-                    time.sleep(2)
+                    time.sleep(2.5)
                 except: pass
 
         # [6] زرع الإعدادات وتحديث الميتا (حسب المنطق الأصلي)
@@ -1453,14 +1453,14 @@ class DataManager:
                 from sheets import seed_default_settings
                 print(f"🌱 زرع الإعدادات الافتراضية للبوت...")
                 seed_default_settings(bot_token)  
-                time.sleep(1)
+                time.sleep(2.5)
             except: pass
 
         try:
             from sheets import update_meta_info
             print(f"📊 تحديث الميتا والتحقق النهائي...")
             update_meta_info()  
-            time.sleep(1.5)  
+            time.sleep(2.5)  
 
             # استدعاء دالة التحقق من داخل الكلاس
             if self.verify_setup(bot_token):  
