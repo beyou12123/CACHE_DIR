@@ -197,9 +197,3 @@ def get_keyboard(kays: int, m_status="OFF"):
     keyboard = keyboards.get(kays, [[InlineKeyboardButton("⚠️ لوحة غير معروفة", callback_data="main_menu")]])
 
     return InlineKeyboardMarkup(keyboard)
-
-def get_coach_panel_keyboard(owner_id=None):
-    return get_keyboard(5)
-
-def get_tech_settings_keyboard(owner_id=None):
-    return get_keyboard(5)
