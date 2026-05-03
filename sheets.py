@@ -626,6 +626,8 @@ ALLOWED_TABLES = {
     "سجل_الإجابات", "الإدارة_المالية", "المهام_الإدارية", "جدول_المحاضرات",
     "سجل_السحوبات", "المكتبة", "الأوسمة_والإنجازات", "الواجبات", "نظام_المزامنة"
 }
+
+
 def local_bulk_save(table_name, data_list, sync_status='pending'):
     """
     محرك الحفظ المطور: يقوم بفحص هيكل الجدول ديناميكياً وتطبيع البيانات المرسلة 
@@ -681,12 +683,13 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
 #  الدالة الرئيسية لحفظ البوت نسخة محسنة
 
 # الدالة الرئيسية لحفظ البوت نسخة محسنة ومطابقة للهيكل التنظيمي
+
 def save_bot(owner_id, bot_type, bot_name, bot_token):
     """
     تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite):
     - الالتزام الصارم بـ 45 عموداً لجدول 'البوتات_المصنوعة'.
     - الالتزام الصارم بـ 39 عموداً لجدول 'إعدادات_المحتوى' (مطابقة للورق).
-    - الحفاظ الكامل على كافة الوظائف الجانبية والمسميات العربية.
+    - تصحيح: استخدام bot_id الرقمي كمفتاح أساسي لضمان تعرف النظام على المالك.
     """
     try:
         from sheets import get_system_time, local_bulk_save, ensure_bot_sync_row, seed_default_settings, update_global_version
@@ -695,9 +698,11 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         now = get_system_time("full")
         today = get_system_time("date")
         bot_token = str(bot_token).strip()
+        
+        # استخراج الآيدي الرقمي فقط (المفتاح المستخدم في "الورق" للربط)
         bot_id_only = bot_token.split(':')[0] if ':' in bot_token else "0"
 
-        # 1. جلب معلومات البوت من تيليجرام (الحفاظ على الوظيفة الأصلية)
+        # 1. جلب معلومات البوت من تيليجرام
         real_bot_name = bot_name
         username_bot = ""
         try:
@@ -707,8 +712,8 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
                 username_bot = res["result"]["username"]
         except: pass
 
-        # 2. حجر الأساس (الحفاظ على صمامات الأمان)
-        ensure_bot_sync_row(bot_token, owner_id)
+        # 2. حجر الأساس (ضمان وجود السجل الأساسي)
+        ensure_bot_sync_row(bot_id_only, owner_id)
         seed_default_settings(bot_token)
 
         # 3. بناء مصفوفة البيانات (45 عموداً بدقة وفقاً للهيكل التنظيمي)
@@ -761,16 +766,16 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         ]
 
         # 4. منع التكرار في جدول البوتات (محلياً)
-        db_manager.cursor.execute('SELECT local_id FROM "البوتات_المصنوعة" WHERE "التوكن" = ?', (bot_token,))
+        db_manager.cursor.execute('SELECT local_id FROM "البوتات_المصنوعة" WHERE "bot_id" = ?', (bot_id_only,))
         if db_manager.cursor.fetchone():
-            update_query = 'UPDATE "البوتات_المصنوعة" SET "حالة التشغيل" = ?, "آخر تشغيل" = ?, sync_status = "pending" WHERE "التوكن" = ?'
-            db_manager.cursor.execute(update_query, ("نشط", now, bot_token))
+            update_query = 'UPDATE "البوتات_المصنوعة" SET "حالة التشغيل" = ?, "آخر تشغيل" = ?, "التوكن" = ?, sync_status = "pending" WHERE "bot_id" = ?'
+            db_manager.cursor.execute(update_query, ("نشط", now, bot_token, bot_id_only))
         else:
             local_bulk_save("البوتات_المصنوعة", bot_row)
 
         # 5. إدارة سجل "إعدادات_المحتوى" (39 عموداً بدقة وفقاً للهيكل التنظيمي للورق)
         content_row = [""] * 39
-        content_row[0] = bot_token            # 1. bot_id
+        content_row[0] = bot_id_only          # 1. bot_id (يجب أن يكون الرقم التعريفي للربط)
         content_row[1] = "أهلاً بك! 🤖"         # 2. الرسالة الترحيبية
         content_row[2] = "لا توجد قوانين."     # 3. القوانين
         content_row[3] = "البوت متوقف."        # 4. رد التوقف
@@ -779,54 +784,39 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         content_row[6] = "true"               # 7. welcome_enabled
         content_row[7] = "[]"                 # 8. buttons
         content_row[8] = "[]"                 # 9. banned_words
-        content_row[9] = str(owner_id)        # 10. admin_ids (المسؤول)
+        content_row[9] = str(owner_id)        # 10. admin_ids (وضع آيدي المالك الفعلي)
         content_row[10] = "ar"                # 11. language
         content_row[11] = "default"           # 12. theme
         content_row[12] = "0"                 # 13. delay_response
         content_row[13] = "true"              # 14. broadcast_enabled
         content_row[14] = "[]"                # 15. custom_commands
-        content_row[15] = "صباح الخير"         # 16. welcome_morning
-        content_row[16] = "طاب يومك"           # 17. welcome_noon
-        content_row[17] = "مساء النور"         # 18. welcome_evening
-        content_row[18] = "ليلة سعيدة"         # 19. welcome_night
-        content_row[19] = "المؤسسة التعليمية"  # 20. اسم_المؤسسة
+        content_row[15] = "صباح الخير والهمة"  # 16. welcome_morning
+        content_row[16] = "طاب يومك السعيد"    # 17. welcome_noon
+        content_row[17] = "مساء الفكر المستنير" # 18. welcome_evening
+        content_row[18] = "ليلة هادئة ومثمرة"  # 19. welcome_night
+        content_row[19] = "منصتي التعليمية"    # 20. اسم_المؤسسة
         content_row[20] = "أنت مساعد ذكي"      # 21. تعليمات_AI
-        content_row[21] = "10"                # 22. ref_points_join
-        content_row[22] = "50"                # 23. ref_points_purchase
-        content_row[23] = "100"               # 24. min_points_redeem
-        content_row[24] = "نقطة"              # 25. currency_unit
-        content_row[25] = "100"               # 26. homework_grade
-        content_row[26] = "0"                 # 27. subscription_price
-        content_row[27] = "Google"            # 28. ai_provider
-        content_row[28] = "OFF"               # 29. maintenance_mode
-        content_row[29] = "50"                # 30. max_daily_ai_questions
-        content_row[30] = ""                  # 31. backup_channel_id
-        content_row[31] = "نشط"               # 32. bot_status_msg
-        content_row[32] = "stop"              # 33. trial_end_action
-        content_row[33] = "Asia/Riyadh"       # 34. timezone
-        content_row[34] = "10"                # 35. ai_memory_limit
-        content_row[35] = "إعدادات الدفع"      # 36. إعدادات_الدفع
-        content_row[36] = "1.0.0"             # 37. إصدار_التحديث
-        content_row[37] = "synced"            # 38. حالة_المزامنة
+        content_row[35] = "Default Payment"   # 36. إعدادات_الدفع
         content_row[38] = now                 # 39. وقت_التعديل
 
-        # منع التكرار في جدول الإعدادات
-        db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token,))
+        # منع التكرار في جدول الإعدادات باستخدام المعرف الرقمي
+        db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_id_only,))
         if db_manager.cursor.fetchone():
             update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, "وقت_التعديل" = ?, sync_status = "pending" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(update_content_query, (str(owner_id), now, bot_token))
+            db_manager.cursor.execute(update_content_query, (str(owner_id), now, bot_id_only))
         else:
             local_bulk_save("إعدادات_المحتوى", content_row)
 
         db_manager.conn.commit()
         
-        # 6. تحديث الكاش العالمي
+        # 6. تحديث الكاش العالمي والمزامنة
         update_global_version("GLOBAL_SYNC") 
         return True
 
     except Exception as e:
         print(f"❌ خطأ حرج في دالة التأسيس المطورة: {e}")
         return False
+
 
     
 
