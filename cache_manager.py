@@ -1271,6 +1271,7 @@ class DataManager:
 
 # ==========================================================================
 # دوال التصفير والفرمتة واعادة البناء
+# ==========================================================================
     async def push_to_google_sheets(self, spreadsheet):
         """محرك المزامنة الشامل لرفع البيانات المعلقة (Pending) إلى السحابة"""
         from sheets import safe_api_call, ss, connect_to_google
@@ -1324,8 +1325,12 @@ class DataManager:
                         self.cursor.execute(update_query, row_ids)
                         self.conn.commit()
                         logger.info(f"✅ تم رفع {len(data_to_upload)} سجل بنجاح إلى {table_name}")
-                        
-
+        
+        # --- [التصحيح: إضافة البلوك المفقود هنا] ---
+        except Exception as e:
+            logger.error(f"❌ خطأ حرج في محرك المزامنة: {e}", exc_info=True)
+        # ------------------------------------------
+            
     def setup_bot_factory_database(self, bot_token=None):
         """
         المحرك الشامل المطور (V8.5 - نسخة الفرض الصارم):
