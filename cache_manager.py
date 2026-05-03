@@ -507,22 +507,26 @@ def generate_excel_from_cache():
 # 2. كلاس إدارة البيانات (DataManager) المدمج من database_core
 # ==========================================================================
 
-class DataManager:
     def __init__(self, bot_token):
         self.bot_token = bot_token
-        
+        self.db_path = DB_PATH 
         # 1. تهيئة أولية للمعرفات (اختياري لكن يوضع في البداية)
         self.conn = None
         self.cursor = None
+                # فتح الاتصال الأولي
+        self._establish_connection()
+
         self.active_tasks = {} 
 
-        # 2. إنشاء الاتصال الفعلي (هذا هو الأهم لضمان عمل الدالة)
+    def _establish_connection(self):
+        """دالة داخلية لفتح أو إعادة فتح الاتصال بالقاعدة"""
         try:
-            self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-            self.conn.row_factory = sqlite3.Row  
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
             self.cursor = self.conn.cursor()
         except Exception as e:
-            print(f"❌ فشل الاتصال بقاعدة البيانات في DataManager: {e}")
+            print(f"❌ خطأ فتح الاتصال: {e}")
+
 
         
     async def create_backup_to_telegram(self, shared_bot=None, user_id=None, bot_id=None):
@@ -1615,6 +1619,7 @@ class DataManager:
 
             # --- [2] تدمير قاعدة بيانات SQLite نهائياً ---
             try:
+                # إغلاق الاتصال الحالي قبل الحذف لفك قفل الملف
                 if self.conn:
                     self.conn.close()
                 
@@ -1622,9 +1627,11 @@ class DataManager:
                     os.remove(self.db_path)
                     current_logger.info(f"💾 [2/4] تم حذف ملف قاعدة البيانات {self.db_path} نهائياً.")
                 
-                # إعادة إنشاء اتصال نظيف وخاوٍ تماماً
-                self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-                self.cursor = self.conn.cursor()
+                # --- [التصحيح التقني]: استخدام الدالة الموحدة لإعادة فتح الاتصال بنجاح ---
+                # بدلاً من تكرار كود sqlite3.connect، نستخدم المحرك الذي أعددناه لضمان الإعدادات الصحيحة
+                self._establish_connection()
+                # ----------------------------------------------------------------------
+                
             except Exception as db_e:
                 current_logger.error(f"⚠️ فشل تدمير SQLite: {db_e}")
 
@@ -1653,6 +1660,7 @@ class DataManager:
             # --- [5] استدعاء دالة البناء (إعادة الإعمار) ---
             print("🔄 جاري الآن بناء الجداول الجديدة وزرع الإعدادات الافتراضية...")
             # استدعاء دالة البناء المتطورة (الرام + SQLite + شيت)
+            # تم التأكد من استخدام bot_token لضمان زرع الإعدادات
             total_sheets = self.setup_bot_factory_database(self.bot_token)
 
             if total_sheets > 0:
@@ -1665,7 +1673,6 @@ class DataManager:
         except Exception as e:
             current_logger.error(f"❌ خطأ كارثي أثناء ضبط المصنع: {e}", exc_info=True)
             return False
-
 
 # ==========================================================================
 #نهاية دوال الفورمات الهيكلة 
