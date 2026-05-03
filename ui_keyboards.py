@@ -111,8 +111,6 @@ def get_keyboard(kays: int, m_status="OFF"):
          InlineKeyboardButton("🔗 رابط الإحالة", callback_data="referral_link")],
 
         [InlineKeyboardButton("🔙 رجوع", callback_data="tech_settings")]
-        
-
     ]
 
     keyboards[4] = [
@@ -137,10 +135,8 @@ def get_keyboard(kays: int, m_status="OFF"):
         [InlineKeyboardButton("🔙 رجوع", callback_data="tech_settings")]
     ]
     
-    
     keyboards[5] = [
-    #"""لوحة تحكم المالك بوت المنصة التعليمية """
-    
+        # """لوحة تحكم المالك بوت المنصة التعليمية """
         [InlineKeyboardButton("📊 الإحصائيات الذكية", callback_data="admin_stats"), 
          InlineKeyboardButton("📡 الإذاعة المستهدفة", callback_data="smart_broadcast")],
         [InlineKeyboardButton("🛠 الإعدادات العامة وتجهيز النظام", callback_data="tech_settings")], 
@@ -149,12 +145,10 @@ def get_keyboard(kays: int, m_status="OFF"):
          InlineKeyboardButton("📤 رفع نسخة بيانات", callback_data="import_data_json")],
 
         [InlineKeyboardButton("❌ إغلاق", callback_data="close_panel")] 
-        
-        
     ]
     
     keyboards[6] = [
-      #  """لوحة تحكم الموظف بوت المنصة التعليمية """
+        # """لوحة تحكم الموظف بوت المنصة التعليمية """
         [InlineKeyboardButton("📁 إدارة الأقسام", callback_data="manage_cats"), 
          InlineKeyboardButton("📚 إدارة الدورات", callback_data="manage_courses")],
         [InlineKeyboardButton("المكتبة الشاملة", callback_data="manage_library"),
@@ -165,15 +159,10 @@ def get_keyboard(kays: int, m_status="OFF"):
          InlineKeyboardButton("🎟 الكوبونات", callback_data="manage_coupons")],
         [InlineKeyboardButton("الكنترول", callback_data="manage_control")],
         [InlineKeyboardButton("🔙 عودة", callback_data="main_menu")]
-    
-        
-        
     ]    
     
-    
     keyboards[7] = [
-     #   """لوحة تحكم المدرب بوت المنصة التعليمية """
-        
+        # """لوحة تحكم المدرب بوت المنصة التعليمية """
         [InlineKeyboardButton("👥 مجموعاتي الدراسية", callback_data="manage_group"), 
          InlineKeyboardButton("📚 دوراتي المتاحة", callback_data="manage_courses")],
         [InlineKeyboardButton("📅 جدول المحاضرات", callback_data="schedules_lectures"), 
@@ -183,69 +172,34 @@ def get_keyboard(kays: int, m_status="OFF"):
         [InlineKeyboardButton("🏆 الأوسمة والتقييمات", callback_data="honors_achievements"), 
          InlineKeyboardButton("🎮 غرفة الكنترول", callback_data="manage_control")],
         [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="main_menu")]
-        
-        
     ]    
     
     keyboards[8] = [
-        """ لوحة تحكم الطالب بوت المنصة التعليمية """
+        # """ لوحة تحكم الطالب بوت المنصة التعليمية """
         [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
         [InlineKeyboardButton("👤 ملفي الدراسي", callback_data="my_profile"), 
          InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
-        # --- الزر الجديد الذي طلبته ---
-        
         [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
-        
         [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
          InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
-        
-        
-        
     ]
     
     keyboards[9] = [
-        """لوحة تحكم الزائر بوت المنصة التعليمية """
+        # """لوحة تحكم الزائر بوت المنصة التعليمية """
         [InlineKeyboardButton("📚 استعراض الدورات", callback_data="view_categories")],
-        # --- الزر الجديد الذي طلبته ---
         [InlineKeyboardButton("💰 اربح دورات مجانية", callback_data="referral_system")],
         [InlineKeyboardButton("🎟 تفعيل دورة", callback_data="activate_course")],
         [InlineKeyboardButton("❓ الأسئلة الشائعة", callback_data="view_faq"),
          InlineKeyboardButton("💬 الدعم الفني", callback_data="contact_admin")]
-        
-        
-        
-    ]
-    
-    keyboards[10] = [
-        
-        
-        
-    ]
-    
-    keyboards[11] = [
-        
-        
-        
-    ]
-    
-    keyboards[12] = [
-        
-        
-        
     ]
 
     # 🔐 fallback (مهم جداً)
-    keyboard = keyboards.get(kays, [
-        [InlineKeyboardButton("⚠️ لوحة غير معروفة", callback_data="main_menu")]
-    ])
+    keyboard = keyboards.get(kays, [[InlineKeyboardButton("⚠️ لوحة غير معروفة", callback_data="main_menu")]])
 
     return InlineKeyboardMarkup(keyboard)
-
-
 
 def get_coach_panel_keyboard(owner_id=None):
     return get_keyboard(5)
 
 def get_tech_settings_keyboard(owner_id=None):
     return get_keyboard(5)
-

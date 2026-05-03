@@ -10,7 +10,7 @@ import uuid
 import json
 import secrets
 import importlib
-from ui_keyboards import get_coach_panel_keyboard, get_tech_settings_keyboard
+from ui_keyboards import get_keyboard
 import importlib.util
 from datetime import datetime
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters
