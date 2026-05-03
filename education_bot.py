@@ -285,7 +285,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     معالجة أمر /start برسائل ترحيبية ذكية ودعم نظام الإحالة والأدوار:
     (مالك، موظف، مدرب، طالب)
-    مع إضافة نظام طباعة وتتبع (Debug) لكل خطوة.
+    مع إضافة نظام طباعة وتتبع (Debug) لكل خطوة لضمان مطابقة "الورق".
     """
 
     # =========================================================
@@ -296,7 +296,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     message = update.message or (query.message if query else None)
 
-    # 🟦 [طباعة تتبع]: بيانات المستخدم الذي ضغط Start
+    # 🟦 [تتبع]: بيانات المستخدم الذي ضغط Start
     print(f"\n--- [ 🟢 بدء تتبع عملية التمييز ] ---")
     print(f"👤 المستخدم الحالي: {user.full_name}")
     print(f"🆔 آيدي المستخدم (Current User ID): {user.id}")
@@ -324,15 +324,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =========================================================
     config = get_bot_config(bot_token)
     
-    # تحسين جلب آيدي الملاك لدعم القوائم أو النصوص المنفصلة بفاصلة
+    # تحسين جلب آيدي الملاك لدعم القوائم أو النصوص المنفصلة بفاصلة (مطابقة لعمود admin_ids في الورق)
     raw_admin_ids = config.get("admin_ids", "0")
     if isinstance(raw_admin_ids, list):
         admin_list = [int(str(i).strip()) for i in raw_admin_ids if str(i).strip().isdigit()]
     else:
         admin_list = [int(i.strip()) for i in str(raw_admin_ids).split(",") if i.strip().isdigit()]
 
-    # 🟦 [طباعة تتبع]: مقارنة الآيدي بقائمة الملاك
-    print(f"👑 قائمة الملاك المعتمدة (Admin List): {admin_list}")
+    # 🟦 [تتبع]: طباعة قائمة الملاك المعتمدة من "الورق"
+    print(f"👑 قائمة الملاك من ورقة (إعدادات_المحتوى): {admin_list}")
     
     bot_owner_id = admin_list[0] if admin_list else 0
     is_owner = user.id in admin_list
@@ -350,6 +350,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_owner:
         if is_empty(ai_config.get('اسم_المؤسسة')):
             try:
+                # محاولة الجلب من قاعدة البيانات المحلية في حال فشل الكاش
                 db_manager.cursor.execute(
                     'SELECT "اسم_المؤسسة" FROM "إعدادات_المحتوى" WHERE "bot_id" = ?',
                     (str(bot_token),)
@@ -456,7 +457,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             inviter_id = potential_inviter
 
     # =========================================================
-    # [ 8 ] تسجيل المستخدم (تم التعديل ليكون استدعاء واحد فقط)
+    # [ 8 ] تسجيل المستخدم (تعبئة ورقة المستخدمين)
     # =========================================================
     is_new_user = save_user(user.id, user.username, inviter_id, bot_token=bot_token)
 
@@ -515,25 +516,29 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = fetch_valid_msg("welcome_night", "أهلاً بالمثابر.. العظماء يصنعون مستقبلهم في هدوء الليل.")
 
     # =========================================================
-    # [ 11 ] تحديد الدور (تصحيح منطق الفحص)
+    # [ 11 ] تحديد الدور (تصحيح منطق الفحص والمطابقة مع الورق)
     # =========================================================
+    print(f"🛡️ [DEBUG STEP 11]: بدء فحص الأدوار")
     
-    # 🟦 [طباعة تتبع]: فحص الصلاحيات
+    # فحص صلاحيات الموظفين بشكل صارم من ورقة (الهيكل_التنظيمي_والصلاحيات)
     has_perm = str(check_user_permission(bot_token, user.id, "الصلاحيات")).upper() == "TRUE"
     has_cat_perm = str(check_user_permission(bot_token, user.id, "صلاحية_الأقسام")).upper() == "TRUE"
     
+    # جلب بيانات الموظفين (ID الموظف أو المدرب هو العمود 3 في الهيكل)
     employees_data = FACTORY_GLOBAL_CACHE["data"].get("إدارة_الموظفين", [])
     user_row = next(
-        (row for row in employees_data if len(row) > 2 and str(row[2]) == str(user.id)),
+        (row for row in employees_data if 
+            (isinstance(row, list) and len(row) > 2 and str(row[2]) == str(user.id)) or
+            (isinstance(row, dict) and str(row.get("ID_الموظف_أو_المدرب") or row.get("user_id")) == str(user.id))
+        ),
         None
     )
 
     is_staff = has_perm or has_cat_perm or (user_row is not None)
-    
-    print(f"📋 فحص الصلاحيات: has_perm={has_perm}, has_cat_perm={has_cat_perm}, is_staff={is_staff}")
+    print(f"📋 فحص الصلاحيات: has_perm={has_perm}, is_staff={is_staff}")
 
     if is_owner:
-        print(f"✅ تم التمييز كـ: مالك (Owner)")
+        print(f"✅ تم التوجيه: واجهة المالك (Key 5)")
         final_text = (
             f"<b>مرحباً بك يا دكتور {user.first_name} في مركز قيادة منصتك</b> 🎓\n\n"
             f"{msg}\n\n"
@@ -542,9 +547,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = get_keyboard(5)
 
     elif is_staff:
-        # التحقق هل هو مدرب أم موظف إداري
-        if user_row and len(user_row) >= 42 and "مدرب" in str(user_row[41]):
-            print(f"✅ تم التمييز كـ: مدرب (Coach)")
+        # التحقق هل هو مدرب أم موظف (مطابقة لعمود "نوع الكادر" المعتاد في نظامك)
+        is_coach = False
+        if isinstance(user_row, list) and len(user_row) >= 42 and "مدرب" in str(user_row[41]):
+            is_coach = True
+        elif isinstance(user_row, dict) and "مدرب" in str(user_row.get("الوظيفة") or user_row.get("نوع_الكادر", "")):
+            is_coach = True
+
+        if is_coach:
+            print(f"👨‍🏫 تم التوجيه: واجهة مدرب (Key 7)")
             final_text = (
                 f"<b>مرحباً بك يا كابتن {user.first_name} في غرفتك الأكاديمية</b> 👨‍🏫\n\n"
                 f"{msg}\n\n"
@@ -552,7 +563,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             reply_markup = get_keyboard(7)
         else:
-            print(f"✅ تم التمييز كـ: موظف (Staff)")
+            print(f"💼 تم التوجيه: واجهة موظف (Key 6)")
             final_text = (
                 f"<b>مرحباً بك يا {user.first_name} في لوحة الإدارة التعليمية</b> 💼\n\n"
                 f"{msg}\n\n"
@@ -561,24 +572,27 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = get_keyboard(6)
 
     else:
-        # فحص هل المستخدم مسجل كطالب (لديه بيانات) أم زائر
+        # فحص هل المستخدم مسجل كطالب (مطابقة لورقة المستخدمين - عمود ID المستخدم)
         all_students = FACTORY_GLOBAL_CACHE["data"].get("المستخدمين", [])
-        is_registered_student = any(str(s.get("user_id") or s.get("id")) == str(user.id) for s in all_students)
+        is_registered_student = any(
+            str(s.get("ID المستخدم") or s.get("user_id") or s.get("id")) == str(user.id) 
+            for s in all_students
+        )
         
-        # إذا لم يكن مسجلاً في الكاش ولكنه ليس مستخدماً جديداً (save_user أعادت False) فهو مسجل
+        # إذا لم يكن في الكاش، نعتمد على نتيجة save_user (إذا أعادت False فهو موجود مسبقاً)
         if not is_registered_student and is_new_user is False:
             is_registered_student = True
             
-        print(f"📋 فحص سجل الطلاب: هل المستخدم مسجل؟ -> {is_registered_student}")
+        print(f"🎓 هل المستخدم طالب مسجل؟ -> {is_registered_student}")
 
         org_name = ai_config.get('اسم_المؤسسة', 'منصتنا التعليمية')
         
         if is_registered_student:
-            print(f"✅ تم التمييز كـ: طالب مسجل (Student)")
+            print(f"📖 تم التوجيه: واجهة طالب مسجل (Key 8)")
             final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓"
             reply_markup = get_keyboard(8)
         else:
-            print(f"✅ تم التمييز كـ: زائر جديد (Visitor)")
+            print(f"🚪 تم التوجيه: واجهة زائر جديد (Key 9)")
             final_text = f"<b>{msg}</b>\n\nمرحباً بك في {org_name} 🎓\nنحن سعداء بزيارتك، استكشف منصتنا الآن:"
             reply_markup = get_keyboard(9)
        

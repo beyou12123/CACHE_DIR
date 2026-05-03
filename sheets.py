@@ -4,7 +4,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
 import logging
-import uuid 
+import uuid
+import requests
 import random
 # استيراد كل شيء من الملف الموحد الجديد
 from cache_manager import (
@@ -540,18 +541,20 @@ def local_save_wrapper(table_name, data_list):
 # دالة حفط  المستخدمين النسخة المحدثة
 def save_user(user_id, username, inviter_id=None, bot_token=None):
     """
-    تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 11 عموداً:
-    - التعديل: إرجاع True للعضو الجديد فقط، و False للعضو الموجود مسبقاً.
+    تطوير دالة حفظ المستخدمين لتطابق هيكل الـ 12 عموداً بناءً على "الورق":
+    - التعديل: إرجاع True للعضو الجديد فقط (في هذا البوت المحدد)، و False للعضو الموجود مسبقاً.
     """
     try:
         # استيراد الدوال اللازمة من داخل الدالة لضمان عدم حدوث Circular Import
         from sheets import get_system_time, local_bulk_save
         from cache_manager import db_manager
+        from datetime import datetime
 
         now = get_system_time("full")
         user_id_str = str(user_id)
         bot_token_str = str(bot_token) if bot_token else "GLOBAL" 
-        # 1. بناء مصفوفة البيانات (11 عموداً بالترتيب الدقيق للورقة المعتمدة)
+        
+        # 1. بناء مصفوفة البيانات (12 عموداً بالترتيب الدقيق للورقة المعتمدة)
         user_row = [
             user_id_str,                            # 1. ID المستخدم
             f"@{username}" if username else "بدون",  # 2. اسم المستخدم
@@ -564,43 +567,51 @@ def save_user(user_id, username, inviter_id=None, bot_token=None):
             "Telegram",                             # 9. مصدر التسجيل
             str(inviter_id) if inviter_id else "None", # 10. معرف إحالة
             "0",                                     # 11. رصيد
-            bot_token_str                           # 12 (bot_id الجديد)
+            bot_token_str                           # 12. bot_id (الرابط الأساسي)
         ]
 
-        # 2. التحقق من وجود المستخدم ومعالجة التكرار
-        db_manager.cursor.execute('SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ?', (user_id_str,))
+        # 2. التحقق من وجود المستخدم ومعالجة التكرار (البحث بالهوية المزدوجة: مستخدم + بوت)
+        # تم تصحيح الاستعلام ليفحص المستخدم داخل هذا البوت تحديداً لضمان دقة التمييز
+        db_manager.cursor.execute(
+            'SELECT local_id FROM "المستخدمين" WHERE "ID المستخدم" = ? AND "bot_id" = ?', 
+            (user_id_str, bot_token_str)
+        )
         results = db_manager.cursor.fetchall() 
 
         if results:
-            # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم) وتطهيره
+            # أ- إذا وجد تكرار (أكثر من سجل لنفس المستخدم في نفس البوت) وتطهيره
             if len(results) > 1:
                 db_manager.cursor.execute('''
                     DELETE FROM "المستخدمين" 
-                    WHERE "ID المستخدم" = ? 
-                    AND local_id NOT IN (SELECT min(local_id) FROM "المستخدمين" WHERE "ID المستخدم" = ?)
-                ''', (user_id_str, user_id_str))
+                    WHERE "ID المستخدم" = ? AND "bot_id" = ?
+                    AND local_id NOT IN (
+                        SELECT min(local_id) FROM "المستخدمين" 
+                        WHERE "ID المستخدم" = ? AND "bot_id" = ?
+                    )
+                ''', (user_id_str, bot_token_str, user_id_str, bot_token_str))
                 db_manager.conn.commit()
-                print(f"🧹 تم تطهير تكرار قديم للمستخدم: {user_id_str}")
+                print(f"🧹 تم تطهير تكرار قديم للمستخدم {user_id_str} في البوت {bot_token_str}")
 
-            # ب- تحديث بيانات النشاط للمستخدم الحالي
+            # ب- تحديث بيانات النشاط للمستخدم الحالي في هذا البوت فقط
             update_query = '''
                 UPDATE "المستخدمين" 
                 SET "اسم المستخدم" = ?, "آخر نشاط" = ?, sync_status = "pending" 
-                WHERE "ID المستخدم" = ?
+                WHERE "ID المستخدم" = ? AND "bot_id" = ?
             '''
-            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id_str))
+            db_manager.cursor.execute(update_query, (f"@{username}" if username else "بدون", now, user_id_str, bot_token_str))
             db_manager.conn.commit()
-            return False  # العضو موجود مسبقاً
+            return False  # العضو مسجل مسبقاً في هذا البوت المحدد
 
         else:
-            # ج- إضافة مستخدم جديد تماماً
+            # ج- إضافة مستخدم جديد تماماً لهذا البوت
             local_bulk_save("المستخدمين", user_row)
-            print(f"👤 مستخدم جديد مسجل محلياً: {user_id_str}")
+            print(f"👤 مستخدم جديد مسجل محلياً: {user_id_str} في البوت: {bot_token_str}")
             db_manager.conn.commit()
-            return True  # العضو جديد فعلاً
+            return True  # العضو جديد فعلاً على هذا البوت
 
     except Exception as e:
-        print(f"❌ خطأ في حفظ المستخدم محلياً: {e}")
+        import logging
+        logging.error(f"❌ خطأ في حفظ المستخدم محلياً: {e}")
         return False
 
 
@@ -668,14 +679,19 @@ def local_bulk_save(table_name, data_list, sync_status='pending'):
         return False
 
 #  الدالة الرئيسية لحفظ البوت نسخة محسنة
+
+# الدالة الرئيسية لحفظ البوت نسخة محسنة ومطابقة للهيكل التنظيمي
 def save_bot(owner_id, bot_type, bot_name, bot_token):
     """
     تطوير دالة التأسيس لتعمل بنظام الذاكرة المحلية (SQLite):
     - الالتزام الصارم بـ 45 عموداً لجدول 'البوتات_المصنوعة'.
-    - الالتزام الصارم بـ 36 عموداً لجدول 'إعدادات_المحتوى'.
+    - الالتزام الصارم بـ 39 عموداً لجدول 'إعدادات_المحتوى' (مطابقة للورق).
     - الحفاظ الكامل على كافة الوظائف الجانبية والمسميات العربية.
     """
     try:
+        from sheets import get_system_time, local_bulk_save, ensure_bot_sync_row, seed_default_settings, update_global_version
+        from cache_manager import db_manager
+
         now = get_system_time("full")
         today = get_system_time("date")
         bot_token = str(bot_token).strip()
@@ -685,7 +701,6 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         real_bot_name = bot_name
         username_bot = ""
         try:
-            import requests
             res = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=5).json()
             if res.get("ok"):
                 real_bot_name = res["result"]["first_name"]
@@ -696,8 +711,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         ensure_bot_sync_row(bot_token, owner_id)
         seed_default_settings(bot_token)
 
-        # 3. بناء مصفوفة البيانات (45 عموداً بدقة وفقاً لـ get_sheets_structure)
-        # تم إضافة الأعمدة التقنية الجديدة وملء الفراغات لضمان توافق SQLite
+        # 3. بناء مصفوفة البيانات (45 عموداً بدقة وفقاً للهيكل التنظيمي)
         bot_row = [
             str(owner_id),          # 1. ID المالك
             bot_type,               # 2. نوع البوت
@@ -724,7 +738,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
             "10",                   # 23. الحد_الأقصى_للدوات
             "3",                    # 24. الحد_الأقصى_للاقسام
             "TRUE",                 # 25. ميزة_الذكاء_الاصطناعي
-            "FALSE",                # 26. ميزة_رفع_وتصدير_البيانات_اكسل (العمود الجديد)
+            "FALSE",                # 26. ميزة_رفع_وتصدير_البيانات_اكسل
             f"INV-{uuid.uuid4().hex[:6].upper()}", # 27. معرف_الفاتورة
             "0ms",                  # 28. متوسط_زمن_الاستجابة
             "0%",                   # 29. استخدام_CPU
@@ -743,7 +757,7 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
             "Gemini-1.5-Flash",     # 42. نموذج_الذكاء_الاصطناعي
             0,                      # 43. استهلاك_التوكنات_AI
             "100",                  # 44. تكلفة_AI
-            "Auto"                  # 45. ملاحظات نظام (إكمال الـ 45 عمود)
+            "Auto"                  # 45. ملاحظات نظام
         ]
 
         # 4. منع التكرار في جدول البوتات (محلياً)
@@ -754,33 +768,53 @@ def save_bot(owner_id, bot_type, bot_name, bot_token):
         else:
             local_bulk_save("البوتات_المصنوعة", bot_row)
 
-        # 5. إدارة سجل "إعدادات_المحتوى" (36 عموداً بدقة وفقاً لـ get_sheets_structure)
-        # بناء صف كامل بـ 36 عمود لضمان سلامة الحقن في SQLite
-        content_row = [""] * 36
-        content_row[0] = bot_token            # bot_id
-        content_row[1] = "أهلاً بك! 🤖"         # الرسالة الترحيبية
-        content_row[2] = "لا توجد قوانين حالياً." # القوانين
-        content_row[3] = "عذراً، البوت متوقف مؤقتاً." # رد التوقف
-        content_row[4] = "false"              # auto_reply
-        content_row[5] = "false"              # ai_enabled
-        content_row[6] = "true"               # welcome_enabled
-        content_row[7] = "[]"                # buttons
-        content_row[8] = "[]"                # banned_words
-        content_row[9] = str(owner_id)        # admin_ids
-        content_row[10] = "ar"               # language
-        content_row[11] = "default"          # theme
-        content_row[12] = "0"                # delay_response
-        content_row[13] = "true"             # broadcast_enabled
-        content_row[14] = "[]"               # custom_commands
-        # من العمود 15 إلى 34 (قيم افتراضية للأعمدة الجديدة مثل welcome_morning واسم_المؤسسة وغيرها)
-        content_row[19] = "المؤسسة التعليمية" # اسم_المؤسسة (العمود 20)
-        content_row[35] = "إعدادات الدفع الافتراضية" # إعدادات_الدفع (العمود 36 والأخير)
+        # 5. إدارة سجل "إعدادات_المحتوى" (39 عموداً بدقة وفقاً للهيكل التنظيمي للورق)
+        content_row = [""] * 39
+        content_row[0] = bot_token            # 1. bot_id
+        content_row[1] = "أهلاً بك! 🤖"         # 2. الرسالة الترحيبية
+        content_row[2] = "لا توجد قوانين."     # 3. القوانين
+        content_row[3] = "البوت متوقف."        # 4. رد التوقف
+        content_row[4] = "false"              # 5. auto_reply
+        content_row[5] = "false"              # 6. ai_enabled
+        content_row[6] = "true"               # 7. welcome_enabled
+        content_row[7] = "[]"                 # 8. buttons
+        content_row[8] = "[]"                 # 9. banned_words
+        content_row[9] = str(owner_id)        # 10. admin_ids (المسؤول)
+        content_row[10] = "ar"                # 11. language
+        content_row[11] = "default"           # 12. theme
+        content_row[12] = "0"                 # 13. delay_response
+        content_row[13] = "true"              # 14. broadcast_enabled
+        content_row[14] = "[]"                # 15. custom_commands
+        content_row[15] = "صباح الخير"         # 16. welcome_morning
+        content_row[16] = "طاب يومك"           # 17. welcome_noon
+        content_row[17] = "مساء النور"         # 18. welcome_evening
+        content_row[18] = "ليلة سعيدة"         # 19. welcome_night
+        content_row[19] = "المؤسسة التعليمية"  # 20. اسم_المؤسسة
+        content_row[20] = "أنت مساعد ذكي"      # 21. تعليمات_AI
+        content_row[21] = "10"                # 22. ref_points_join
+        content_row[22] = "50"                # 23. ref_points_purchase
+        content_row[23] = "100"               # 24. min_points_redeem
+        content_row[24] = "نقطة"              # 25. currency_unit
+        content_row[25] = "100"               # 26. homework_grade
+        content_row[26] = "0"                 # 27. subscription_price
+        content_row[27] = "Google"            # 28. ai_provider
+        content_row[28] = "OFF"               # 29. maintenance_mode
+        content_row[29] = "50"                # 30. max_daily_ai_questions
+        content_row[30] = ""                  # 31. backup_channel_id
+        content_row[31] = "نشط"               # 32. bot_status_msg
+        content_row[32] = "stop"              # 33. trial_end_action
+        content_row[33] = "Asia/Riyadh"       # 34. timezone
+        content_row[34] = "10"                # 35. ai_memory_limit
+        content_row[35] = "إعدادات الدفع"      # 36. إعدادات_الدفع
+        content_row[36] = "1.0.0"             # 37. إصدار_التحديث
+        content_row[37] = "synced"            # 38. حالة_المزامنة
+        content_row[38] = now                 # 39. وقت_التعديل
 
-        # منع التكرار في جدول الإعدادات (محلياً)
+        # منع التكرار في جدول الإعدادات
         db_manager.cursor.execute('SELECT local_id FROM "إعدادات_المحتوى" WHERE "bot_id" = ?', (bot_token,))
         if db_manager.cursor.fetchone():
-            update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, sync_status = "pending" WHERE "bot_id" = ?'
-            db_manager.cursor.execute(update_content_query, (str(owner_id), bot_token))
+            update_content_query = 'UPDATE "إعدادات_المحتوى" SET "admin_ids" = ?, "وقت_التعديل" = ?, sync_status = "pending" WHERE "bot_id" = ?'
+            db_manager.cursor.execute(update_content_query, (str(owner_id), now, bot_token))
         else:
             local_bulk_save("إعدادات_المحتوى", content_row)
 
